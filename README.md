@@ -47,14 +47,14 @@ This data is cached automatically, with a line like this:
 
 	cache[object.url] = object
 
-  The programmer specifies a `url' field on every JSON dictionary he
+  The programmer specifies a `url` field on every JSON dictionary he
   wants cached.  He can even cache nested dictionaries like
-  '/point/34' above.  This RESTful 'url' is a hash key.  It also has a
+  `/point/34` above.  This RESTful `url` is a hash key.  It also has a
   second use when we save objects, which you'll learn soon.
 
-  The cache is saved in localStorage so that it never dies.
+  The cache is saved in `localStorage` so that it never dies.
 
-The Proposal component's render() method can then access this data  like so:
+The Proposal component's `render()` method can then access this data  like so:
 
 	this.props.title
 	this.props.points[3]
@@ -65,7 +65,7 @@ If the user edits the proposal title, we save the edits with:
 	save(proposal)
 
   This will save the new data on the server.  It updates the cache,
-  then does a POST/PUT/UPDATE request to the proposal object's `url',
+  then does a `POST/PUT/UPDATE` request to the proposal object's `url`,
   and tells React to re-render the page.
 
 To create a new object, just make one like this:
@@ -74,7 +74,7 @@ To create a new object, just make one like this:
 	                     title: 'Barf on you, man!',
 	                     ... }
 
-  ...and then save it with save().  This will put it in the cache and
+  ...and then save it with `save()`.  This will put it in the cache and
   save it in the server.
 
 Loading indicators
@@ -82,12 +82,12 @@ Loading indicators
 Perhaps we want to customize the HTML of a component when it's
 loading.
 
-In ActiveREST, you add a "render_loading()" method to any component
+In ActiveREST, you add a `render_loading()` method to any component
 that will need a spinner.  This will automatically get called, instead
-of render(), if the data it depends upon is still being fetched over
-the internet.  When the data loads, it'll re-render with render().
+of `render()`, if the data it depends upon is still being fetched over
+the internet.  When the data loads, it'll re-render with `render()`.
 
-We can one-up the venerable "spinner.gif" with this.  We could display
+We can one-up the venerable `spinner.gif` with this.  We could display
 proposals as outlines when loading, and fill in the text, images, and
 details once they load.  Those details could be presented as "Missing
 3d Cutouts" while loading.  You know, something like this:
@@ -121,8 +121,8 @@ Or a checkerboard image:
        ##  ##  ##  ##  ##
      ##  ##  ##  ##  ##  ##
 
-Any component's render_loading() method can explicitly call their
-nested child's render_loading() method if they wish.  To do the 3d
+Any component's `render_loading()` method can explicitly call their
+nested child's `render_loading()` method if they wish.  To do the 3d
 Cutout on a child's component, add the following line to its class:
 
      render_loading: render_3d_cutout,
@@ -190,7 +190,7 @@ loads a full proposal:
                ]
     }
 
-Now, in the Proposal object's render_loading() method, it'll check if
+Now, in the Proposal object's `render_loading()` method, it'll check if
 the summary info is in the cache, and use it if so:
 
     if (p = cache['/proposal_summary/34']) {
