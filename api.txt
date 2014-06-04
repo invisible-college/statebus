@@ -1,0 +1,65 @@
+-*- mode: outline -*-
+
+* fetch(url)
+
+Checks the cache for url.
+
+Else:
+  server_fetch(url)
+  Runs update_cache() on the result.
+
+Returns the result
+
+** Questions
+How does it handle asynchronous updates?
+
+* server_fetch(url)
+Grabs json from the server
+* cache_fetch(url)
+return cache[ur]
+
+* update_cache(object)
+** Purpose
+Recurses through the object and folds it into the cache.
+
+** Code
+If object has url field:
+  If cache has no object there
+    cache[url] = object
+  Else
+    Mutate cache[url] so it = object
+
+Recurse:
+  If object is array, on each element in array
+  If object is hash, on each value in hash
+
+  After each recursion, update element to the value returned in
+  recursion.
+
+Return cache[url] || object
+
+** Questions
+What if someone uses an array with a url field?  Is that possible?
+Right now I'm assuming that if there's a URL field that this is a
+hash.
+
+** Future Optimizations
+Over time, the cache will grow unbounded unless we start deleting
+things.
+
+We should keep track of the most recent observation per url, and
+periodically sweep through and delete the oldest ones from the cache.
+
+* save(object, ...)
+ - update_cache(object, ...)
+ - server_save(object, ...)
+ - return cache[object.url]
+* server_save(object, ...)
+?? 
+** Questions
+ - How does it find the url?  I don't have save urls yet.  Need to
+   look at considerit API.
+ - 
+
+* Optimizations
+** LocalStorage
