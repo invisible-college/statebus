@@ -3,20 +3,15 @@
 * fetch(url)
 
 Checks the cache for url.
+  - If it exists, returns it
+  - Else, starts a server_fetch() in background
+    - Returns stub data immediately
+    - When server_fetch() completes:
+      - update_cache()
+      - and re-render the page
 
-Else:
-  server_fetch(url)
-  Runs update_cache() on the result.
-
-Returns the result
-
-** Questions
-How does it handle asynchronous updates?
-
-* server_fetch(url)
-Grabs json from the server
-* cache_fetch(url)
-return cache[ur]
+* server_fetch(url, callback)
+Grabs json from the server, runs callback on it when finished
 
 * update_cache(object)
 ** Purpose
@@ -56,10 +51,38 @@ periodically sweep through and delete the oldest ones from the cache.
  - return cache[object.url]
 * server_save(object, ...)
 ?? 
-** Questions
- - How does it find the url?  I don't have save urls yet.  Need to
-   look at considerit API.
- - 
 
-* Optimizations
+* Partially-Loaded Data
+** URLs
+Append "?loading" to indicate that data is incomplete:
+
+   /proposal/34?loading
+
+In future, we'll support partial data, like a summary:
+
+   /proposal/34?summary
+
+And then if it's loading the full proposal, it could look like:
+
+   /proposal/34?summary&full=loading
+
+** Storing it 
+We don't use the ?___ stuff for caching.  So we'll have things like:
+
+    cache['/proposal'] ==> {url: '/proposal?summary&full=loading'
+                            ...}
+
+** Rendering loading indicators
+This will be automated in the future.  But for now, write an if
+statement inside a component's render() function like this:
+
+  render: function () {
+             if (is_loading(this.props)) {
+                 ... render loading indicator ...
+             } else {
+                 ... render normal stuff ...
+             }
+          }
+
+* Future Optimizations & Improvements
 ** LocalStorage
