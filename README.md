@@ -176,9 +176,10 @@ I have notes on how to implement these.  Lemme know if you want em.
 Optimizing the cache
 --------------
 
-> NOTE: This has changed too.  We now support partially-loaded objects,
-> by adding a `?loading` query parameter to the object's URL.  I'll
-> update the docs later.
+> NOTE: This has changed too.  We now support the "proposal
+> vs. proposal_summary" via partially-loaded objects, by adding a
+> `?loading` query parameter to the object's URL.  I'll update the
+> docs later.
 
 When we load the homepage, we only fetch summaries of each proposal.
 We fetch the full details of a proposal when a user clicks into it.
