@@ -4,6 +4,19 @@
     <script>window.re_render = function() { console.log('Yeay!') }</script>
   </head>
   <body>
-    Now you can open your javascript console and run "fetch('/proposal')".
+    Now you can open your javascript console and
+    run <code>fetch('/proposal')</code>.  This will:
+
+    <ol>
+      <li>Load an empty stub proposal and put it in the cache</li>
+      <li>In the background, load the actual <code>proposal</code>
+        <br>Meanwhile, <code>is_loading(this.props)</code> will
+        return <code>true</code>, and a React component can use this
+        to know it should display a loading indicator.</li>
+
+      <li>Once the proposal has finished loading, the cache will
+      automatically update and the global <code>re_render()</code>
+      function will get called, which you can define to re-render your
+      page.
   </body>
 </html>

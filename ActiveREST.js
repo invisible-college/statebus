@@ -94,8 +94,7 @@ ActiveREST = (function () {
                 object[i] = update_cache(object[i])
         else if (typeof(object) == 'object')
             for (var key in object)
-                if (object.hasOwnProperty(key))
-                    object[key] = update_cache(object[key])
+                object[key] = update_cache(object[key])
 
         // Return the new cached representation of this object
         return cache[url] || object
