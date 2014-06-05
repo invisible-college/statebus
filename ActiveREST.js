@@ -1,9 +1,8 @@
 ActiveREST = (function () {
-    // To do:
-    //  - Test this on consider.it
-    //    - Connect 
-    //  - Implement server_save()
-
+    /*   To do:
+          - Try connecting to a real React component
+          - Implement server_save()
+     */
 
     // ****************
     // Public API
@@ -26,14 +25,14 @@ ActiveREST = (function () {
         return cache[url]
     }
 
-    /** 
-        Takes any number of object arguments.  For each:
-        - Update cache
-        - Saves to server
-
-        It supports multiple arguments to allow batching multiple
-        server_save() calls together in future optimizations.
-    */
+    /* 
+     *  Takes any number of object arguments.  For each:
+     *  - Update cache
+     *  - Saves to server
+     *
+     *  It supports multiple arguments to allow batching multiple
+     *  server_save() calls together in future optimizations.
+     */
     function save() {
         for (var i=0; i < arguments.length; i++) {
             var object = arguments[i]
@@ -118,6 +117,7 @@ ActiveREST = (function () {
     }
 
     function server_save(object) {
+        // XXX unimplemented XXX
         // Jsonify object
         // Do a PUT/UPDATE/whatever request to the server at url for this object.
     }
@@ -149,8 +149,8 @@ ActiveREST = (function () {
     // Export the public API
     return {fetch: fetch,
             save: save,
-            server_fetch: server_fetch,
-            server_save: server_save,
+            //server_fetch: server_fetch,
+            //server_save: server_save,
             is_loading: is_loading}
 })()
 
