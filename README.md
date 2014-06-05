@@ -131,6 +131,21 @@ Or if you want a spinner, use:
 
     render_loading: function () { return '<img src="/static/spinner.gif">' }
 
+> NOTE: This `render_loading` API isn't currently supported.  Instead,
+> put an `if` statement into your `render()` method that branches on
+> `is_loading(this.props)`, like this:
+> 
+    render: function () {
+        if (is_loading(this.props)) {
+            ... render loading indicator ...
+        } else {
+            ... render regular component ...
+        }
+    }
+> 
+> I'll make the `render_loading()` method work once I implement a
+> React.createClass wrapper.
+
 Optimizations
 ------------
 The first release will be simple but inefficient.  For instance:
@@ -160,6 +175,12 @@ I have notes on how to implement these.  Lemme know if you want em.
 
 Optimizing the cache
 --------------
+
+> NOTE: This has changed too.  We now support the "proposal
+> vs. proposal_summary" via partially-loaded objects, by adding a
+> `?loading` query parameter to the object's URL.  I'll update the
+> docs later.
+
 When we load the homepage, we only fetch summaries of each proposal.
 We fetch the full details of a proposal when a user clicks into it.
 Ideally, we would re-use the homepage's proposal summaries when
