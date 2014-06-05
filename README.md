@@ -134,7 +134,7 @@ Or if you want a spinner, use:
 > NOTE: This `render_loading` API isn't currently supported.  Instead,
 > put an `if` statement into your `render()` method that branches on
 > `is_loading(this.props)`, like this:
-
+> 
     render: function () {
         if (is_loading(this.props)) {
             ... render loading indicator ...
@@ -142,7 +142,7 @@ Or if you want a spinner, use:
             ... render regular component ...
         }
     }
-
+> 
 > I'll make the `render_loading()` method work once I implement a
 > React.createClass wrapper.
 
