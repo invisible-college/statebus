@@ -19,6 +19,8 @@ ActiveREST = (function () {
         cache[url] = {url: mark_as_loading(url)}
         server_fetch(url, function (obj) {
             update_cache(obj)
+            var re_render = (window.re_render || function () {
+                console.log('You need to implement re_render()') })
             re_render()
         })
         return cache[url]
@@ -51,21 +53,6 @@ ActiveREST = (function () {
      *               }
      */
     function is_loading(props) {
-        function has_loading(url) {
-            url = url.split('?')
-            if (url.length < 2) return false
-            vars = url[1].split('&')
-            for (var i=0; i < vars.length; i++) {
-                pair = vars[i].split('=')
-
-                // Return true for both "?loading", and "?<key>=loading"
-                if (pair[0] == 'loading')
-                    return true
-                if (pair.length > 1 && pair[1] == 'loading')
-                    return true
-            }
-            return false
-        }
         for (var key in props)
             if (props.hasOwnProperty(key))
                 if (props[key].url && has_loading(props[key].url))
@@ -136,16 +123,27 @@ ActiveREST = (function () {
         // Do a PUT/UPDATE/whatever request to the server at url for this object.
     }
 
-    function re_render() {
-        // At some point this should redraw the react shit
-    }
 
 
     // ******************
     // Internal url helpers
-
     function mark_as_loading(url) {
         return url.split('?')[0] + '?loading'
+    }
+    function has_loading(url) {
+        url = url.split('?')
+        if (url.length < 2) return false
+        vars = url[1].split('&')
+        for (var i=0; i < vars.length; i++) {
+            pair = vars[i].split('=')
+
+            // Return true for both "?loading", and "?<key>=loading"
+            if (pair[0] == 'loading')
+                return true
+            if (pair.length > 1 && pair[1] == 'loading')
+                return true
+        }
+        return false
     }
 
 
