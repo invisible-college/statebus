@@ -26,22 +26,25 @@ object-oriented model system.  No pubsub.  That's not necessary.
 How to Use it
 -----------------
 
-Here's a basic scenario. Let's render the page for Proposal #34.
+Here's a basic scenario. Let's render the page for Book #34.
 
-	var proposal = fetch('/proposal/34')
-	React.renderComponent(<Proposal data={proposal} />, document.body)
+	var book = fetch('/book/34')
+	React.renderComponent(<Book data={book} />, document.body)
 
 Look at that fetch.  It goes to the server, which returns nested JSON like this:
 
-	{ url: '/proposal/34',
-	  title: 'Should I have a baby?',
-	  description: '...',
-	  points: [{url: '/point/34',
-	            is_pro: true,
-	            ...},
-	            {...}
-	            ]
-	}
+
+    { url: '/book/34',
+      title: 'Should I have a baby?',
+      description: '...',
+      sections: [{url: '/section/34',
+                  page_number: 1,
+                  header: 'How to choose a baby',
+                  body: 'First, put on some good-looking undies...'
+                  ...},
+                 {...}]
+    }
+
 
 This data is cached automatically, with a line like this:
 
@@ -49,30 +52,30 @@ This data is cached automatically, with a line like this:
 
   The programmer specifies a `url` field on every JSON dictionary he
   wants cached.  He can even cache nested dictionaries like
-  `/point/34` above.  This RESTful `url` is a hash key.  It also has a
+  `/section/34` above.  This RESTful `url` is a hash key.  It also has a
   second use when we save objects, which you'll learn soon.
 
   The cache is saved in `localStorage` so that it never dies.
 
-The Proposal component's `render()` method can then access this data  like so:
+The Book component's `render()` method can then access this data  like so:
 
 	this.props.title
-	this.props.points[3]
+	this.props.sections[3]
 
-If the user edits the proposal title, we save the edits with:
+If the user edits the book title, we save the edits with:
 
-	proposal.title = <new title>
+	book.title = <new title>
 	save(proposal)
 
   This will save the new data on the server.  It updates the cache,
   then does a `POST/PUT/UPDATE` request to the proposal object's `url`,
-  and tells React to re-render the page.
+  and tells React to re-render the DOM.
 
 To create a new object, just make one like this:
 
-	var pointy_point = { url: new_url('point'),
-	                     title: 'Barf on you, man!',
-	                     ... }
+	var booky_book = { url: new_url('book'),
+	                   title: 'Barf on you, man!',
+	                   ... }
 
   ...and then save it with `save()`.  This will put it in the cache and
   save it in the server.
@@ -146,6 +149,68 @@ Or if you want a spinner, use:
 > I'll make the `render_loading()` method work once I implement a
 > React.createClass wrapper.
 
+Partial Data
+--------------
+
+**Example:**
+
+What if we want to display a table of contents of every `/section` in
+`/book/34`, like this:
+
+    How to choose a baby       p1
+    Who to make a baby with    p3
+    What clothing to wear      p10
+    ...
+
+We only need each section's `header` and `page_number`.  So rather
+than download the full text of every section, we will fetch a slimmed
+data structure from the server, that looks like:
+
+
+    { url: '/table_of_contents/87',
+      sections: [{url: '/section/34?brief,
+                  page_number: 1,
+                  header: 'How to choose a baby'},     // Look, no body!
+                 {url: '/section/43?brief',
+                  page_number: 3,
+                  header: 'Who to make a baby with'},  // Look ma, no body!
+                  {...}]
+   }
+
+
+Notice two things:
+
+1. We skipped the `body` fields.
+2. Each section's url contains a query parameter `?summary`. This is
+   how the server specifies that it's incomplete.
+
+**How it works:**
+
+ActiveREST has a special semantics for query parameters on a REST
+URL—they specify which parts of an object have been loaded. If the
+URL has no parameters, it means the whole object has been loaded. If it
+has a parameter (e.g. `?summary`) then only part of it is loaded. If
+it has multiple parameters, (e.g. `?summary&footer`) then all those
+parts are loaded.
+
+When ActiveREST is loading part of an object, it marks it with
+`?parameter=loading`, and if the whole object is loading, then it
+specifies `?loading`. (The current implementation only supports
+`?loading` for the whole object because I haven't written the full
+query string parsing code.)
+
+**Re-using data**
+
+Now, if the user actually clicks through to a section, we can re-use
+the existing title and page number to render those parts of the page
+before the rest of it has loaded.  The `render_loading()` method will
+just check if the summary info is in the cache, and use it if so:
+
+    var header = section.header || spinner
+    var page_number = section.page_number || spinner
+    var body = section.body || spinner
+    return <div>{{header}}</div><div>{{body}}</div><div>{{page_number}}</div>
+
 Optimizations
 ------------
 The first release will be simple but inefficient.  For instance:
@@ -172,53 +237,6 @@ programmers to change their code.  Here are four that we could do:
   needed, keeping statistics and a simple utility measure.
 
 I have notes on how to implement these.  Lemme know if you want em.
-
-Optimizing the cache
---------------
-
-> NOTE: This has changed too.  We now support the "proposal
-> vs. proposal_summary" via partially-loaded objects, by adding a
-> `?loading` query parameter to the object's URL.  I'll update the
-> docs later.
-
-When we load the homepage, we only fetch summaries of each proposal.
-We fetch the full details of a proposal when a user clicks into it.
-Ideally, we would re-use the homepage's proposal summaries when
-loading proposals, so that the user can see the proposal's title while
-the details load.
-
-Here's a way to do this in ActiveREST without any new features.  The
-homepage loads a summary of each proposal, and each proposal page
-loads a full proposal:
-
-  Fetched for the homepage:
-
-    { url: '/top_proposals'
-      proposal_summaries: [{ url: '/proposal_summary/4',  title: 'Should we barf?', ... },
-                           { url: '/proposal_summary/25', title: 'Should we eat?', ... },
-                           ...]
-    }
-
-  Fetched for a proposal page:
-
-    { url: '/proposal/34',
-      title: 'Should we barf?',
-      description: '...',
-      points: [{url: '/point/34',
-                is_pro: true,
-                ...},
-                {...}
-               ]
-    }
-
-Now, in the Proposal object's `render_loading()` method, it'll check if
-the summary info is in the cache, and use it if so:
-
-    if (p = cache['/proposal_summary/34']) {
-       this.props.title = p.title
-       this.props.pro_points = [p.top_pro, null, null, null, null]
-       this.props.con_points = [p.top_con, null, null, null, null]
-    }
 
 Specifying custom "url" keys
 ----------
