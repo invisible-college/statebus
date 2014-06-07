@@ -149,7 +149,7 @@ Or if you want a spinner, use:
 > I'll make the `render_loading()` method work once I implement a
 > React.createClass wrapper.
 
-Partial Data
+Incremental Data Loading
 --------------
 
 **Example:**
