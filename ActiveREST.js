@@ -151,7 +151,8 @@ ActiveREST = (function () {
             save: save,
             //server_fetch: server_fetch,
             //server_save: server_save,
-            is_loading: is_loading}
+            is_loading: is_loading,
+            isLoading: is_loading}
 })()
 
 // Make the API global
