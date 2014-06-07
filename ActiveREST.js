@@ -1,5 +1,6 @@
 ActiveREST = (function () {
     /*   To do:
+          - Make fetch() work for root objects lacking cache key
           - Try connecting to a real React component
           - Implement server_save()
      */
@@ -9,20 +10,21 @@ ActiveREST = (function () {
     var cache = {}
     function fetch(url) {
         // Return the cached version if it exists
-        var result = cache[url]
+        var cache_key = url
+        var result = cache[cache_key]
         if (result)
             return result
 
         // Else, prepare a stub result and start a server_fetch in the
         // background.
-        cache[url] = {url: mark_as_loading(url)}
+        cache[cache_key] = {key: mark_as_loading(cache_key)}
         server_fetch(url, function (obj) {
             update_cache(obj)
             var re_render = (window.re_render || function () {
                 console.log('You need to implement re_render()') })
             re_render()
         })
-        return cache[url]
+        return cache[cache_key]
     }
 
     /* 
@@ -52,9 +54,9 @@ ActiveREST = (function () {
      *               }
      */
     function is_loading(props) {
-        for (var key in props)
-            if (props.hasOwnProperty(key))
-                if (props[key].url && has_loading(props[key].url))
+        for (var v in props)
+            if (props.hasOwnProperty(v))
+                if (props[v].key && has_loading(props[v].key))
                     return true
         return false
     }
@@ -66,22 +68,22 @@ ActiveREST = (function () {
     function update_cache(object) {
         // Recurses through object and folds it into the cache.
 
-        // If this object has a url, update the cache for it
-        var url = object.url
-        if (url) {
-            var cached = cache[url]
+        // If this object has a key, update the cache for it
+        var key = object.key
+        if (key) {
+            var cached = cache[key]
             if (!cached)
                 // This object is new.  Let's cache it.
-                cache[url] = object
-            else if (object !== cache[url]) {
+                cache[key] = object
+            else if (object !== cache[key]) {
                 // Else, mutate cache to equal the object.
 
                 // We want to mutate it in place so that we don't break
                 // pointers to this cache object.
-                for (var key in cache[url])
-                    delete cache[url][key]
-                for (var key in object)
-                    cache[url][key] = object[key]
+                for (var v in cache[key])
+                    delete cache[key][v]
+                for (var v in object)
+                    cache[key][v] = object[v]
             }
         }
 
@@ -92,11 +94,11 @@ ActiveREST = (function () {
             for (var i=0; i < object.length; i++)
                 object[i] = update_cache(object[i])
         else if (typeof(object) === 'object')
-            for (var key in object)
-                object[key] = update_cache(object[key])
+            for (var v in object)
+                object[v] = update_cache(object[v])
 
         // Return the new cached representation of this object
-        return cache[url] || object
+        return cache[key] || object
     }
 
     function server_fetch(url, callback) {
@@ -106,7 +108,7 @@ ActiveREST = (function () {
             if (request.status === 200) {
                 var result = JSON.parse(request.responseText)
                 // Make sure the server returns data for the url we asked it for
-                console.assert(result.url && result.url.split('?')[0] === url.split('?')[0],
+                console.assert(result.key && result.key.split('?')[0] === url.split('?')[0],
                                'Server returned bad data', result, 'for url', url)
                 callback(result)
             }
@@ -125,14 +127,14 @@ ActiveREST = (function () {
 
 
     // ******************
-    // Internal url helpers
-    function mark_as_loading(url) {
-        return url.split('?')[0] + '?loading'
+    // Internal key helpers
+    function mark_as_loading(key) {
+        return key.split('?')[0] + '?loading'
     }
-    function has_loading(url) {
-        url = url.split('?')
-        if (url.length < 2) return false
-        vars = url[1].split('&')
+    function has_loading(key) {
+        key = key.split('?')
+        if (key.length < 2) return false
+        vars = key[1].split('&')
         for (var i=0; i < vars.length; i++) {
             pair = vars[i].split('=')
 

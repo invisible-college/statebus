@@ -1,10 +1,10 @@
-{"url": "/proposal",
+{"key": "/proposal",
  "title": "I am a dog",
  "description": "My mother ate a banana",
- "points": [{"url": "/point/82",
+ "points": [{"key": "/point/82",
              "nutshell": "Bananas R Us",
              "is_pro": true},
-            {"url": "/point/2",
+            {"key": "/point/2",
              "nutshell": "Dogs R Bananas",
              "is_pro": false}]
 }
