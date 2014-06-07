@@ -91,7 +91,7 @@ ActiveREST = (function () {
         if (Array.isArray(object))
             for (var i=0; i < object.length; i++)
                 object[i] = update_cache(object[i])
-        else if (typeof(object) == 'object')
+        else if (typeof(object) === 'object')
             for (var key in object)
                 object[key] = update_cache(object[key])
 
@@ -103,10 +103,10 @@ ActiveREST = (function () {
         // This needs to take a callback and become async
         var request = new XMLHttpRequest()
         request.onload = function () {
-            if (request.status == 200) {
+            if (request.status === 200) {
                 var result = JSON.parse(request.responseText)
                 // Make sure the server returns data for the url we asked it for
-                console.assert(result.url && result.url.split('?')[0] == url.split('?')[0],
+                console.assert(result.url && result.url.split('?')[0] === url.split('?')[0],
                                'Server returned bad data', result, 'for url', url)
                 callback(result)
             }
@@ -137,9 +137,9 @@ ActiveREST = (function () {
             pair = vars[i].split('=')
 
             // Return true for both "?loading", and "?<key>=loading"
-            if (pair[0] == 'loading')
+            if (pair[0] === 'loading')
                 return true
-            if (pair.length > 1 && pair[1] == 'loading')
+            if (pair.length > 1 && pair[1] === 'loading')
                 return true
         }
         return false
