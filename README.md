@@ -1,8 +1,8 @@
 ActiveREST
 ==========
 
-    The web library that makes fun of web libraries in its name
-    by having a web library name that's an oxymoron
+    The web library that makes fun of web libraries in its name,
+    by calling itself a web library name that's an oxymoron
 
 ActiveREST is the stuff in between a server API and React.
 
@@ -11,13 +11,13 @@ It addresses these needs:
 
 **1. Fetching data from server**
 
-   - Injecting it into React components
-   - And saving changes back to DB
+- Injecting it into React components
+- And saving changes back to DB
 
 **2. Caching data**
 
-   - So you can access it repeatedly in javascript data structures
-     without re-fetching each time
+- So you can access it repeatedly in javascript data structures
+  without re-fetching each time
 
 **3. Allowing loading indicators when data is being fetched (spinners, etc)**
 
@@ -25,18 +25,22 @@ Everything else is left simple, and un-designed.  There's no
 object-oriented model system.  No pubsub.  No dispatchers.  Those
 aren't necessary.
 
+All you need is `fetch(url)`, and `save(object)`.
+
 How to Use it
 -----------------
 
-Here's a basic scenario. Let's render the page for Book #34.
+Here's a basic scenario. Let's render Book #34.
 
+```javascript
 	var book = fetch('/book/34')
 	React.renderComponent(<Book data={book} />, document.body)
+```
 
-Look at that fetch.  It goes to the server's `http://___/book/34` url,
-which returns nested JSON like this:
+Look at that fetch.  It goes to the server's
+`http://server.com/book/34` url, which returns nested JSON like this:
 
-
+```javascript
     { url: '/book/34',
       title: 'Should I have a baby?',
       description: '...',
@@ -47,11 +51,13 @@ which returns nested JSON like this:
                   ...},
                  {...}]
     }
+```
 
+This data is cached automatically within ActiveREST, with a line like this:
 
-This data is cached automatically, with a line like this:
-
+```javascript
 	cache[object.url] = object
+```
 
   The programmer specifies a `url` field on every JSON dictionary he
   wants cached.  He can even cache nested dictionaries like
@@ -62,13 +68,17 @@ This data is cached automatically, with a line like this:
 
 The Book component's `render()` method can then access this data  like so:
 
+```javascript
 	this.props.title
 	this.props.sections[3]
+```
 
 If the user edits the book title, we save the edits with:
 
+```javascript
 	book.title = <new title>
 	save(proposal)
+```
 
   This will save the new data on the server.  It updates the cache,
   then does a `POST/PUT/UPDATE` request to the proposal object's `url`,
@@ -76,9 +86,11 @@ If the user edits the book title, we save the edits with:
 
 To create a new object, just make one like this:
 
+```javascript
 	var booky_book = { url: new_url('book'),
 	                   title: 'Barf on you, man!',
 	                   ... }
+```
 
   ...and then save it with `save()`.  This will put it in the cache and
   save it in the server.
@@ -135,12 +147,15 @@ Cutout on a child's component, add the following line to its class:
 
 Or if you want a spinner, use:
 
-    render_loading: function () { return '<img src="/static/spinner.gif">' }
+```javascript
+    render_loading: function () { return <img src="/static/spinner.gif"> }
+```
 
-> NOTE: This `render_loading` API isn't currently supported.  Instead,
+> NOTE: This `render_loading` API isn't supported yet.  Instead,
 > put an `if` statement into your `render()` method that branches on
 > `is_loading(this.props)`, like this:
 > 
+```javascript
     render: function () {
         if (is_loading(this.props)) {
             ... render loading indicator ...
@@ -148,6 +163,7 @@ Or if you want a spinner, use:
             ... render regular component ...
         }
     }
+```
 > 
 > I'll make the `render_loading()` method work once I implement a
 > React.createClass wrapper.
@@ -160,41 +176,47 @@ Incremental Data Loading
 What if we want to display a table of contents of every `/section` in
 `/book/34`, like this:
 
-    How to choose a baby       p1
-    Who to make a baby with    p3
-    What clothing to wear      p10
-    ...                        ...
+    +================================+
+    |     SHOULD I HAVE A BABY?      |
+    |--------------------------------|
+    |                                |
+    |       Table of Contents        |
+    |                                |
+    | How to choose a baby       p1  |
+    | Who to make a baby with    p3  |
+    | What clothing to wear      p10 |
+    | ...                        ... |
 
 We only need each section's `header` and `page_number`.  So rather
 than download the full text of every section, we will fetch a slimmed
 data structure from the server, that looks like:
 
-
+```javascript
     { url: '/table_of_contents/87',
-      sections: [{url: '/section/34?brief,
+      sections: [{url: '/section/34?summary',
                   page_number: 1,
                   header: 'How to choose a baby'},     // Look, no body!
-                 {url: '/section/43?brief',
+                 {url: '/section/43?summary',
                   page_number: 3,
                   header: 'Who to make a baby with'},  // Look ma, no body!
                   {...}]
     }
-
+```
 
 Notice two things:
 
 1. We skipped the `body` fields.
 2. Each section's url contains a query parameter `?summary`. This is
-   how the server specifies that it's incomplete.
+   how the server specifies that it's sending an incomplete object.
 
 **How it works:**
 
 ActiveREST has a special semantics for query parameters on a REST
-URL—they specify which parts of an object have been loaded. If the URL
-has no parameters, it means the whole object has been loaded. If it
-has a parameter (e.g. `?summary`) then only that part of it is
-loaded. If it has multiple parameters, (e.g. `?summary&footer`) then
-all those parts are loaded.
+URL—they specify which parts of an object are loaded. If the URL has
+no parameters, it means the whole object is loaded. If it has a
+parameter (e.g. `?summary`) then only that part of it is loaded. If it
+has multiple parameters, (e.g. `?summary&footer`) then all those parts
+are loaded.
 
 When ActiveREST is loading part of an object, it marks it with
 `?parameter=loading`, and if the whole object is loading, then it
@@ -209,10 +231,12 @@ the existing title and page number to render those parts of the page
 before the rest of it has loaded.  The `render_loading()` method will
 just check if the summary info is in the cache, and use it if so:
 
+```javascript
     var header = section.header || spinner
     var page_number = section.page_number || spinner
     var body = section.body || spinner
     return <div>{{header}}</div><div>{{body}}</div><div>{{page_number}}</div>
+```
 
 As soon as the new data comes through, ActiveREST will re-render the
 component to fill it in.
@@ -250,12 +274,16 @@ Specifying custom "url" keys
 If the programmer can't change the server's API to include a "url"
 field, he can give ActiveREST a pair of custom functions:
 
+```javascript
     function cache_key_func (object) { ... return key ... }
     function save_object_url (object) { ... return url ... }
+```
 
 These simply default to:
 
+```javascript
     cache_key_func = save_object_url = function (object) { return object.url }
+```
 
 This unification of CACHING KEYS and SAVING API METHOD within RESTful
 URLs is the REST part of ActiveREST.
@@ -275,7 +303,9 @@ Giving new objects good URLs
 When the client makes a new object and sends it to the server, it
 generates a temp url.  For instance:
 
+```javascript
     new_url("point")  =>  "/new/point/34"
+```
 
 The server might name its urls according to its internal database row
 ids.  That's fine.  It can choose a better url for each new object the
@@ -283,6 +313,17 @@ client sends it, return that info to the client, and the client will
 keep track of the old and new url, translating between both so that
 the changed url is transparent to the programmer.
   
+Current Status
+------------
+
+Big things:
+- I've implemented `fetch()`, but haven't finished `save()`.
+
+Littler things:
+- Doesn't yet distinguish between partially-loaded and not-at-all-loaded objects
+- `render_loading()` API isn't fully implemented
+- Hasn't been optimized in the slightest
+
 The Name
 ------------
  - ACTIVE: because it's an active DB layer like ActiveRecord
@@ -295,7 +336,8 @@ oxymoron.
 
 The branding and religion of a product should not be contradictory.
 Our branding, on the other hand, has deep meaning.  The meaning of
-seeking meaning in branding, by illustrating a contradiction.
+seeking meaning in branding, by illustrating a contradiction in
+branding.
 
 I think it would be awesome if programmers used ActiveREST for a while
 without realizing that they are using an oxymoron, and then when they
