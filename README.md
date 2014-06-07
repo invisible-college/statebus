@@ -175,7 +175,7 @@ data structure from the server, that looks like:
                   page_number: 3,
                   header: 'Who to make a baby with'},  // Look ma, no body!
                   {...}]
-   }
+    }
 
 
 Notice two things:
@@ -187,11 +187,11 @@ Notice two things:
 **How it works:**
 
 ActiveREST has a special semantics for query parameters on a REST
-URL—they specify which parts of an object have been loaded. If the
-URL has no parameters, it means the whole object has been loaded. If it
-has a parameter (e.g. `?summary`) then only part of it is loaded. If
-it has multiple parameters, (e.g. `?summary&footer`) then all those
-parts are loaded.
+URL—they specify which parts of an object have been loaded. If the URL
+has no parameters, it means the whole object has been loaded. If it
+has a parameter (e.g. `?summary`) then only that part of it is
+loaded. If it has multiple parameters, (e.g. `?summary&footer`) then
+all those parts are loaded.
 
 When ActiveREST is loading part of an object, it marks it with
 `?parameter=loading`, and if the whole object is loading, then it
@@ -211,12 +211,15 @@ just check if the summary info is in the cache, and use it if so:
     var body = section.body || spinner
     return <div>{{header}}</div><div>{{body}}</div><div>{{page_number}}</div>
 
+As soon as the new data comes through, ActiveREST will re-render the
+component to fill it in.
+
 Optimizations
 ------------
 The first release will be simple but inefficient.  For instance:
 
   - Every changed datum will re-render the entire page.
-  - The user must refresh to get changes another user made
+  - The user must refresh their browser to get changes another user made
     - A naïve polling solution needs to repeatedly re-fetch the
       entire cache to discover what changed
 
