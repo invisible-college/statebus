@@ -1,9 +1,10 @@
 ActiveREST
 ==========
 
-     The web library that makes fun of web libraries in its own name
+    The web library that makes fun of web libraries in its name
+    by having a web library name that's an oxymoron
 
-ActiveREST is the stuff in between the server API and React.
+ActiveREST is the stuff in between a server API and React.
 
 It addresses these needs:
 ----------------------
@@ -21,7 +22,8 @@ It addresses these needs:
 **3. Allowing loading indicators when data is being fetched (spinners, etc)**
 
 Everything else is left simple, and un-designed.  There's no
-object-oriented model system.  No pubsub.  That's not necessary.
+object-oriented model system.  No pubsub.  No dispatchers.  Those
+aren't necessary.
 
 How to Use it
 -----------------
@@ -31,7 +33,8 @@ Here's a basic scenario. Let's render the page for Book #34.
 	var book = fetch('/book/34')
 	React.renderComponent(<Book data={book} />, document.body)
 
-Look at that fetch.  It goes to the server, which returns nested JSON like this:
+Look at that fetch.  It goes to the server's `http://___/book/34` url,
+which returns nested JSON like this:
 
 
     { url: '/book/34',
@@ -160,7 +163,7 @@ What if we want to display a table of contents of every `/section` in
     How to choose a baby       p1
     Who to make a baby with    p3
     What clothing to wear      p10
-    ...
+    ...                        ...
 
 We only need each section's `header` and `page_number`.  So rather
 than download the full text of every section, we will fetch a slimmed
