@@ -27,7 +27,7 @@ ActiveREST = (function () {
         return cache[cache_key]
     }
 
-    /* 
+    /*
      *  Takes any number of object arguments.  For each:
      *  - Update cache
      *  - Saves to server
@@ -45,7 +45,7 @@ ActiveREST = (function () {
 
     /* Use this inside render() so you know when to show a loading
      * indicator.  Like:
-     * 
+     *
      *     render: function () {
      *               if (is_loading(this.props)) {
      *                   ... render loading indicator ...
@@ -54,6 +54,8 @@ ActiveREST = (function () {
      *               }
      */
     function is_loading(props) {
+        if (props.key && has_loading(props.key))
+            return true
         for (var v in props)
             if (props.hasOwnProperty(v))
                 if (props[v].key && has_loading(props[v].key))
@@ -113,7 +115,7 @@ ActiveREST = (function () {
                 callback(result)
             }
         }
-        
+
         request.open('GET', url, true)
         request.send(null);
     }
