@@ -25,7 +25,7 @@ Everything else is left simple, and un-designed.  There's no
 object-oriented model system.  No pubsub.  No dispatchers.  Those
 aren't necessary.
 
-All you need is `fetch(url)`, and `save(object)`.
+All you need is `fetch(key)`, and `save(object)`.
 
 How to Use it
 -----------------
@@ -41,10 +41,10 @@ Look at that fetch.  It goes to the server's
 `http://server.com/book/34` url, which returns nested JSON like this:
 
 ```javascript
-    { url: '/book/34',
+    { key: '/book/34',
       title: 'Should I have a baby?',
       description: '...',
-      sections: [{url: '/section/34',
+      sections: [{key: '/section/34',
                   page_number: 1,
                   header: 'How to choose a baby',
                   body: 'First, put on some good-looking undies...'
@@ -56,13 +56,14 @@ Look at that fetch.  It goes to the server's
 This data is cached automatically within ActiveREST, with a line like this:
 
 ```javascript
-	cache[object.url] = object
+	cache[object.key] = object
 ```
 
-  The programmer specifies a `url` field on every JSON dictionary he
-  wants cached.  He can even cache nested dictionaries like
-  `/section/34` above.  This RESTful `url` is a hash key.  It also has a
-  second use when we save objects, which you'll learn soon.
+The programmer specifies a `key` field on every JSON dictionary he
+wants cached.  He can even cache nested dictionaries like
+`/section/34` above.  For many objects, this `key` doubles as a
+RESTful URL, and is used when we save objects, which you'll learn
+soon.
 
   The cache is saved in `localStorage` so that it never dies.
 
@@ -81,13 +82,13 @@ If the user edits the book title, we save the edits with:
 ```
 
   This will save the new data on the server.  It updates the cache,
-  then does a `POST/PUT/UPDATE` request to the proposal object's `url`,
-  and tells React to re-render the DOM.
+  then does a `POST/PUT/UPDATE` request to the proposal object's `key`
+  url, and tells React to re-render the DOM.
 
 To create a new object, just make one like this:
 
 ```javascript
-	var booky_book = { url: new_url('book'),
+	var booky_book = { key: new_key('book'),
 	                   title: 'Barf on you, man!',
 	                   ... }
 ```
@@ -192,11 +193,11 @@ than download the full text of every section, we will fetch a slimmed
 data structure from the server, that looks like:
 
 ```javascript
-    { url: '/table_of_contents/87',
-      sections: [{url: '/section/34?summary',
+    { key: '/table_of_contents/87',
+      sections: [{key: '/section/34?summary',
                   page_number: 1,
                   header: 'How to choose a baby'},     // Look, no body!
-                 {url: '/section/43?summary',
+                 {key: '/section/43?summary',
                   page_number: 3,
                   header: 'Who to make a baby with'},  // Look ma, no body!
                   {...}]
@@ -206,13 +207,13 @@ data structure from the server, that looks like:
 Notice two things:
 
 1. We skipped the `body` fields.
-2. Each section's url contains a query parameter `?summary`. This is
+2. Each section's key contains a query parameter `?summary`. This is
    how the server specifies that it's sending an incomplete object.
 
 **How it works:**
 
-ActiveREST has a special semantics for query parameters on a REST
-URL—they specify which parts of an object are loaded. If the URL has
+ActiveREST has a special semantics for query parameters on a cache
+key—they specify which parts of an object are loaded. If the key has
 no parameters, it means the whole object is loaded. If it has a
 parameter (e.g. `?summary`) then only that part of it is loaded. If it
 has multiple parameters, (e.g. `?summary&footer`) then all those parts
@@ -268,10 +269,10 @@ programmers to change their code.  Here are four that we could do:
 
 I have notes on how to implement these.  Lemme know if you want em.
 
-Specifying custom "url" keys
+Specifying custom cache keys
 ----------
 
-If the programmer can't change the server's API to include a "url"
+If the programmer can't change the server's API to include a "key"
 field, he can give ActiveREST a pair of custom functions:
 
 ```javascript
@@ -282,7 +283,7 @@ field, he can give ActiveREST a pair of custom functions:
 These simply default to:
 
 ```javascript
-    cache_key_func = save_object_url = function (object) { return object.url }
+    cache_key_func = save_object_url = function (object) { return object.key }
 ```
 
 This unification of CACHING KEYS and SAVING API METHOD within RESTful
@@ -297,21 +298,21 @@ e.g.:
  - Joins over a relational database
  - Directly mapping it to a NoSQL json data store
 
-Giving new objects good URLs
+Giving new objects good keys
 -------------
 
 When the client makes a new object and sends it to the server, it
-generates a temp url.  For instance:
+generates a temp key.  For instance:
 
 ```javascript
-    new_url("point")  =>  "/new/point/34"
+    new_key("point")  =>  "/new/point/34"
 ```
 
-The server might name its urls according to its internal database row
-ids.  That's fine.  It can choose a better url for each new object the
-client sends it, return that info to the client, and the client will
-keep track of the old and new url, translating between both so that
-the changed url is transparent to the programmer.
+The server might prefer to name its keys according to its internal
+database row ids.  That's fine.  It can choose a better key for each
+new object the client sends it, return that info to the client, and
+the client will keep track of the old and new key, translating between
+both so that the changed url is transparent to the programmer.
   
 Current Status
 ------------
@@ -327,7 +328,7 @@ Littler things:
 The Name
 ------------
  - ACTIVE: because it's an active DB layer like ActiveRecord
- - REST:   because the data schema is defined in terms of RESTful urls
+ - REST:   because the data schema is defined in terms of RESTful url keys
 
 We call it ActiveREST because programmers fervently combine "Active"
 records with "REST" in a programming religion that is full of
