@@ -90,10 +90,12 @@ function parseId(id) {
 }
 
 app.get('/proposals', function(req, res) {
-    res.send({
-        key: '/proposals',
-        proposals: getProposals()
-    });
+    setTimeout(function () {
+        res.send({
+            key: '/proposals',
+            proposals: getProposals()
+        });
+    }, 1000)
 });
 
 app.get('/proposal/:id', function(req, res) {
