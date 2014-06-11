@@ -1,0 +1,10 @@
+{
+    "name": "testserver",
+    "description": "trivial server to test ActiveREST",
+    "private": true,
+    "dependencies": {
+        "express": "4.x",
+        "body-parser": "*",
+        "underscore": "*"
+    }
+}
