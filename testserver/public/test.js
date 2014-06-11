@@ -9,9 +9,7 @@
 
             var body;
 
-            if (is_loading(proposals)) {
-                body = 'Loading...';
-            } else {
+            if (has_loaded(proposals)) {
                 body = [];
                 proposals.proposals.forEach(function(p) {
                     body.push(D.div({}, [
@@ -20,6 +18,8 @@
                         p.description
                     ]));
                 });
+            } else {
+                body = 'Loading...';
             }
 
             return D.div({}, body);

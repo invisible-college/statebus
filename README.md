@@ -154,14 +154,14 @@ Or if you want a spinner, use:
 
 > NOTE: This `render_loading` API isn't supported yet.  Instead,
 > put an `if` statement into your `render()` method that branches on
-> `is_loading(this.props)`, like this:
+> `has_loaded(this)`, like this:
 > 
 ```javascript
     render: function () {
-        if (is_loading(this.props)) {
-            ... render loading indicator ...
+        if (has_loaded(this)) {
+            ... render normally ...
         } else {
-            ... render regular component ...
+            ... render loading indicator ...
         }
     }
 ```
@@ -169,13 +169,11 @@ Or if you want a spinner, use:
 > I'll make the `render_loading()` method work once I implement a
 > React.createClass wrapper.
 
-Incremental Data Loading
+Partial Data
 --------------
 
-**Example:**
-
-What if we want to display a table of contents of every `/section` in
-`/book/34`, like this:
+Some pages only need parts of objects.  For instance, a book's table of
+contents page needs the `header` and `page_number` of every section...
 
     +================================+
     |     SHOULD I HAVE A BABY?      |
@@ -188,59 +186,79 @@ What if we want to display a table of contents of every `/section` in
     | What clothing to wear      p10 |
     | ...                        ... |
 
-We only need each section's `header` and `page_number`.  So rather
-than download the full text of every section, we will fetch a slimmed
-data structure from the server, that looks like:
+...but it doesn't need to download each section's full `body`!  That
+would take forever.  To display this page, we'll want to load a
+_subset_ of every section: the headers and page numbers, but no full
+text bodies.
+
+ActiveREST lets us work with a subset of an object by appending a
+`?subset` tag to the object's key.  For instance, we might invent a
+`?no_body` subset name for any section that lacks a `body` and give
+these objects keys like:
+
+```javascript
+   key = "/section/34?no_body"
+```
+
+Now, the server can return a condensed data structure for the table of
+contents (omitting the `body` fields):
 
 ```javascript
     { key: '/table_of_contents/87',
-      sections: [{key: '/section/34?summary',
+      sections: [{key: '/section/34?no_body',
                   page_number: 1,
                   header: 'How to choose a baby'},     // Look, no body!
-                 {key: '/section/43?summary',
+                 {key: '/section/43?no_body',
                   page_number: 3,
                   header: 'Who to make a baby with'},  // Look ma, no body!
                   {...}]
     }
 ```
 
-Notice two things:
+Even better, ActiveREST will re-use this summary information when we
+load a full section!  Full objects don't have a `?subset` section in
+their key.
 
-1. We skipped the `body` fields.
-2. Each section's key contains a query parameter `?summary`. This is
-   how the server specifies that it's sending an incomplete object.
+All subsets map to the same cache location, so the information from
+one subset is automatically available in others.
 
-**How it works:**
-
-ActiveREST has a special semantics for query parameters on a cache
-key—they specify which parts of an object are loaded. If the key has
-no parameters, it means the whole object is loaded. If it has a
-parameter (e.g. `?summary`) then only that part of it is loaded. If it
-has multiple parameters, (e.g. `?summary&footer`) then all those parts
-are loaded.
-
-When ActiveREST is loading part of an object, it marks it with
-`?parameter=loading`, and if the whole object is loading, then it
-specifies `?loading`. (The current implementation only supports
-`?loading` for the whole object because I haven't written the full
-query string parsing code.)
-
-**Re-using data**
-
-Now, if the user actually clicks through to a section, we can re-use
-the existing title and page number to render those parts of the page
-before the rest of it has loaded.  The `render_loading()` method will
-just check if the summary info is in the cache, and use it if so:
+Let's imagine that the user clicks on the first section, "How to
+choose a baby".  This will need the full section data, and will run:
 
 ```javascript
+var data = fetch("/section/34")    // Download the full section.  No subset specified!
+React.renderComponent(...data...)  // Render the component (a loading indicator at first)
+```
+
+But even while the full data loads, ActiveREST will hold onto the
+previous `?no_body` data, and the section's `render_loading()`
+function can take advantage of it by just checking if the summary info
+is in the cache, and using it if so:
+
+```javascript
+function render() {
     var header = section.header || spinner
     var page_number = section.page_number || spinner
     var body = section.body || spinner
     return <div>{{header}}</div><div>{{body}}</div><div>{{page_number}}</div>
+}
 ```
 
-As soon as the new data comes through, ActiveREST will re-render the
-component to fill it in.
+Now, when a user goes to a section, it will immediately show the
+section's `header` and `page_number` (re-using them from the
+homepage), and will show the full body text once it's been downloaded.
+
+**Tech Specs**
+
+You can specify that multiple subsets are loaded with
+`?set1&set2` syntax, such as `?summary&footer`.
+
+When ActiveREST is loading part of an object, it marks it with
+`?subset=loading`, and if the whole object is loading, then it
+specifies `?loading`. (The current implementation only supports
+`?loading` for the whole object because I haven't written the full
+query string parsing code.)
+
 
 Optimizations
 ------------

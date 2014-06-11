@@ -47,13 +47,21 @@ ActiveREST = (function () {
      * indicator.  Like:
      *
      *     render: function () {
-     *               if (is_loading(this.props)) {
-     *                   ... render loading indicator ...
-     *               } else {
+     *               if (has_loaded(this)) {
      *                   ... render normally ...
+     *               } else {
+     *                   ... render loading indicator ...
      *               }
      */
-    function is_loading(props) {
+    function has_loaded(obj) {
+        return !is_loading(obj)
+    }
+    function is_loading(obj) {
+        if (obj.key && has_loading(obj.key))
+            return true
+
+        var props = obj.props
+        if (!props) return
         if (props.key && has_loading(props.key))
             return true
         for (var v in props)
@@ -109,9 +117,9 @@ ActiveREST = (function () {
         request.onload = function () {
             if (request.status === 200) {
                 var result = JSON.parse(request.responseText)
-                // Make sure the server returns data for the url we asked it for
+                // Warn if the server returns data for a different url than we asked it for
                 console.assert(result.key && result.key.split('?')[0] === url.split('?')[0],
-                               'Server returned bad data', result, 'for url', url)
+                               'Server returned data with unexpected key', result, 'for url', url)
                 callback(result)
             }
         }
@@ -155,8 +163,8 @@ ActiveREST = (function () {
             save: save,
             //server_fetch: server_fetch,
             //server_save: server_save,
-            is_loading: is_loading,
-            isLoading: is_loading} // We support CamelCase too
+            has_loaded: has_loaded,
+            hasLoaded: has_loaded} // We support CamelCase too
 })()
 
 // Make the API global
