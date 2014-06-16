@@ -10,21 +10,19 @@ ActiveREST = (function () {
     var cache = {}
     function fetch(url) {
         // Return the cached version if it exists
-        var cache_key = url
+        var cache_key = url.split('?')[0]
         var result = cache[cache_key]
         if (result)
             return result
 
-        // Else, prepare a stub result and start a server_fetch in the
-        // background.
-        cache[cache_key] = {key: mark_as_loading(cache_key)}
+        // Else, start a server_fetch in the background and return {}.
         server_fetch(url, function (obj) {
             update_cache(obj)
             var re_render = (window.re_render || function () {
                 console.log('You need to implement re_render()') })
             re_render()
         })
-        return cache[cache_key]
+        return {}
     }
 
     /*
@@ -47,27 +45,28 @@ ActiveREST = (function () {
      * indicator.  Like:
      *
      *     render: function () {
-     *               if (has_loaded(this)) {
+     *               if (is_loaded(object)) {
      *                   ... render normally ...
      *               } else {
      *                   ... render loading indicator ...
      *               }
      */
-    function has_loaded(obj) {
-        return !is_loading(obj)
-    }
-    function is_loading(obj) {
-        if (obj.key && has_loading(obj.key))
-            return true
+    function is_loaded(obj, subset) {
+        var cached = cache[obj.key]
+        if (cached) {
+            var cached_subsets = querystring_vals(cached.key, 'subset')
+            // Check if fully loaded
+            if (cached_subsets == null)
+                return true
 
-        var props = obj.props
-        if (!props) return
-        if (props.key && has_loading(props.key))
-            return true
-        for (var v in props)
-            if (props.hasOwnProperty(v))
-                if (props[v].key && has_loading(props[v].key))
-                    return true
+            // Check if it's loaded for an unlabeled '?subset'
+            if (subset === 'subset')
+                return cached_subsets.length == 0
+
+            // Check if a labeled subset is present
+            if (subset)
+                return cached_subsets.indexOf(subset) != -1
+        }
         return false
     }
 
@@ -79,14 +78,20 @@ ActiveREST = (function () {
         // Recurses through object and folds it into the cache.
 
         // If this object has a key, update the cache for it
-        var key = object.key
+        var key = object.key && object.key.split('?')[0]
         if (key) {
             var cached = cache[key]
             if (!cached)
                 // This object is new.  Let's cache it.
                 cache[key] = object
-            else if (object !== cache[key]) {
+            else if (object !== cached) {
                 // Else, mutate cache to equal the object.
+
+                // First let's merge the subset keys
+                var old_subsets = querystring_vals(cached.key, 'subset')
+                var new_subsets = querystring_vals(object.key, 'subset')
+                var merged_subsets = array_union(old_subsets || [],
+                                                 new_subsets || [])
 
                 // We want to mutate it in place so that we don't break
                 // pointers to this cache object.
@@ -94,6 +99,12 @@ ActiveREST = (function () {
                     delete cache[key][v]
                 for (var v in object)
                     cache[key][v] = object[v]
+
+                if (merged_subsets.length > 0)
+                    // I'll have to generalize this later if we want
+                    // it to support params in urls beyond 'subset'
+                    // ... right now it wipes out all other params.
+                    cache[key].key = key + '?subset=' + merged_subsets.join(',')
             }
         }
 
@@ -138,33 +149,37 @@ ActiveREST = (function () {
 
     // ******************
     // Internal key helpers
-    function mark_as_loading(key) {
-        return key.split('?')[0] + '?loading'
-    }
-    function has_loading(key) {
-        key = key.split('?')
-        if (key.length < 2) return false
-        vars = key[1].split('&')
-        for (var i=0; i < vars.length; i++) {
-            pair = vars[i].split('=')
-
-            // Return true for both "?loading", and "?<key>=loading"
-            if (pair[0] === 'loading')
-                return true
-            if (pair.length > 1 && pair[1] === 'loading')
-                return true
+    function querystring_vals(query, variable) {
+        var params = query.split('?')[1]
+        if (!params) return null
+        params = params.split('&')
+        for (var i=0; i<params.length; i++) {
+            var param = params[i].split('=')
+            if (param.length < 2) continue
+            var param_variable = param[0]
+            var param_value = param[1]
+            if (param_variable.toLowerCase() === variable.toLowerCase())
+                return param_value.split(',')
         }
-        return false
+        return null
     }
 
+    function array_union(array1, array2) {
+        var hash = {}
+
+        for (var i=0; i<array1.length; i++)
+            hash[array1[i]] = true
+        for (var i=0; i<array2.length; i++)
+            hash[array2[i]] = true
+
+        return Object.keys(hash)
+    }
 
     // Export the public API
     return {fetch: fetch,
             save: save,
-            //server_fetch: server_fetch,
-            //server_save: server_save,
-            has_loaded: has_loaded,
-            hasLoaded: has_loaded} // We support CamelCase too
+            is_loaded: is_loaded,
+            isLoaded: is_loaded} // We support CamelCase too
 })()
 
 // Make the API global

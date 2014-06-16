@@ -9,7 +9,7 @@
 
             var body;
 
-            if (has_loaded(proposals)) {
+            if (is_loaded(proposals)) {
                 body = [];
                 proposals.proposals.forEach(function(p) {
                     body.push(D.div({}, [
