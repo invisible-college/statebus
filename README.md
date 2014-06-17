@@ -1,7 +1,17 @@
-fart
+Nervous Programming
 ==========
 
-It's a little thing in between you and your server.
+Nerve is a library that connects React to a server API.
+
+When used with React, it creates a single source-of-truth for all
+state in your application, which simplifies multi-component
+programming.
+
+You will never have to:
+ - keep track of states
+ - chain lots of callback functions together
+ - or make components depend on one another
+...again.
 
 It addresses these needs:
 ----------------------
@@ -55,7 +65,7 @@ re-fetched by using keys.)
     }
 ```
 
-This data is cached automatically within ActiveREST, with a line like this:
+This data is cached automatically within Nervous, with a line like this:
 
 ```javascript
 	cache[object.key] = object
@@ -103,7 +113,7 @@ Loading indicators
 Perhaps we want to customize the HTML of a component when it's
 loading.
 
-In ActiveREST, you add a `render_loading()` method to any component
+In Nervous, you add a `render_loading()` method to any component
 that will need a spinner.  This will automatically get called, instead
 of `render()`, if the data it depends upon is still being fetched over
 the internet.  When the data loads, it'll re-render with `render()`.
@@ -193,7 +203,7 @@ would take forever to display this page.  So: how can we load a
 _subset_ of every section: the headers and page numbers, but not the
 full text bodies?
 
-ActiveREST lets us work with a subset of an object by appending a
+Nervous lets us work with a subset of an object by appending a
 `?subset=label` tag to the object's key.  For instance, we might invent a
 `?subset=no_body` subset name for any section that lacks a `body` and give
 these objects keys like:
@@ -217,7 +227,7 @@ contents (omitting the `body` fields):
     }
 ```
 
-Even better, ActiveREST will re-use this summary information when we
+Even better, Nervous will re-use this summary information when we
 load a full section!  Full objects don't have a `?subset` section in
 their key.
 
@@ -232,7 +242,7 @@ var data = fetch("/section/34")    // Download the full section.  No subset spec
 React.renderComponent(...data...)  // Render the component (a loading indicator at first)
 ```
 
-But even while the full data loads, ActiveREST will hold onto the
+But even while the full data loads, Nervous will hold onto the
 previous `?no_body` data, and the section's `render_loading()`
 function can take advantage of it by just checking if the summary info
 is in the cache, and using it if so:
@@ -287,7 +297,7 @@ Specifying custom cache keys
 ----------
 
 If the programmer can't change the server's API to include a "key"
-field, he can give ActiveREST a pair of custom functions:
+field, he can give Nervous a pair of custom functions:
 
 ```javascript
     function cache_key_func (object) { ... return key ... }
@@ -301,7 +311,7 @@ These simply default to:
 ```
 
 This unification of CACHING KEYS and SAVING API METHOD within RESTful
-URLs is the REST part of ActiveREST.
+URLs is the REST part of Nervous.
 
 Custom server APIs
 ------------
