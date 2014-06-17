@@ -11,6 +11,7 @@ You will never have to:
  - keep track of states
  - chain lots of callback functions together
  - or make components depend on one another
+
 ...again.
 
 It addresses these needs:

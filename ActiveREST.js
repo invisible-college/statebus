@@ -15,14 +15,17 @@ ActiveREST = (function () {
         if (result)
             return result
 
-        // Else, start a server_fetch in the background and return {}.
+        // Else, start a server_fetch in the background and return stub.
         server_fetch(url, function (obj) {
             update_cache(obj)
             var re_render = (window.re_render || function () {
                 console.log('You need to implement re_render()') })
             re_render()
         })
-        return {}
+
+        // This stub is not in the cache, but if you save() it, it
+        // will end up there.
+        return {key: url}
     }
 
     /*
@@ -37,7 +40,8 @@ ActiveREST = (function () {
         for (var i=0; i < arguments.length; i++) {
             var object = arguments[i]
             update_cache(object)
-            server_save(object)
+            if (object.key && object.key[0] == '/')
+                server_save(object)
         }
     }
 
