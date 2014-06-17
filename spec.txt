@@ -53,34 +53,78 @@ periodically sweep through and delete the oldest ones from the cache.
 ?? 
 
 * Partially-Loaded Data
-** URLs
-Append "?loading" to indicate that data is incomplete:
+** Requirements
+*** Views
+- Need to be able to specify which parts of the data they depend upon
+- Need to be able to use a loaded subset, while waiting for a larger
+  set to load
 
-   /proposal/34?loading
+*** Cache
+- Incorporate new subsets of data as they come over the wire
+- Store a union of all subsets at all times
 
-In future, we'll support partial data, like a summary:
+*** Server
+- Need to be able to return partial data
+- Needs to specify which parts of the data it's returning
 
-   /proposal/34?summary
+** Subset URLs
+Some views will need only partial data to be loaded.  The views will
+communicate the subset of the data they depend upon by adding a
+parameter to the REST key:
 
-And then if it's loading the full proposal, it could look like:
+    fetch("/proposal/34?subset=summary")
 
-   /proposal/34?summary&full=loading
+If a program only ever uses a single type of subset, it can skip the
+"=summary" part, and just say "?subset":
+
+    fetch("/proposal/34?subset")
+
+Next, we'll want to mark this information in the cache, so that when a
+new view needs the data, it knows whether it can use the cached
+version, or if it needs to get more data from the server.  So we'll
+record:
+
+    key = "/proposal/34?subset"
+
+Or, if there are multiple subsets used in your app, then you specify a
+particular one with "?subset=<label>":
+
+   key = "/proposal/34?subset=summary"
+
+If multiple subsets have been loaded, the cache will keep track of
+them with:
+
+   key = "/proposal/34?subset=summary,mobile"
+
+Sometimes we'll put objects in the cache that are totally empty -- so
+that other parts of the application get an object that will be filled
+in later.  We will specify empty objects with "?subset=empty":
+
+   key = "/proposal/34?subset=summary"
+
+And the default indicates that an entire object has been loaded:
+
+   key = "/proposal/34"
+
+** is_loaded(obj, <optional> subset)
+This function will check the object's key to see if it has the subset
+loaded yet.  Returns false if not.
 
 ** Storing it 
-We don't use the ?___ stuff for caching.  So we'll have things like:
+The cache wants to maintain a single object for all subsets.  So it
+inserts objects into the cache by ignoring the '?__' part:
 
-    cache['/proposal'] ==> {url: '/proposal?summary&full=loading'
-                            ...}
+    cache['/proposal'] ==> {url: '/proposal?subset=summary' ...}
 
 ** Rendering loading indicators
 This will be automated in the future.  But for now, write an if
 statement inside a component's render() function like this:
 
   render: function () {
-             if (is_loading(this.props)) {
-                 ... render loading indicator ...
-             } else {
+             if (this.is_loaded('subset')) {
                  ... render normal stuff ...
+             } else {
+                 ... render loading indicator ...
              }
           }
 
