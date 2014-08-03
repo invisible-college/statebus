@@ -249,8 +249,8 @@
 
     // Make the private methods accessible under "window.nona"
     vars = 'cache fetch save serverFetch serverSave updateCache csrf keys_4_component components_4_key components hashset clone wrap'.split(' ')
-    window.nona = {}
+    window.ActiveREST = {}
     for (var i=0; i<vars.length; i++)
-        window.nona[vars[i]] = eval(vars[i])
+        window.ActiveREST[vars[i]] = eval(vars[i])
 
 })()
