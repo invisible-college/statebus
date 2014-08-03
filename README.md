@@ -1,10 +1,18 @@
-ActiveREST
+Nervous Programming
 ==========
 
-    The web library that makes fun of web libraries in its name,
-    by calling itself a web library name that's an oxymoron
+Nerve is a library that connects React to a server API.
 
-ActiveREST is the stuff in between a server API and React.
+When used with React, it creates a single source-of-truth for all
+state in your application, which simplifies multi-component
+programming.
+
+You will never have to:
+ - keep track of states
+ - chain lots of callback functions together
+ - or make components depend on one another
+
+...again.
 
 It addresses these needs:
 ----------------------
@@ -40,6 +48,11 @@ Here's a basic scenario. Let's render Book #34.
 Look at that fetch.  It goes to the server's
 `http://server.com/book/34` url, which returns nested JSON like this:
 
+(To do: Explain how to get data and display it without keys.  Say "if
+you already have an API, you can just use it like this."  Then make a
+"caching" section, and explain how to cache data so that it isn't
+re-fetched by using keys.)
+
 ```javascript
     { key: '/book/34',
       title: 'Should I have a baby?',
@@ -53,7 +66,7 @@ Look at that fetch.  It goes to the server's
     }
 ```
 
-This data is cached automatically within ActiveREST, with a line like this:
+This data is cached automatically within Nervous, with a line like this:
 
 ```javascript
 	cache[object.key] = object
@@ -101,7 +114,7 @@ Loading indicators
 Perhaps we want to customize the HTML of a component when it's
 loading.
 
-In ActiveREST, you add a `render_loading()` method to any component
+In Nervous, you add a `render_loading()` method to any component
 that will need a spinner.  This will automatically get called, instead
 of `render()`, if the data it depends upon is still being fetched over
 the internet.  When the data loads, it'll re-render with `render()`.
@@ -187,17 +200,17 @@ contents page needs the `header` and `page_number` of every section...
     | ...                        ... |
 
 ...but it doesn't need to download each section's full `body`!  That
-would take forever.  To display this page, we'll want to load a
-_subset_ of every section: the headers and page numbers, but no full
-text bodies.
+would take forever to display this page.  So: how can we load a
+_subset_ of every section: the headers and page numbers, but not the
+full text bodies?
 
-ActiveREST lets us work with a subset of an object by appending a
-`?subset` tag to the object's key.  For instance, we might invent a
-`?no_body` subset name for any section that lacks a `body` and give
+Nervous lets us work with a subset of an object by appending a
+`?subset=label` tag to the object's key.  For instance, we might invent a
+`?subset=no_body` subset name for any section that lacks a `body` and give
 these objects keys like:
 
 ```javascript
-   key = "/section/34?no_body"
+   key = "/section/34?subset=no_body"
 ```
 
 Now, the server can return a condensed data structure for the table of
@@ -205,17 +218,17 @@ contents (omitting the `body` fields):
 
 ```javascript
     { key: '/table_of_contents/87',
-      sections: [{key: '/section/34?no_body',
+      sections: [{key: '/section/34?subset=no_body',
                   page_number: 1,
                   header: 'How to choose a baby'},     // Look, no body!
-                 {key: '/section/43?no_body',
+                 {key: '/section/43?subset=no_body',
                   page_number: 3,
                   header: 'Who to make a baby with'},  // Look ma, no body!
                   {...}]
     }
 ```
 
-Even better, ActiveREST will re-use this summary information when we
+Even better, Nervous will re-use this summary information when we
 load a full section!  Full objects don't have a `?subset` section in
 their key.
 
@@ -230,7 +243,7 @@ var data = fetch("/section/34")    // Download the full section.  No subset spec
 React.renderComponent(...data...)  // Render the component (a loading indicator at first)
 ```
 
-But even while the full data loads, ActiveREST will hold onto the
+But even while the full data loads, Nervous will hold onto the
 previous `?no_body` data, and the section's `render_loading()`
 function can take advantage of it by just checking if the summary info
 is in the cache, and using it if so:
@@ -252,12 +265,6 @@ homepage), and will show the full body text once it's been downloaded.
 
 You can specify that multiple subsets are loaded with
 `?set1&set2` syntax, such as `?summary&footer`.
-
-When ActiveREST is loading part of an object, it marks it with
-`?subset=loading`, and if the whole object is loading, then it
-specifies `?loading`. (The current implementation only supports
-`?loading` for the whole object because I haven't written the full
-query string parsing code.)
 
 
 Optimizations
@@ -291,7 +298,7 @@ Specifying custom cache keys
 ----------
 
 If the programmer can't change the server's API to include a "key"
-field, he can give ActiveREST a pair of custom functions:
+field, he can give Nervous a pair of custom functions:
 
 ```javascript
     function cache_key_func (object) { ... return key ... }
@@ -305,7 +312,7 @@ These simply default to:
 ```
 
 This unification of CACHING KEYS and SAVING API METHOD within RESTful
-URLs is the REST part of ActiveREST.
+URLs is the REST part of Nervous.
 
 Custom server APIs
 ------------
@@ -339,40 +346,5 @@ Big things:
 - I've implemented `fetch()`, but haven't finished `save()`.
 
 Littler things:
-- Doesn't yet distinguish between partially-loaded and not-at-all-loaded objects
-- `render_loading()` API isn't fully implemented
-- Hasn't been optimized in the slightest
-
-The Name
-------------
- - ACTIVE: because it's an active DB layer like ActiveRecord
- - REST:   because the data schema is defined in terms of RESTful url keys
-
-We call it ActiveREST because programmers fervently combine "Active"
-records with "REST" in a programming religion that is full of
-contradiction.  To embody this contradiction, ActiveREST is an
-oxymoron.
-
-The branding and religion of a product should not be contradictory.
-Our branding, on the other hand, has deep meaning.  The meaning of
-seeking meaning in branding, by illustrating a contradiction in
-branding.
-
-I think it would be awesome if programmers used ActiveREST for a while
-without realizing that they are using an oxymoron, and then when they
-find out, the jokes on them ignorant suckers!
-
-    He's the one, who likes all our pretty songs
-    And he likes to sing along
-    And he likes to shoot his gun
-    But he don't know what it means
-
-    In Bloom, by Nirvana
-    https://www.youtube.com/watch?v=6vqfuAczm7g
-
-Maybe the code-name for ActiveREST can be "In Bloom", because that's
-the name of the song that describes the people who don't know that the
-code-name of ActiveREST is the meaning of the song "In Bloom".  They
-deserve not to know it, them ignorant suckers!
-
-Finally, the React portion of ActiveREST is named ReActiveREST.
+- `render_loading()` API is partially implemented as `is_loaded()`
+- Optimizations aren't yet implemented
