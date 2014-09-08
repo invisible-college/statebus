@@ -53,15 +53,20 @@ window.StateDash = ReactiveComponent
         add_key(key)
       return tree
 
-    cache = @search_results().data_matches
+    search_results = @search_results()
+    cache = search_results.matches
     tree = url_tree(cache)
-    first_key = do () ->
+
+    first_key = (cache) ->
       for key of cache
         reject_name = dash.selected.name and parse_key(key).name != dash.selected.name
         reject_numb = dash.selected.number and parse_key(key).number != dash.selected.number
         if !reject_name and !reject_numb
           return key
       return null
+
+    best_guess = first_key(search_results.key_matches) or \
+                 first_key(search_results.data_matches)
 
     DIV className: 'state_dash',
       STYLE null,
@@ -81,6 +86,12 @@ window.StateDash = ReactiveComponent
         .state_dash .left  { min-width:   40px; display: inline-block; }
         .state_dash .right { margin-left: 30px; display: inline-block; max-width: 70%; }
         .state_dash .top   { max-width:   100%; margin: 20px 0; }
+
+        .string { color: green; }
+        .number { color: darkorange; }
+        .boolean { color: blue; }
+        .null { color: magenta; }
+        .key { color: red; }
         """
 
       # Render the top (name) menu
@@ -97,12 +108,10 @@ window.StateDash = ReactiveComponent
                   prefix + name
 
       # Render the object
-      DIV className: 'right',
-        JSON.stringify(arest.cache[first_key])
+      PRE className: 'right', ref: 'json_preview',
+        JSON.stringify(arest.cache[best_guess], undefined, 3)
 
   # Other methods
-  componentDidMount: ->
-    console.log('focused it')
   search_results: () ->
     # Returns two filtered views of the cache:
     # 
@@ -110,18 +119,21 @@ window.StateDash = ReactiveComponent
     #     data_matches: {...a cache filtered to matching data...} }
 
     dash = fetch('state_dash')
+    matches = {}
     key_matches = {}
     data_matches = {}
     if dash.filter
       for key of arest.cache
         if key.match(dash.filter)
+          matches[key] = arest.cache[key]
           key_matches[key] = arest.cache[key]
         if JSON.stringify(arest.cache[key]).match(dash.filter)
+          matches[key] = arest.cache[key]
           data_matches[key] = arest.cache[key]
     else
-      key_matches = data_matches = arest.cache
+      matches = key_matches = data_matches = arest.cache
 
-    return {key_matches, data_matches}
+    return {matches, key_matches, data_matches}
   filter_to: (e) ->
     dash = @data('state_dash')
     dash.filter = e.target.value
@@ -129,10 +141,31 @@ window.StateDash = ReactiveComponent
       dash.filter = null
     save(dash)
     true
+
+  componentDidUpdate: () ->
+    el = @refs.json_preview.getDOMNode()
+    el.innerHTML = rainbows(el.innerHTML)
 reset_selection = () ->
   dash = fetch('state_dash')
   dash.selected = {owner: null, name: null, number: null}
   save(dash)
+
+rainbows = (json) ->
+  json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) ->
+    cls = 'number'
+    if (/^"/.test(match))
+      if (/:$/.test(match))
+        cls = 'key'
+      else
+        cls = 'string';
+    else if (/true|false/.test(match))
+      cls = 'boolean'
+    else if (/null/.test(match))
+      cls = 'null';
+    
+    return "<span class=\"#{cls}\">#{match}</span>")
+
 
 fetch 'state_dash',
   on: false
