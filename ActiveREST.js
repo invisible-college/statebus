@@ -3,26 +3,24 @@
     // ****************
     // Public API
     var cache = {}
-    function fetch(url, defaults) {
-        if (window.watch && watch(url)) console.trace()
+    function fetch(key, defaults) {
+        if (key.key) key = key.key // if key is passed as object
 
-        window.record_dependence && record_dependence(url)
+        if (url.key) url = url.key    // If user passes key as object
+        window.record_dependence && record_dependence(key)
 
         // Return the cached version if it exists
-        if (cache[url]) return cache[url]
+        if (cache[key]) return cache[key]
 
         // Else, start a serverFetch in the background and return stub.
-        if (url[0] === '/')
-            server_fetch(url)
+        if (key[0] === '/')
+            server_fetch(key)
 
-        return cache[url] = extend({key: url}, defaults)
+        update_cache(extend({key: key}, defaults))
+        return cache[key]
     }
 
-    /*  Can be called as save(object) or save([object1, object2]).
-     *  For each object:
-     *  - Update cache
-     *  - Saves to server
-     *
+    /*  Updates cache and saves to server.
      *  You can pass a callback that will run when the saves have finished.
      */
     function save(object, continuation) {
@@ -35,10 +33,8 @@
             if (continuation) continuation()
     }
 
-    /*  Can be called as destroy(object).
-     *  For each object:
-     *  - Delete from server (if server-managed)
-     *  - Remove key from cache
+    /*  Deletes from server (if it's there) and removes from cache
+     *  You can pass a callback that will run when the delete has finished.
      */
     function destroy(key, continuation) {
         if (!key) return
@@ -81,7 +77,7 @@
                     // This object is new.  Let's cache it.
                     cache[key] = object
                 else if (object !== cached)
-                    // Else, mutate cache to equal the object.
+                    // Else, mutate cache to match the object.
                     for (var k in object)          // Mutating in place preserves
                         cache[key][k] = object[k]  // pointers to this object
 
@@ -118,21 +114,22 @@
         })
     }
 
-    var outstanding_fetches = {}
+    var pending_fetches = {}
     function server_fetch(key) {
         // Error check
-        if (outstanding_fetches[key]) throw Error('Duplicate request for '+key)
+        if (pending_fetches[key]) {
+            console.error('Duplicate request for '+key)
+            return
+        }
 
         // Build request
         var request = new XMLHttpRequest()
         request.onload = function () {
-            delete outstanding_fetches[key]
+            delete pending_fetches[key]
             if (request.status === 200) {
-                console.log('Fetch returned for', key)
                 var result = JSON.parse(request.responseText)
-                // Warn if the server returns data for a different url than we asked it for
-                console.assert(result.key && result.key === key,
-                               'Server returned data with unexpected key', result, 'for key', key)
+                if (window.arest.trans_in)
+                    result = arest.trans_in(result)
                 update_cache(result)
             }
             else if (request.status === 500)
@@ -141,13 +138,24 @@
         }
 
         // Open request
-        outstanding_fetches[key] = request
+        pending_fetches[key] = request
         request.open('GET', key, true)
         request.setRequestHeader('Accept','application/json')
+        request.setRequestHeader('X-Requested-With','XMLHttpRequest')
+
         request.send(null)
     }
 
+    var pending_saves = {} // Stores xmlhttprequest of any key being saved
+                           // (Note: This shim will fail in many situations...)
     function server_save(object, continuation) {
+        console.log('pending saves', pending_saves[object.key])
+        if (pending_saves[object.key]) {
+            console.log('Yo foo, aborting')
+            pending_saves[object.key].abort()
+            delete pending_saves[object.key]
+        }
+
         var original_key = object.key
         
         // Special case for /new.  Grab the pieces of the URL.
@@ -158,19 +166,23 @@
         // Build request
         var request = new XMLHttpRequest()
         request.onload = function () {
+            // No longer pending
+            delete pending_saves[original_key]
+
             if (request.status === 200) {
                 var result = JSON.parse(request.responseText)
-                console.log('New save result', result)
+                // console.log('New save result', result)
                 // Handle /new/stuff
-                map_objects(result, function (obj) {
+                deep_map(function (obj) {
                     match = obj.key && obj.key.match(/(.*)\?original_id=(\d+)$/)
                     if (match && match[2]) {
                         // Let's map the old and new together
                         var new_key = match[1]                // It's got a fresh key
                         cache[new_key] = cache[original_key]  // Point them at the same thing
-                        obj.key = new_key                     // And it's no longer new
+                        obj.key = new_key                     // And it's no longer "/new/*"
                     }
-                })
+                },
+                        result)
                 update_cache(result)
                 if (continuation) continuation()
             }
@@ -187,15 +199,19 @@
         request.setRequestHeader('Accept','application/json')
         request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
         request.setRequestHeader('X-CSRF-Token', csrf())
+        request.setRequestHeader('X-Requested-With','XMLHttpRequest')
         request.send(JSON.stringify(object))
+
+        // Remember it
+        pending_saves[original_key] = request
     }
 
-    function server_destroy(key, continuation) {
+    function server_delete(key, continuation) {
         // Build request
         var request = new XMLHttpRequest()
         request.onload = function () {
             if (request.status === 200) {
-                console.log('Destroy returned for', key)
+                console.log('Delete returned for', key)
                 var result = JSON.parse(request.responseText)
                 delete cache[key]
                 update_cache(result)
@@ -217,17 +233,9 @@
         request.setRequestHeader('Accept','application/json')
         request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
         request.setRequestHeader('X-CSRF-Token', csrf())
+        request.setRequestHeader('X-Requested-With','XMLHttpRequest')
         request.send(JSON.stringify(payload))
     }
-
-    // This is used in a specific hack.  I need to work on it.
-    function clear_matching_objects (match_key_func) {
-        // Clears all keys where match_key_func(key) returns true
-        for (key in cache)
-            if (match_key_func(key))
-                delete cache[key]
-    }
-
 
     var csrf_token = null
     function csrf(new_token) {
@@ -240,6 +248,65 @@
             } 
         } 
         return ""
+    }
+
+    // Websockets code
+    function upgrade_to_websockets() {
+        if (window.socket && window.socket.io) {
+            console.log('Upgrading statebus to websockets')
+            
+            // Fetch
+            server_fetch = function (key) {
+                // Error check
+                if (pending_fetches[key]) {
+                    console.error('Duplicate request for '+key)
+                    return
+                }
+                pending_fetches[key] = true
+
+                socket.emit('get', key)
+            }
+
+            // Save
+            server_save = function (object) {
+                socket.emit('put', object)            
+            }
+            // Still need to handle /new stuff
+
+            server_delete = function (key) {
+                socket.emit('delete', key)
+            }
+
+            // Receive stuff
+            socket.on('put', function(obj) {
+                console.log('We got putted a', obj)
+                delete pending_fetches[obj.key]
+                if (window.arest.trans_in)
+                    result = arest.trans_in(obj)
+                update_cache(obj)
+            })
+
+            socket.on('delete', function(key) {
+                delete cache[key]
+            })
+
+            // Reconnect needs to re-establish dependencies
+            socket.on('reconnect', function() {
+                for (var key in cache)
+                    if (key[0] == '/')
+                        socket.emit('get', key)
+            })
+        }
+    }
+    document.addEventListener('DOMContentLoaded', upgrade_to_websockets, false)
+
+
+    // This is used in a specific hack.  I need to work on it.
+    function clear_matching_objects (match_key_func) {
+        // Clears all keys where match_key_func(key) returns true
+        for (key in cache)
+            if (match_key_func(key))
+                delete cache[key]
     }
 
     loading_indicator = React.DOM.div({style: {height: '100%', width: '100%'},
@@ -291,8 +358,8 @@
                     execution_context = []
                     if (e instanceof TypeError) {
                         if (this.is_waiting()) return loading_indicator
-                        else { error(e); return error_indicator(e.message) }
-                    } else { error(e) }
+                        else { error(e, this.name); return error_indicator(e.message) }
+                    } else { error(e, this.name) }
                 }
                 execution_context = []
                 after && after.apply(this, arguments)
@@ -323,26 +390,22 @@
 
                  // STEP 2: Create shortcuts e.g. `this.foo' for all parents up the
                  // tree, and this component's local key
-                 function add_shortcut (obj, shortcut_name, to_key) {
-                     //console.log('Giving '+obj.name+' shorcut @'+shortcut_name+'='+to_key)
-                     delete obj[name]
-                     Object.defineProperty(obj, shortcut_name, {
-                         get: function () { return obj.get(to_key) },
-                         configurable: true })
-                 }
 
-                 // ...first for @local
-                 add_shortcut(this, 'local', this.local_key)
-                 
-                 // ...and now for all parents
+                 // First for all parents
                  var parents = this.props.parents.concat([this.local_key])
                  for (var i=0; i<parents.length; i++) {
-                     var name = components[parents[i]].name
-                     var key = components[parents[i]].props.key
-                     if (!key && cache[name] !== undefined)
-                         key = name
-                     add_shortcut(this, name, key)
+                     parent_keys = keys_4_component.get(parents[i])
+                     if (this.mounted_key)
+                         parent_keys = parent_keys.concat([this.mounted_key])
+                     for (var j=0; j<parent_keys.length; j++) {
+                         var key = parent_keys[j]
+                         var name = key_name(key)
+                         add_shortcut(this, name, key)
+                     }
                  }
+
+                 // ...and now for @local
+                 add_shortcut(this, 'local', this.local_key)
              })
 
         wrap(component, 'render', function () {
@@ -381,7 +444,7 @@
             // requested?
             var dependent_keys = keys_4_component.get(this.local_key)
             for (var i=0; i<dependent_keys.length; i++)
-                if (outstanding_fetches[dependent_keys[i]])
+                if (pending_fetches[dependent_keys[i]])
                     return true
             return false
         }
@@ -393,11 +456,23 @@
         // Now create the actual React class with this definition, and
         // return it.
         var react_class = React.createClass(component)
-        return function (props, children) {
+        var result = function (props, children) {
             props = props || {}
             props.parents = execution_context.slice()
             return react_class(props, children)
         }
+        // Give it the same prototype as the original class so that it
+        // passes React.isValidClass() inspection
+        result.prototype = react_class.prototype
+        return result
+    }
+
+    function add_shortcut (obj, shortcut_name, to_key) {
+        //console.log('Giving '+obj.name+' shorcut @'+shortcut_name+'='+to_key)
+        delete obj[shortcut_name]
+        Object.defineProperty(obj, shortcut_name, {
+            get: function () { return obj.get(to_key) },
+            configurable: true })
     }
 
 
@@ -417,15 +492,23 @@
 
         // Then we sweep through and update them
         for (var comp_key in dirty_components)
-            if (dirty_components[comp_key]) // Since one component might update another
+            // the check on both dirty_components and components is a PATCH
+            // for a possible inconsistency between dirty_components and components
+            // that occurs if a component has a componentWillUnmount method.
+            if (dirty_components[comp_key] && components[comp_key]) // Since one component might update another
                 components[comp_key].forceUpdate()
     }
     function record_component_dependence(key) {
         // Looks up current component from the execution context
         if (execution_context.length > 0) {
             var component = execution_context[execution_context.length-1]
-            keys_4_component.add(component, key)  // Track dependencies
-            components_4_key.add(key, component)  // both ways
+            if (!keys_4_component.contains(component, key)) {
+                keys_4_component.add(component, key)  // Track dependencies
+                components_4_key.add(key, component)  // both ways
+
+                // Give it the this.foo syntax
+                add_shortcut(components[component], key_name(key), key)
+            }
         }
     }
     function clear_component_dependencies(component) {
@@ -442,7 +525,6 @@
         var hash = this.hash = {}
         this.get = function (k) { return Object.keys(hash[k] || {}) }
         this.add = function (k, v) {
-            // if (k == 'component/946') {console.log('Adding component/946');console.trace()}
             if (hash[k] === undefined)
                 hash[k] = {}
             hash[k][v] = true
@@ -451,6 +533,7 @@
             delete hash[k][v]
         }
         this.delAll = function (k) { hash[k] = {} }
+        this.contains = function (k, v) { return hash[k] && hash[k][v] }
     }
     function Set() {
         var hash = {}
@@ -475,26 +558,38 @@
             if (!obj.hasOwnProperty(attr)) obj[attr] = with_obj[attr]
         return obj
     }
-    function map_objects(object, func) {
+    function deep_map(func, object) {
+        // This function isn't actually a full "deep map" yet.
+        // Limitations: It only applies func to OBJECTS (not arrays or
+        // atoms), and doesn't return anything.
         if (Array.isArray(object))
             for (var i=0; i < object.length; i++)
-                map_objects(object[i], func)
+                deep_map(func, object[i])
         else if (typeof(object) === 'object' && object !== null) {
             func(object)
             for (var k in object)
-                map_objects(object[k], func)
+                deep_map(func, object[k])
         }
     }
-    function error(e) {
-        console.error('In', this.name + ':', e.stack)
+    function error(e, name) {
+        console.error('In', name + ':', e.stack)
         if (window.on_client_error)
             window.on_client_error(e)
     }
 
+    function key_id(string) {
+        return string.match(/\/?[^\/]+\/(\d+)/)[1]
+    }
+    function key_name(string) {
+        return string.match(/\/?([^\/]+).*/)[1]
+    }
 
     // Camelcased API options
     var updateCache=update_cache, serverFetch=server_fetch,
-        serverSave=server_save, serverDestroy=server_destroy
+        serverSave=server_save,
+        serverDelete  =server_delete,
+        serverDestroy =server_delete
+        server_destroy=server_delete
 
     // Export the public API
     window.ReactiveComponent = ReactiveComponent
@@ -503,7 +598,7 @@
     window.destroy = destroy
 
     // Make the private methods accessible under "window.arest"
-    vars = 'cache fetch save server_fetch serverFetch server_save serverSave update_cache updateCache csrf keys_4_component components_4_key components execution_context One_To_Many clone dirty_components affected_keys clear_matching_objects'.split(' ')
+    vars = 'cache fetch save server_fetch serverFetch server_save serverSave update_cache updateCache csrf keys_4_component components_4_key components execution_context One_To_Many clone dirty_components affected_keys clear_matching_objects deep_map key_id key_name'.split(' ')
     window.arest = {}
     for (var i=0; i<vars.length; i++)
         window.arest[vars[i]] = eval(vars[i])
