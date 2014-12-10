@@ -1,5 +1,10 @@
-ActiveREST
+Statebus
 ==========
+
+Formerly named:
+
+ActiveREST
+---------------
 
     The web library that makes fun of web libraries in its name,
     by calling itself a web library name that's an oxymoron
