@@ -6,7 +6,6 @@
     function fetch(key, defaults) {
         if (key.key) key = key.key // if key is passed as object
 
-        if (url.key) url = url.key    // If user passes key as object
         window.record_dependence && record_dependence(key)
 
         // Return the cached version if it exists
