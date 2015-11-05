@@ -1,549 +1,508 @@
-(function () {
+// These 5 lines generate a module that can be included with CommonJS, AMD, and <script> tags.
+(function(name, definition) {
+    if (typeof module != 'undefined') module.exports = definition()
+    else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
+    else this[name] = definition()
+}('statebus', function() { var busses = {}, executing_funk, global_funk, funks = {}; return function make_bus () {
+    var log = console.log.bind(console)
 
     // ****************
-    // Public API
+    // The statebus object we will return
+    function bus (arg) {
+        // Called with a function to react to
+        if (typeof arg === 'function') {
+            var f = reactive(funk)
+            f()
+            return f
+        }
+
+        // Called with a key to produce a subspace
+        else return subspace(arg)
+    }
+    var id = 'bus ' + (Math.random()+'').substring(7)
+    bus.toString = function () { return id + (bus.label || '') }
+    bus.delete_bus = function () { delete busses[bus.id] }
+
+    // The Data Almighty!!
     var cache = {}
-    function fetch(key, defaults) {
-        if (key.key) key = key.key // if key is passed as object
 
-        window.record_dependence && record_dependence(key)
-
-        // Return the cached version if it exists
-        if (cache[key]) return cache[key]
-
-        // Else, start a serverFetch in the background and return stub.
-        if (key[0] === '/')
-            server_fetch(key)
-
-        update_cache(extend({key: key}, defaults))
-        return cache[key]
-    }
-
-    /*  Updates cache and saves to server.
-     *  You can pass a callback that will run when the saves have finished.
-     */
-    function save(object, continuation) {
-        update_cache(object)
-
-        // Save all the objects
-        if (object.key && object.key[0] == '/')
-            server_save(object, continuation)
-        else
-            if (continuation) continuation()
-    }
-
-    /*  Deletes from server (if it's there) and removes from cache
-     *  You can pass a callback that will run when the delete has finished.
-     */
-    function destroy(key, continuation) {
-        if (!key) return
-
-        // Save all the objects
-        if (key[0] == '/')
-            server_destroy(key, continuation)
-        else {
-            // Just remove the key from the cache if this state is
-            // owned by the client.  Note that this won't clean up
-            // references to this object in e.g. any lists. The Client
-            // is responsible for updating all the relevant
-            // references.
-            delete cache[key]
-            if (continuation) continuation()
-        }
-    }
-
-
-    // ================================
-    // == Internal funcs
-
-    var new_index = 0
-    var affected_keys = new Set()
-    var re_render_timer = null
-    function update_cache(object) {
-        function recurse(object) {
-            // Recurses into object and folds it into the cache.
-
-            // If this object has a key, update the cache for it
-            var key = object && object.key
-            if (key) {
-                // Change /new/thing to /new/thing/45
-                if (key.match(new RegExp('^/new/'))     // Starts with /new/
-                    && !key.match(new RegExp('/\\d+$'))) // Doesn't end in a /number
-                    key = object.key = key + '/' + new_index++
-
-                var cached = cache[key]
-                if (!cached)
-                    // This object is new.  Let's cache it.
-                    cache[key] = object
-                else if (object !== cached)
-                    // Else, mutate cache to match the object.
-                    for (var k in object)          // Mutating in place preserves
-                        cache[key][k] = object[k]  // pointers to this object
-
-                // Remember this key for re-rendering
-                affected_keys.add(key)
-            }
-
-            // Now recurse into this object.
-            //  - Through each element in arrays
-            //  - And each property on objects
-            if (Array.isArray(object))
-                for (var i=0; i < object.length; i++)
-                    object[i] = recurse(object[i])
-            else if (typeof(object) === 'object' && object !== null)
-                for (var k in object)
-                    object[k] = recurse(object[k])
-
-            // Return the new cached representation of this object
-            return cache[key] || object
-        }
-
-        recurse(object)
-
-        // Now initiate the re-rendering, if there isn't a timer already going
-        re_render_timer = re_render_timer || setTimeout(function () {
-            re_render_timer = null
-            var keys = affected_keys.all()
-            affected_keys.clear()
-            if (keys.length > 0) {
-                var re_render = (window.re_render || function () {
-                    console.log('You need to implement re_render()') })
-                re_render(keys)
-            }
-        })
-    }
+    // ****************
+    // Reactive REST API
 
     var pending_fetches = {}
-    function server_fetch(key) {
-        // Error check
-        if (pending_fetches[key]) {
-            console.error('Duplicate request for '+key)
-            return
-        }
+    var fetches_out = {}                // Maps `key' to `true' iff we've fetched `key'
+    var fetches_in = new One_To_Many()  // Maps `key' to `pub_funcs' subscribed to our key
+    function fetch (key, callback) {
+        //console.log('fetch:', key, 'on', bus)
+        key = key.key || key    // You can pass in an object instead of key
 
-        // Build request
-        var request = new XMLHttpRequest()
-        request.onload = function () {
-            delete pending_fetches[key]
-            if (request.status === 200) {
-                var result = JSON.parse(request.responseText)
-                if (window.arest.trans_in)
-                    result = arest.trans_in(result)
-                update_cache(result)
-            }
-            else if (request.status === 500)
-                if (window.on_ajax_error) window.on_ajax_error()
+        var called_from_reactive_funk = !callback
+        var funk = callback || executing_funk
 
-        }
+        // Remove this limitation at some point.  One reason for it is
+        // that add_handler() doesn't check if a wildcard handler
+        // already exists... it just pushes a new one.  That'll grow
+        // unbounded.  I can later use regexps for wildcard handlers,
+        // and start escaping the patterns between fetch() and
+        // add_handler() and solve these issues robustly.
+        console.assert(key[key.length-1] !== '*')
 
-        // Open request
-        pending_fetches[key] = request
-        request.open('GET', key, true)
-        request.setRequestHeader('Accept','application/json')
-        request.setRequestHeader('X-Requested-With','XMLHttpRequest')
+        // ** Call fetchers upstream **
 
-        request.send(null)
+        // TODO: checking fetches_out[] doesn't count keys that we got
+        // which arrived nested within a bigger object, because we
+        // never explicity fetched those keys.  But we don't need to
+        // fetch them now cause we already have them.
+        if (!fetches_out[key])
+            bus.route(key, 'fetch', key)
+
+        // Now there might be a new value pubbed onto this bus.
+        // Or there might be a pending fetch.
+        // ... or there weren't any fetchers upstream.
+
+        // ** Subscribe the calling funk **
+
+        if (called_from_reactive_funk)
+            funk.depends_on(bus, key)
+        fetches_in.add(key, funk_key(funk))
+        add_handler(key, 'pub', funk)
+
+        // ** Return a value **
+
+        // If called reactively, we always return a value.
+        if (called_from_reactive_funk)
+            return cache[key] = cache[key] || {key: key}
+
+        // Otherwise, we want to make sure that a pub gets called on
+        // the handler.  If there's a pending fetch, then it'll get
+        // called later.  Otherwise, let's call it now.
+        else if (!pending_fetches[key])
+            run_handler(funk, 'pub', cache[key] = cache[key] || {key: key})
+
     }
 
-    var pending_saves = {} // Stores xmlhttprequest of any key being saved
-                           // (Note: This shim will fail in many situations...)
-    function server_save(object, continuation) {
-        console.log('pending saves', pending_saves[object.key])
-        if (pending_saves[object.key]) {
-            console.log('Yo foo, aborting')
-            pending_saves[object.key].abort()
-            delete pending_saves[object.key]
-        }
+    function save (obj) { bus.route(obj.key, 'save', obj) }
 
-        var original_key = object.key
-        
-        // Special case for /new.  Grab the pieces of the URL.
-        var pattern = new RegExp("/new/([^/]+)/(\\d+)")
-        var match = original_key.match(pattern)
-        var url = (match && '/' + match[1]) || original_key
+    function pub (object) {
+        delete pending_fetches[object.key]
 
-        // Build request
-        var request = new XMLHttpRequest()
-        request.onload = function () {
-            // No longer pending
-            delete pending_saves[original_key]
+        var modified_keys = new Set()
 
-            if (request.status === 200) {
-                var result = JSON.parse(request.responseText)
-                // console.log('New save result', result)
-                // Handle /new/stuff
-                deep_map(function (obj) {
-                    match = obj.key && obj.key.match(/(.*)\?original_id=(\d+)$/)
-                    if (match && match[2]) {
-                        // Let's map the old and new together
-                        var new_key = match[1]                // It's got a fresh key
-                        cache[new_key] = cache[original_key]  // Point them at the same thing
-                        obj.key = new_key                     // And it's no longer "/new/*"
-                    }
-                },
-                        result)
-                update_cache(result)
-                if (continuation) continuation()
-            }
-            else if (request.status === 500)
-                window.ajax_error && window.ajax_error()
-        }
+        // Recursively add all of object, and its sub-objects, into the cache
+        deep_map(object, function (obj) {
 
-        object = clone(object)
-        object['authenticity_token'] = csrf()
+            // Two ways to optimize this in future:
+            //
+            // 1. Only clone objects/arrays if they are new.
+            // 
+            //    Right now we re-clone all internal arrays and
+            //    objects on each pub.  But we really only need to
+            //    clone them the first time they are pubbed into the
+            //    cache.  After that, we can trust that they aren't
+            //    referenced elsewhere.  (We make it the programmer's
+            //    responsibility to clone data if necessary on fetch,
+            //    but not when on pub.)
+            // 
+            //    We'll optimize this once we have history.  We can
+            //    look at the old version to see if an object/array
+            //    existed already before cloning it.
+            //
+            // 2. Don't go infinitely deep.
+            //
+            //    Eventually, each save/pub will be limited to the
+            //    scope underneath nested keyed objects.  Right now
+            //    I'm just recursing infinitely on the whole data
+            //    structure with each pub.
 
-        // Open request
-        var POST_or_PUT = match ? 'POST' : 'PUT'
-        request.open(POST_or_PUT, url, true)
-        request.setRequestHeader('Accept','application/json')
-        request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
-        request.setRequestHeader('X-CSRF-Token', csrf())
-        request.setRequestHeader('X-Requested-With','XMLHttpRequest')
-        request.send(JSON.stringify(object))
+            // Clone arrays
+            if (Array.isArray(obj))
+                obj = obj.slice()
 
-        // Remember it
-        pending_saves[original_key] = request
-    }
-
-    function server_delete(key, continuation) {
-        // Build request
-        var request = new XMLHttpRequest()
-        request.onload = function () {
-            if (request.status === 200) {
-                console.log('Delete returned for', key)
-                var result = JSON.parse(request.responseText)
-                delete cache[key]
-                update_cache(result)
-                if (continuation) continuation()
-            }
-            else if (request.status === 500)
-                if (window.on_ajax_error) window.on_ajax_error()
-            else {
-                // TODO: give user feedback that DELETE failed
-                console.log('DELETE of', key, 'failed!')
+            // Clone objects
+            else if (typeof obj === 'object'
+                     && obj        // That aren't null
+                     && !(obj.key  // That aren't already in cache
+                          && cache[obj.key] === obj)) {
+                var tmp = {}; for (var k in obj) tmp[k] = obj[k]; obj = tmp
             }
 
-        }
+            // Fold cacheable objects into cache
+            if (obj && obj.key) {
+                modified_keys.add(obj.key)
+                if (!cache[obj.key])
+                    // This object is new.  Let's store it.
+                    cache[obj.key] = obj
 
-        payload = {'authenticity_token': csrf()}
+                else if (obj !== cache[obj.key]) {
+                    // Else, mutate cache to match the object.
 
-        // Open request
-        request.open('DELETE', key, true)
-        request.setRequestHeader('Accept','application/json')
-        request.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
-        request.setRequestHeader('X-CSRF-Token', csrf())
-        request.setRequestHeader('X-Requested-With','XMLHttpRequest')
-        request.send(JSON.stringify(payload))
-    }
-
-    var csrf_token = null
-    function csrf(new_token) {
-        if (new_token) csrf_token = new_token
-        if (csrf_token) return csrf_token
-        var metas = document.getElementsByTagName('meta')
-        for (i=0; i<metas.length; i++) { 
-            if (metas[i].getAttribute("name") == "csrf-token") { 
-                return metas[i].getAttribute("content");
-            } 
-        } 
-        return ""
-    }
-
-    // Websockets code
-    function upgrade_to_websockets() {
-        if (window.socket && window.socket.io) {
-            console.log('Upgrading statebus to websockets')
-            
-            // Fetch
-            server_fetch = function (key) {
-                // Error check
-                if (pending_fetches[key]) {
-                    console.error('Duplicate request for '+key)
-                    return
+                    // First, add/update missing/changed fields to cache
+                    for (var k in obj)
+                        if (cache[obj.key][k] !== obj[k])
+                            cache[obj.key][k] = obj[k]
+                    
+                    // Then delete extra fields from cache
+                    for (var k in cache[obj.key])
+                        if (!(k in obj))
+                            delete cache[obj.key][k]
                 }
-                pending_fetches[key] = true
-
-                socket.emit('get', key)
+                obj = cache[obj.key]
             }
 
-            // Save
-            server_save = function (object) {
-                socket.emit('put', object)            
-            }
-            // Still need to handle /new stuff
+            return obj
+        })
 
-            server_delete = function (key) {
-                socket.emit('delete', key)
-            }
+        var keys = modified_keys.all()
+        console.log('pub:', object.key, '. And we are finding these to route:', keys)
+        for (var i=0; i<keys.length; i++)
+            bus.route(keys[i], 'pub', cache[keys[i]])
+        console.log('pub: done from', object.key)
+    }
 
-            // Receive stuff
-            socket.on('put', function(obj) {
-                console.log('We got putted a', obj)
-                delete pending_fetches[obj.key]
-                if (window.arest.trans_in)
-                    result = arest.trans_in(obj)
-                update_cache(obj)
-            })
+    function forget (key, pub_handler) {
+        pub_handler = pub_handler || global_funk
+        var fkey = funk_key(pub_handler)
+        //console.log('Fetches in is', fetches_in.hash)
+        if (!fetches_in.contains(key, fkey)) {
+            console.error("***\n****\nTrying to forget lost key", key,
+                          "from function",
+                          pub_handler, pub_handler.statebus_id,
+                          "that hasn't fetched that key.",
+                          funks[fetches_in.get(key)[0]],
+                          funks[fetches_in.get(key)[0]] && funks[fetches_in.get(key)[0]].statebus_id
+                         )
+            throw 'aldkfjalsdfj'
+        }
 
-            socket.on('delete', function(key) {
-                delete cache[key]
-            })
+        fetches_in.del(key, fkey)
+        del_handler(key, 'pub', pub_handler)
 
-            // Reconnect needs to re-establish dependencies
-            socket.on('reconnect', function() {
-                for (var key in cache)
-                    if (key[0] == '/')
-                        socket.emit('get', key)
-            })
+        // If this is the last handler listening to this key, then we
+        // can delete the cache entry and send a forget upstream.
+        if (!fetches_in.has_any(key)) {
+            clearTimeout(to_be_forgotten[key])
+            to_be_forgotten[key] = setTimeout(function () {
+                bus.route(key, 'forget', key)
+
+                //delete cache[key]
+                delete fetches_out[key]
+                delete to_be_forgotten[key]
+            }, 200)
         }
     }
-    document.addEventListener('DOMContentLoaded', upgrade_to_websockets, false)
-
-
-    // This is used in a specific hack.  I need to work on it.
-    function clear_matching_objects (match_key_func) {
-        // Clears all keys where match_key_func(key) returns true
-        for (key in cache)
-            if (match_key_func(key))
-                delete cache[key]
+    function del(obj_or_key) {
+        var key = obj_or_key.key || obj_or_key
+        delete cache[key]
+        console.log('del:', obj_or_key)
+        bus.route(key, 'delete', key)
+        //forget(key /*, bus??*/)
     }
 
-    loading_indicator = React.DOM.div({style: {height: '100%', width: '100%'},
-                                       className: 'loading'}, 'Loading')
-    function error_indicator(message) {
-        return React.DOM.div(null, 'Error! ' + message)
-    }
 
     // ****************
-    // Wrapper for React Components
-    var components = {}                  // Indexed by 'component/0', 'component/1', etc.
-    var components_count = 0
-    var dirty_components = {}
-    var execution_context = []  // The stack of components that are being rendered
-    function ReactiveComponent(component) {
-        // STEP 1: Define get() and save()
-        component.fetch = component.data = component.get = function (key, defaults) {
-            if (!this._lifeCycleState || this._lifeCycleState == 'UNMOUNTED')
-                throw Error('Component ' + this.name + ' (' + this.local_key
-                            + ') is tryin to get data(' + key + ') after it died.')
+    // Dirty
+    var dirty_keys = new Set()
+    var dirty_sweeper = null
+    function dirty (key) {
+        log('dirty:', key)
+        dirty_keys.add(key)
 
-            if (key === undefined)    key = this.mounted_key || this.name
-            if (!key)                 return null
-            // if (!key)    throw TypeError('Component mounted onto a null key. '
-            //                              + this.name + ' ' + this.local_key)
-            if (key.key) key = key.key   // If user passes key as object
-            return fetch(key, defaults)  // Call into main activerest
-        }
-        component.save = save                  // Call into main activerest
-        
-
-        // STEP 2: Wrap all the component's methods
-        function wrap(obj, method, before, after) {
-            var original_method = obj[method]
-            if (!(original_method || before || after)) return
-            obj[method] = function() {
-                before && before.apply(this, arguments)
-                if (this.local_key !== undefined)
-                    // We only want to set the execution context on wrapped methods
-                    // that are called on live instance.  getDefaultProps(), for
-                    // instance, is called when defining a component class, but not
-                    // on actual instances.  You can't render new components from
-                    // within there, so we don't need to track the execution context.
-                    execution_context = this.props.parents.concat([this.local_key])
-
-                try {
-                    var result = original_method && original_method.apply(this, arguments)
-                } catch (e) {
-                    execution_context = []
-                    if (e instanceof TypeError) {
-                        if (this.is_waiting()) return loading_indicator
-                        else { error(e, this.name); return error_indicator(e.message) }
-                    } else { error(e, this.name) }
+        dirty_sweeper = dirty_sweeper || setTimeout(function () {
+            console.log('dirty_sweeper:', dirty_keys.all())
+            // Let's grab the dirty keys and clear it, so that
+            // anything that gets dirty during this sweep will be able
+            // to sweep again afterward
+            var keys = dirty_keys.all()
+            dirty_keys.clear()
+            dirty_sweeper = null
+            
+            // Now sweep through our cache of dirty filth and sweep it all up!
+            for (var i=0; i<keys.length; i++)
+                // If anybody is fetching this key
+                if (fetches_in.has_any(keys[i])) {
+                    log('dirty_sweeper: calling on_fetch for', key)
+                    bus.route(key, 'fetch', key)
                 }
-                execution_context = []
-                after && after.apply(this, arguments)
+        }, 0)
+    }
 
-                return result
-            }
-        }
 
-        // We register the component when mounting it into the DOM
-        wrap(component, 'componentWillMount',
-             function () { 
-
-                 // STEP 1. Register the component's basic info
-                 if (component.displayName === undefined)
-                     throw 'Component needs a displayName'
-                 this.name = component.displayName.toLowerCase().replace(' ', '_')
-                 this.local_key = 'component/' + components_count++
-                 components[this.local_key] = this
-
-                 // You can pass an object in as a key if you want:
-                 if (this.props.key && this.props.key.key)
-                     this.props.key = this.props.key.key
-
-                 // XXX Putting this into WillMount probably won't let you use the
-                 // mounted_key inside getInitialState!  But you should be using
-                 // activerest state anyway, right?
-                 this.mounted_key = this.props.key
-
-                 // STEP 2: Create shortcuts e.g. `this.foo' for all parents up the
-                 // tree, and this component's local key
-
-                 // First for all parents
-                 var parents = this.props.parents.concat([this.local_key])
-                 for (var i=0; i<parents.length; i++) {
-                     parent_keys = keys_4_component.get(parents[i])
-                     if (this.mounted_key)
-                         parent_keys = parent_keys.concat([this.mounted_key])
-                     for (var j=0; j<parent_keys.length; j++) {
-                         var key = parent_keys[j]
-                         var name = key_name(key)
-                         add_shortcut(this, name, key)
-                     }
-                 }
-
-                 // ...and now for @local
-                 add_shortcut(this, 'local', this.local_key)
-             })
-
-        wrap(component, 'render', function () {
-            // Render will need to clear the component's old
-            // dependencies before rendering and finding new ones
-            clear_component_dependencies(this.local_key)
-            delete dirty_components[this.local_key]
-        })
-
-        wrap(component, 'componentDidMount')
-        wrap(component, 'componentDidUpdate')
-        wrap(component, 'getDefaultProps')
-        //wrap(component, 'componentWillReceiveProps')
-        wrap(component, 'componentWillUnmount', function () {
-            // Clean up
-            clear_component_dependencies(this.local_key)
-            delete cache[this.local_key]
-            delete components[this.local_key]
-            delete dirty_components[this.local_key]
-        })
-        component.shouldComponentUpdate = function (next_props, next_state) {
-            // This component definitely needs to update if it is marked as dirty
-            if (dirty_components[this.local_key] !== undefined) return true
-
-            // Otherwise, we'll check to see if its state or props
-            // have changed.  We can do so by simply serializing them
-            // and then comparing them.  But ignore React's 'children'
-            // prop, because it often has a circular reference.
-            next_props = clone(next_props); this_props = clone(this.props)
-            delete next_props['children']; delete this_props['children']
-            return JSON.stringify([next_state, next_props]) != JSON.stringify([this.state, this_props])
-        }
-        
-        component.is_waiting = function () {
-            // Does this component depend on any keys that are being
-            // requested?
-            var dependent_keys = keys_4_component.get(this.local_key)
-            for (var i=0; i<dependent_keys.length; i++)
-                if (pending_fetches[dependent_keys[i]])
-                    return true
-            return false
-        }
-
-        // STEP 3: Configure the global function hooks for React
-        window.re_render = react_rerender
-        window.record_dependence = record_component_dependence
-
-        // Now create the actual React class with this definition, and
-        // return it.
-        var react_class = React.createClass(component)
-        var result = function (props, children) {
-            props = props || {}
-            props.parents = execution_context.slice()
-            return react_class(props, children)
-        }
-        // Give it the same prototype as the original class so that it
-        // passes React.isValidClass() inspection
-        result.prototype = react_class.prototype
+    // ****************
+    // Connections
+    function subspace (key) {
+        var result = {}
+        for (method in {fetch:null, save:null, pub:null,
+                        'delete':null, forget:null})
+            (function (method) {
+                Object.defineProperty(result, 'on_' + method, {
+                    set: function (func) { add_handler(key, method, func) },
+                    get: function () {
+                        var result = handlers_for(key, method)
+                        result.remove = function (funk) { del_handler (key, method, funk) }
+                        return result
+                    }
+                })
+            })(method)
         return result
     }
 
-    function add_shortcut (obj, shortcut_name, to_key) {
-        //console.log('Giving '+obj.name+' shorcut @'+shortcut_name+'='+to_key)
-        delete obj[shortcut_name]
-        Object.defineProperty(obj, shortcut_name, {
-            get: function () { return obj.get(to_key) },
-            configurable: true })
+    // The funks attached to each key, maps e.g. 'fetch /point/3' to '/30'
+    var handlers = new One_To_Many()
+    var wildcard_handlers = []  // An array of {prefix, message, funk}
+    //var funks = {}              // Maps funk_id -> function
+
+    // A set of timers, for keys to send forgets on
+    var to_be_forgotten = {}
+    function funk_key (funk) {
+        if (!funk.statebus_id) {
+            funk.statebus_id = Math.random() + ''
+            funks[funk.statebus_id] = funk
+        }
+        return funk.statebus_id
     }
+    function add_handler (key, message, funk) {
+        if (key[key.length-1] !== '*')
+            handlers.add(message + ' ' + key, funk_key(funk))
+        else
+            wildcard_handlers.push({prefix: key,
+                                    message: message,
+                                    funk: funk})
 
-
-    // *****************
-    // Dependency-tracking for React components
-    var keys_4_component = new One_To_Many() // Maps component to its dependence keys
-    var components_4_key = new One_To_Many() // Maps key to its dependent components
-    function react_rerender (keys) {
-        // Re-renders only the components that depend on `keys'
-
-        // First we determine the components that will need to be updated
-        for (var i = 0; i < keys.length; i++) {
-            affected_components = components_4_key.get(keys[i])
-            for (var j = 0; j < affected_components.length; j++)
-                dirty_components[affected_components[j]] = true
+        if (to_be_forgotten[key]) {
+            clearTimeout(to_be_forgotten[key])
+            delete to_be_forgotten[key]
         }
 
-        // Then we sweep through and update them
-        for (var comp_key in dirty_components)
-            // the check on both dirty_components and components is a PATCH
-            // for a possible inconsistency between dirty_components and components
-            // that occurs if a component has a componentWillUnmount method.
-            if (dirty_components[comp_key] && components[comp_key]) // Since one component might update another
-                components[comp_key].forceUpdate()
+        // Now check if the method is a fetch and there's a fetched
+        // key in this space, and if so call the handler.
     }
-    function record_component_dependence(key) {
-        // Looks up current component from the execution context
-        if (execution_context.length > 0) {
-            var component = execution_context[execution_context.length-1]
-            if (!keys_4_component.contains(component, key)) {
-                keys_4_component.add(component, key)  // Track dependencies
-                components_4_key.add(key, component)  // both ways
+    var forget_timer
+    function del_handler (key, message, funk) {
+        if (key[key.length-1] !== '*')
+            // Delete direct connection
+            handlers.del(message + ' ' + key, funk_key(funk))
+        else
+            // Delete wildcard connection
+            for (var i=0; i<wildcard_handlers.length; i++) {
+                var handler = wildcard_handlers[i]
+                if (handler.prefix === key
+                    && handler.message === message
+                    && handler.funk === funk) {
 
-                // Give it the this.foo syntax
-                add_shortcut(components[component], key_name(key), key)
+                    wildcard_handlers.splice(i,1)  // Splice this element out of the array
+                    i--                            // And decrement the counter while we're looping
+                }
             }
-        }
     }
-    function clear_component_dependencies(component) {
-        var depends_on_keys = keys_4_component.get(component)
-        for (var i=0; i<depends_on_keys.length; i++)
-            components_4_key.del(depends_on_keys[i], component)
-        keys_4_component.delAll(component)
+
+    function handlers_for(key, message) {
+        //console.log('handlers_for:', key, message)
+        var result = []
+
+        // First get the exact key matches
+        var exacts = handlers.get(message + ' ' + key)
+        for (var i=0; i < exacts.length; i++)
+            result.push(funks[exacts[i]])
+
+        // Now iterate through prefixes
+        for (var i=0; i < wildcard_handlers.length; i++) {
+            handler = wildcard_handlers[i]
+
+            var prefix = handler.prefix.slice(0, -1)       // Cut off the *
+            if (prefix === key.substr(0,prefix.length)     // If the prefix matches
+                && message === handler.message)            // And it has the right message
+                result.push(handler.funk)
+        }
+
+        return result
+    }
+
+    function run_handler(funk, method, arg) {
+        if (method === 'fetch') {
+            fetches_out[arg] = true
+            pending_fetches[arg] = funk
+        }
+
+        // When we first run a handler (e.g. a fetch or save), we wrap
+        // it in a reactive() funk that calls it with its arg.  Then
+        // if it fetches or saves, it'll register a pub handler with
+        // this funk.
+
+        // Pub events will be calling an already-wrapped funk, that
+        // has its own arg
+        if (funk.react) {
+            console.assert(method === 'pub')
+            return funk.react()
+        }
+
+        // Fresh fetch/save/forget/delete handlers will just be
+        // regular functions.  We'll store their arg and let them
+        // re-run until they are done re-running.
+        var f = reactive(function () {
+            var result = funk(arg)
+
+            // For fetch
+            if (method === 'fetch' && result instanceof Object && !f.is_loading()) {
+                result.key = arg
+                console.log('run_handler: pubbing', arg,
+                            'after fetched RETURN from fetch('+arg+')')
+                pub(result)
+                return result
+            }
+
+            // Save aborts changes if still is_loading()
+            // ... implement here ...
+
+            // Save, forget and delete handlers stop re-running once
+            // they've completed without anything loading.
+            // ... with f.forget()
+        })
+
+        // on_fetch handlers stop re-running when the key is forgotten
+        if (method === 'fetch') {
+            var key = arg
+            function done () {
+                f.forget()
+                del_handler(key, 'forget', done)
+            }
+            add_handler(key, 'forget', done)
+        }
+
+        return f()
+    }
+
+    // route() can be overridden
+    bus.route = function (key, method, arg) {
+        var funcs = bus.handlers_for(key, method)
+        for (var i=0; i<funcs.length; i++)
+            bus.run_handler(funcs[i], method, arg)
+
+        if (method === 'fetch') console.assert(funcs.length<2)
+        return funcs.length
     }
 
 
     // ****************
-    // Utility for React Components
-    function One_To_Many() {
-        var hash = this.hash = {}
-        this.get = function (k) { return Object.keys(hash[k] || {}) }
-        this.add = function (k, v) {
-            if (hash[k] === undefined)
-                hash[k] = {}
-            hash[k][v] = true
-        }
-        this.del = function (k, v) {
-            delete hash[k][v]
-        }
-        this.delAll = function (k) { hash[k] = {} }
-        this.contains = function (k, v) { return hash[k] && hash[k][v] }
+    // Reactive functions
+    // 
+    // We wrap any function with a reactive wrapper that re-calls it
+    // whenever state it's fetched changes.
+
+    if (!global_funk) {
+        global_funk = reactive(function () {})
+        executing_funk = global_funk
+        funks[global_funk.statebus_id = 'global'] = global_funk
     }
-    function Set() {
-        var hash = {}
-        this.add = function (a) { hash[a] = true }
-        this.all = function () { return Object.keys(hash) }
-        this.clear = function () { hash = {} }
+    //global_funk.fetched_keys = new Set()
+
+    var executing_funk = global_funk
+    function reactive(func) {
+        var dis, args
+        function funk () {
+            if (executing_funk !== global_funk)
+                console.assert(executing_funk !== funk, 'Recursive funk', args)
+
+            // If you call this function with 
+            if (funk.called_directly)
+                dis = this, args = arguments
+
+            // Forget the keys from last time
+            funk.forget()
+
+            // Now let's run it
+            var last_executing_funk = executing_funk
+            executing_funk = funk
+            try {
+                var result = func.apply(dis, args)
+            } catch (e) {
+                //executing_funk = null // Or should this be last_executing_funk?
+                if (funk.is_loading()) return null
+                else {
+                    console.error('Error!', e)
+                    func.apply(dis, args)
+                }
+            } finally {
+                executing_funk = last_executing_funk
+            }
+            return result
+        }
+
+        funk.called_directly = true
+        funk.fetched_keys = new One_To_Many() // maps bus to keys
+        funk.depends_on = function (bus, key) {
+            this.fetched_keys.add(bus, key)
+        }
+        funk.react = function () {
+            var result
+            try {
+                funk.called_directly = false
+                result = funk()
+            } finally {
+                funk.called_directly = true
+            }
+            return result
+        }
+        funk.forget = function () {
+            if (funk.statebus_id === 'global') return
+
+            var buss_ids = Object.keys(funk.fetched_keys.hash)
+            for (var i=0; i<buss_ids.length; i++) {
+                var keys = funk.fetched_keys.get(buss_ids[i])
+                for (var j=0; j<keys.length; j++)
+                    forget(keys[j], funk)
+                funk.fetched_keys.del_all(buss_ids[i])
+            }
+            // var keys = funk.fetched_keys.all()
+            // //console.log('react: forgetting', keys)
+            // for (var i=0; i<keys.length; i++) forget(keys[i], funk)
+            // funk.fetched_keys.clear()
+        }
+        funk.is_loading = function () {
+            var buss_ids = Object.keys(funk.fetched_keys.hash)
+            for (var i=0; i<buss_ids.length; i++) {
+                var b = buss_ids[i]
+                if (busses[b].loading_keys(funk.fetched_keys.get(b)))
+                    return true
+            }
+            return false
+        }
+        return funk
+    }
+
+    function loading_keys (keys) {
+        // Do any of these keys have outstanding gets?
+        //console.log('Loading: pending_keys is', pending_fetches)
+        for (var i=0; i<keys.length; i++)
+            if (pending_fetches[keys[i]]) return true
+        return false
     }
 
 
     // ******************
-    // General utility funcs
+    // Utility funcs
+    function One_To_Many() {
+        var hash = this.hash = {}
+        var counts = {}
+        this.get = function (k) { return Object.keys(hash[k] || {}) }
+        this.add = function (k, v) {
+            if (hash[k] === undefined)   hash[k]   = {}
+            if (counts[k] === undefined) counts[k] = 0
+            if (!hash[k][v]) counts[k]++
+            hash[k][v] = true
+        }
+        this.del = function (k, v) { delete hash[k][v]; counts[k]-- }
+        this.del_all = function (k) { delete hash[k]; delete counts[k] }
+        this.contains = function (k, v) { return hash[k] && hash[k][v] }
+        this.has_any = function (k) { return counts[k] }
+    }
+    function Set() {
+        var hash = {}
+        this.add = function (a) { hash[a] = true }
+        //this.has = function (a) { return a in hash }
+        this.all = function () { return Object.keys(hash) }
+        this.del = function (a) { delete hash[a] }
+        this.clear = function () { hash = {} }
+    }
     function clone(obj) {
         if (obj == null) return obj
         var copy = obj.constructor()
@@ -554,52 +513,52 @@
     function extend(obj, with_obj) {
         if (with_obj === undefined) return obj
         for (var attr in with_obj)
-            if (!obj.hasOwnProperty(attr)) obj[attr] = with_obj[attr]
+            if (obj.hasOwnProperty(attr)) obj[attr] = with_obj[attr]
         return obj
     }
-    function deep_map(func, object) {
-        // This function isn't actually a full "deep map" yet.
-        // Limitations: It only applies func to OBJECTS (not arrays or
-        // atoms), and doesn't return anything.
+
+    function deep_map (object, func) {
+        object = func(object)
+
+        // Recurse through each element in arrays
         if (Array.isArray(object))
             for (var i=0; i < object.length; i++)
-                deep_map(func, object[i])
-        else if (typeof(object) === 'object' && object !== null) {
-            func(object)
+                object[i] = deep_map(object[i], func)
+
+        // Recurse through each property on objects
+        else if (typeof(object) === 'object')
             for (var k in object)
-                deep_map(func, object[k])
-        }
-    }
-    function error(e, name) {
-        console.error('In', name + ':', e.stack)
-        if (window.on_client_error)
-            window.on_client_error(e)
+                object[k] = deep_map(object[k], func)
+
+        return object
     }
 
-    function key_id(string) {
-        return string.match(/\/?[^\/]+\/(\d+)/)[1]
+    function key_id(string) { return string.match(/\/?[^\/]+\/(\d+)/)[1] }
+    function key_name(string) { return string.match(/\/?([^\/]+).*/)[1] }
+
+
+    // #######################################
+    // ########### Browser Code ##############
+    // #######################################
+
+    // Make the private methods accessible under "window.statebus"
+    var api = ['cache fetch save forget del pub dirty',
+               'subspace handlers wildcard_handlers handlers_for',
+               'run_handler del_handler reactive',
+               'funk_key funks key_id key_name id',
+               'pending_fetches fetches_in loading_keys',
+               'global_funk executing_funk',
+               'Set One_To_Many clone extend deep_map'
+              ].join(' ').split(' ')
+    for (var i=0; i<api.length; i++)
+        bus[api[i]] = eval(api[i])
+
+    // Export globals
+    if (Object.keys(busses).length === 0) {
+        var globals = 'fetch save pub del'.split(' ')
+        for (var i=0; i<globals.length; i++)
+            this[globals[i]] = /*window[globals[i]] ||*/ eval(globals[i])
     }
-    function key_name(string) {
-        return string.match(/\/?([^\/]+).*/)[1]
-    }
-
-    // Camelcased API options
-    var updateCache=update_cache, serverFetch=server_fetch,
-        serverSave=server_save,
-        serverDelete  =server_delete,
-        serverDestroy =server_delete
-        server_destroy=server_delete
-
-    // Export the public API
-    window.ReactiveComponent = ReactiveComponent
-    window.fetch = fetch
-    window.save = save
-    window.destroy = destroy
-
-    // Make the private methods accessible under "window.arest"
-    vars = 'cache fetch save server_fetch serverFetch server_save serverSave update_cache updateCache csrf keys_4_component components_4_key components execution_context One_To_Many clone dirty_components affected_keys clear_matching_objects deep_map key_id key_name'.split(' ')
-    window.arest = {}
-    for (var i=0; i<vars.length; i++)
-        window.arest[vars[i]] = eval(vars[i])
-
-})()
+    busses[bus.id] = bus
+    return bus
+}}))
