@@ -93,7 +93,7 @@ var extra_methods = {
             var our_fetches_in = {}  // Every key that every client has fetched.
             console.log('sockjs_s: New connection from', conn.remoteAddress)
             function pubber (obj) {
-                console.trace('sockjs_s.pubber:', obj.key, 'from', userb)
+                console.log('sockjs_s.pubber:', obj.key, 'from', userb)
                 conn.write(JSON.stringify({method: 'pub', obj: obj}))
             }
             conn.on('data', function(message) {
@@ -593,8 +593,7 @@ var extra_methods = {
             var user = master.fetch('clients')[conn.client]
             // console.log('Giving a /current_user for', conn.client,
             //             master.fetch('clients'))
-            return {user: user || null, salt: salt, logged_in: !!user,
-                    /*not_you: userb.fetch('/user/2')*/}
+            return {user: user || null, salt: salt, logged_in: !!user}
         }
 
         userb('/current_user').on_save = function (o) {

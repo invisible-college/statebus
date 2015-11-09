@@ -113,6 +113,15 @@
             }
 
             sock.onmessage = function(event) {
+                // Todo: Perhaps optimize processing of many messages
+                // in batch by putting new messages into a queue, and
+                // waiting a little bit for more messages to show up
+                // before we try to re-render.  That way we don't
+                // re-render 100 times for a function that depends on
+                // 100 items from server while they come in.  This
+                // probably won't make things render any sooner, but
+                // will probably save energy.
+
                 //console.log('[.] message')
                 try {
                     var message = JSON.parse(event.data)
