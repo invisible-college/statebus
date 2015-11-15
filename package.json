@@ -1,0 +1,13 @@
+{
+  "name": "statebus",
+  "version": "3.0.1",
+  "description": "Implementation of statebus. Don't use this yet unless you're Paul.",
+  "main": "statebus-server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "sockjs": "^0.3.4"
+  },
+  "author": "Michael Toomim"
+}
