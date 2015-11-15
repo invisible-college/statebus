@@ -130,15 +130,16 @@ var extra_methods = {
                 delete connections[conn.id]; save(connections)
                 userb.delete_bus()
             })
-            userb('connection').on_fetch = function () { return {mine: conn.id} }
+            userb('/connection').on_fetch = function () { return {mine: connections[conn.id]} }
         })
 
         s.installHandlers(httpserver, {prefix:'/statebus'});
 
         master('/connections').on_fetch = function (key) {
             var result = []
-            for (c in fetch('connections'))
-                if (c !== 'key') result.push(c)
+            var connections = fetch('connections')
+            for (c in connections)
+                if (c !== 'key') result.push(connections[c])
             return {all: result}
         }
         master('/connections').on_save = function () {}
@@ -199,15 +200,16 @@ var extra_methods = {
                 delete connections[socket.id]; save(connections)
                 userb.delete_bus()
             })
-            userb('connection').on_fetch = function () { return {mine: socket.id} }
+            userb('/connection').on_fetch = function () { return {mine: socket.id} }
         })
 
         // s.installHandlers(httpserver, {prefix:'/statebus'});
 
         master('/connections').on_fetch = function (key) {
             var result = []
-            for (c in fetch('connections'))
-                if (c !== 'key') result.push(c)
+            var connections = fetch('connections')
+            for (c in connections)
+                if (c !== 'key') result.push(connections[c])
             return {all: result}
         }
         master('/connections').on_save = function () {}
@@ -705,7 +707,7 @@ var extra_methods = {
 }
 
 function make_server_bus () {
-    var bus = require('statebus')()
+    var bus = require('./statebus')()
     for (m in extra_methods)
         bus[m] = extra_methods[m]
     return bus
