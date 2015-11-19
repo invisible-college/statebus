@@ -6,6 +6,8 @@
 }('statebus', function() { var busses = {}, executing_funk, global_funk, funks = {}; return function make_bus () {
     var log = console.log.bind(console)
 
+    var Executing_funk=function(){return executing_funk}// Delete this line
+
     // ****************
     // The statebus object we will return
     function bus (arg) {
@@ -21,7 +23,20 @@
     }
     var id = 'bus ' + (Math.random()+'').substring(7)
     bus.toString = function () { return id + (bus.label || '') }
-    bus.delete_bus = function () { delete busses[bus.id] }
+    bus.delete_bus = function () {
+        // // Forget all wildcard handlers
+        // for (var i=0; i<wildcard_handlers.length; i++) {
+        //     console.log('Forgetting', funk_name(wildcard_handlers[i].funk))
+        //     wildcard_handlers[i].funk.forget()
+        // }
+
+        // // Forget all handlers
+        // for (var k1 in handlers.hash)
+        //     for (var k2 in handlers.hash[k])
+        //         handlers.hash[k][k2].forget()
+
+        delete busses[bus.id]
+    }
 
     // The Data Almighty!!
     var cache = {}
@@ -152,12 +167,38 @@
             return obj
         })
 
-        var keys = modified_keys.all()
-        console.log('pub:', object.key, '. And we are finding these to route:', keys)
-        for (var i=0; i<keys.length; i++)
-            bus.route(keys[i], 'pub', cache[keys[i]])
-        console.log('pub: done from', object.key)
+        publishable_keys_queue.push.apply(publishable_keys_queue, modified_keys.all())
+        key_publisher = key_publisher ||
+            setTimeout(function () {
+                //console.log('pub:', object.key+ '. Listeners on these keys need update:', keys)
+
+                // Note: this can be made more efficient.  There may
+                // be duplicate handler calls in here, because a
+                // single handler might react to multiple keys.  For
+                // instance, it might fetch multiple keys, where each
+                // key has been modified.  To make this more
+                // efficient, we should first find all the handlers
+                // affected by these keys, and then collapse them, and
+                // call each one once.  Unfortunately, doing so would
+                // require digging into the bus.route() API and
+                // changing it.  We'd probably need to make it accept
+                // an array of keys instead of a single key, and then
+                // have search_handlers take an array of keys as well.
+                // So I'm not bothering with this optimization yet.
+                // We will just have duplicate-running functions for a
+                // while.
+                for (var i=0; i<publishable_keys_queue.length; i++) {
+                    //console.log('pub: In loop', i + ', updating listeners on \''+keys[i]+"'")
+                    var key = publishable_keys_queue[i]
+                    bus.route(key, 'pub', cache[key])
+                }
+                publishable_keys_queue = []
+                key_publisher = null
+                //console.log('pub: done looping through', keys, ' and done with', object.key)
+            }, 0)
     }
+    var key_publisher = null
+    var publishable_keys_queue = []
 
     function forget (key, pub_handler) {
         pub_handler = pub_handler || global_funk
@@ -165,13 +206,14 @@
         //console.log('Fetches in is', fetches_in.hash)
         if (!fetches_in.contains(key, fkey)) {
             console.error("***\n****\nTrying to forget lost key", key,
-                          "from function",
-                          pub_handler, pub_handler.statebus_id,
+                          'from',
+                          pub_handler.statebus_name || pub_handler,
                           "that hasn't fetched that key.",
                           funks[fetches_in.get(key)[0]],
                           funks[fetches_in.get(key)[0]] && funks[fetches_in.get(key)[0]].statebus_id
                          )
-            throw 'aldkfjalsdfj'
+            console.trace()
+            throw Error('asdfalsdkfajsdf')
         }
 
         fetches_in.del(key, fkey)
@@ -208,7 +250,8 @@
         dirty_keys.add(key)
 
         dirty_sweeper = dirty_sweeper || setTimeout(function () {
-            console.log('dirty_sweeper:', dirty_keys.all())
+            //console.log('dirty_sweeper:', dirty_keys.all())
+
             // Let's grab the dirty keys and clear it, so that
             // anything that gets dirty during this sweep will be able
             // to sweep again afterward
@@ -238,7 +281,7 @@
                     set: function (func) { add_handler(key, method, func) },
                     get: function () {
                         var result = handlers_for(key, method)
-                        result.remove = function (funk) { del_handler (key, method, funk) }
+                        result.remove = function (func) { del_handler (key, method, func) }
                         return result
                     }
                 })
@@ -248,7 +291,7 @@
 
     // The funks attached to each key, maps e.g. 'fetch /point/3' to '/30'
     var handlers = new One_To_Many()
-    var wildcard_handlers = []  // An array of {prefix, message, funk}
+    var wildcard_handlers = []  // An array of {prefix, method, funk}
     //var funks = {}              // Maps funk_id -> function
 
     // A set of timers, for keys to send forgets on
@@ -260,13 +303,20 @@
         }
         return funk.statebus_id
     }
-    function add_handler (key, message, funk) {
+    function funk_name (f) {
+        return f.statebus_name || (f.toString().substr(0,30) + '...')
+    }
+    function add_handler (key, method, func) {
+        func.statebus_name = func.statebus_name ||
+            ("('"+key+"').on_"+method
+             + (func.name? ' = function '+func.name+'() {...}' : ''))
+
         if (key[key.length-1] !== '*')
-            handlers.add(message + ' ' + key, funk_key(funk))
+            handlers.add(method + ' ' + key, funk_key(func))
         else
             wildcard_handlers.push({prefix: key,
-                                    message: message,
-                                    funk: funk})
+                                    method: method,
+                                    funk: func})
 
         if (to_be_forgotten[key]) {
             clearTimeout(to_be_forgotten[key])
@@ -277,16 +327,16 @@
         // key in this space, and if so call the handler.
     }
     var forget_timer
-    function del_handler (key, message, funk) {
+    function del_handler (key, method, funk) {
         if (key[key.length-1] !== '*')
             // Delete direct connection
-            handlers.del(message + ' ' + key, funk_key(funk))
+            handlers.del(method + ' ' + key, funk_key(funk))
         else
             // Delete wildcard connection
             for (var i=0; i<wildcard_handlers.length; i++) {
                 var handler = wildcard_handlers[i]
                 if (handler.prefix === key
-                    && handler.message === message
+                    && handler.method === method
                     && handler.funk === funk) {
 
                     wildcard_handlers.splice(i,1)  // Splice this element out of the array
@@ -295,12 +345,17 @@
             }
     }
 
-    function handlers_for(key, message) {
-        //console.log('handlers_for:', key, message)
+    function handlers_for(key, method) {
+        if (typeof key !== 'string') {
+            console.error('Error:', key, 'is not a string')
+            console.trace()
+        }
+
+        //console.log('handlers_for:', key, method)
         var result = []
 
         // First get the exact key matches
-        var exacts = handlers.get(message + ' ' + key)
+        var exacts = handlers.get(method + ' ' + key)
         for (var i=0; i < exacts.length; i++)
             result.push(funks[exacts[i]])
 
@@ -310,7 +365,7 @@
 
             var prefix = handler.prefix.slice(0, -1)       // Cut off the *
             if (prefix === key.substr(0,prefix.length)     // If the prefix matches
-                && message === handler.message)            // And it has the right message
+                && method === handler.method)              // And it has the right method
                 result.push(handler.funk)
         }
 
@@ -318,6 +373,15 @@
     }
 
     function run_handler(funk, method, arg) {
+        // console.log("run_handler: ('"+(arg.key||arg)+"').on_"
+        //             +method+' = f^'+funk_key(funk))
+        // if (funk.statebus_name === undefined || funk.statebus_name === 'undefined')
+        //     console.log('WEIRDO FUNK', funk, typeof funk.statebus_name)
+
+        if (funk.statebus_name !== 'global_funk')
+            console.log('run_handler: a', method+"('"+(arg.key||arg)
+                        +"') is triggering", funk_name(funk))
+
         if (method === 'fetch') {
             fetches_out[arg] = true
             pending_fetches[arg] = funk
@@ -344,8 +408,8 @@
             // For fetch
             if (method === 'fetch' && result instanceof Object && !f.is_loading()) {
                 result.key = arg
-                console.log('run_handler: pubbing', arg,
-                            'after fetched RETURN from fetch('+arg+')')
+                // console.log('run_handler: pubbing', arg,
+                //             'after fetched RETURN from fetch('+arg+')')
                 pub(result)
                 return result
             }
@@ -356,7 +420,11 @@
             // Save, forget and delete handlers stop re-running once
             // they've completed without anything loading.
             // ... with f.forget()
+            if ((method === 'save' || method === 'forget' || method === 'delete')
+                && !f.is_loading())
+                f.forget()
         })
+        f.statebus_name = funk.statebus_name
 
         // on_fetch handlers stop re-running when the key is forgotten
         if (method === 'fetch') {
@@ -377,7 +445,10 @@
         for (var i=0; i<funcs.length; i++)
             bus.run_handler(funcs[i], method, arg)
 
-        if (method === 'fetch') console.assert(funcs.length<2)
+        if (method === 'fetch')
+            console.assert(funcs.length<2,
+                           'Two on_fetch functions are registered for the same key '+key,
+                           funcs)
         return funcs.length
     }
 
@@ -389,18 +460,32 @@
     // whenever state it's fetched changes.
 
     if (!global_funk) {
-        global_funk = reactive(function () {})
+        global_funk = reactive(function global_funk () {})
+        global_funk.statebus_name = 'global_funk'
         executing_funk = global_funk
         funks[global_funk.statebus_id = 'global'] = global_funk
     }
     //global_funk.fetched_keys = new Set()
 
-    var executing_funk = global_funk
     function reactive(func) {
         var dis, args
+
+        // You can call a funk directly:
+        //
+        //    f = reactive(func)
+        //    f(arg1, arg2)
+        //
+        // This will remember every fetch it depends on, and make it
+        // re-call itself whenever that state changes.  It will
+        // remember arg1 and arg2 and use those again.  You can also
+        // trigger a re-action manually with:
+        //
+        //    funk.react().
+        //
+        // ...which will make it re-run with the original arg1 and arg2 .
         function funk () {
-            if (executing_funk !== global_funk)
-                console.assert(executing_funk !== funk, 'Recursive funk', args)
+            console.assert(executing_funk === global_funk
+                           || executing_funk !== funk, 'Recursive funk', funk.func)
 
             // If you call this function with 
             if (funk.called_directly)
@@ -415,11 +500,24 @@
             try {
                 var result = func.apply(dis, args)
             } catch (e) {
+                if (e.message === 'Maximum call stack size exceeded') {
+                    console.error(e)
+                    process.exit()
+                }
                 //executing_funk = null // Or should this be last_executing_funk?
                 if (funk.is_loading()) return null
                 else {
                     console.error('Error!', e)
-                    func.apply(dis, args)
+                    var result = func.apply(dis, args)
+                    // If code reaches here, there was an error
+                    // triggering the error.  We should warn the
+                    // programmer, and then probably move on, because
+                    // maybe the error went away... and it doesn't do
+                    // us any good to just crash now, does it?  Then
+                    // the programmer has less information on what
+                    // happened because he/she can't see it in the
+                    // result, which might also be fucked up, and
+                    // might be informative.
                 }
             } finally {
                 executing_funk = last_executing_funk
@@ -427,6 +525,7 @@
             return result
         }
 
+        funk.func = func  // just for debugging
         funk.called_directly = true
         funk.fetched_keys = new One_To_Many() // maps bus to keys
         funk.depends_on = function (bus, key) {
@@ -445,11 +544,25 @@
         funk.forget = function () {
             if (funk.statebus_id === 'global') return
 
+            //console.log('Funk.forget() on', funk_name(funk))
+
             var buss_ids = Object.keys(funk.fetched_keys.hash)
             for (var i=0; i<buss_ids.length; i++) {
                 var keys = funk.fetched_keys.get(buss_ids[i])
-                for (var j=0; j<keys.length; j++)
-                    forget(keys[j], funk)
+                for (var j=0; j<keys.length; j++) {
+                    //console.log('Forgetting', keys[j], buss_ids[i], 'from', Object.keys(busses))
+                    // There's a bug here when a funk depends on a bus
+                    // that has disconnected.  What do we do in this
+                    // situation?  Is the bus not cleaning up after
+                    // itself when it dies?  How does it die?  What
+                    // should it do?
+
+                    // Answer: socksj_server calls delete_bus(), which
+                    // just deletes the bussid from var busses[].  But
+                    // this doesn't clean up each funk's fetched keys.
+                    if (buss_ids[i] in busses)
+                        busses[buss_ids[i]].forget(keys[j], funk)
+                }
                 funk.fetched_keys.del_all(buss_ids[i])
             }
             // var keys = funk.fetched_keys.all()
@@ -461,7 +574,7 @@
             var buss_ids = Object.keys(funk.fetched_keys.hash)
             for (var i=0; i<buss_ids.length; i++) {
                 var b = buss_ids[i]
-                if (busses[b].loading_keys(funk.fetched_keys.get(b)))
+                if (busses[b] && busses[b].loading_keys(funk.fetched_keys.get(b)))
                     return true
             }
             return false
@@ -548,7 +661,7 @@
                'funk_key funks key_id key_name id',
                'pending_fetches fetches_in loading_keys',
                'global_funk executing_funk',
-               'Set One_To_Many clone extend deep_map'
+               'Set One_To_Many clone extend deep_map Executing_funk'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)
         bus[api[i]] = eval(api[i])

@@ -4,8 +4,8 @@ var extra_methods = {
         options = options || {}
         var c = options.client_definition
         if (!('file_store' in options) || options.file_store)
-            bus.file_store('*')                          // Save everything to a file
-        bus('*').on_save = function (o) { bus.pub(o) }   // No security/validation
+            bus.file_store('*')                                // Save everything to a file
+        bus('*').on_save = function reflect (o) { bus.pub(o) } // No security/validation
 
         // Custom route
         var OG_route = bus.route
@@ -24,11 +24,11 @@ var extra_methods = {
         var bus = this
         options = options || {}
         var c = options.client_definition
-        bus.make_http_server(options)                    // Create our own http server
-        bus.sockjs_server(this.http_server, c)           // Serve via sockjs on it
         if (!('file_store' in options) || options.file_store)
             bus.file_store('*')                          // Save everything to a file
-        bus('*').on_save = function (o) { bus.pub(o) }   // No security/validation
+        bus.make_http_server(options)                    // Create our own http server
+        bus.sockjs_server(this.http_server, c)           // Serve via sockjs on it
+        bus('*').on_save = function reflect (o) { bus.pub(o) }   // No security/validation
 
         // Custom route
         var OG_route = bus.route
@@ -37,8 +37,10 @@ var extra_methods = {
 
             // This whitelists anything we don't have a specific handler for,
             // reflecting it to all clients!
-            if (count === 0 && method === 'save')
+            if (count === 0 && method === 'save') {
                 bus.pub(arg)
+                count++
+            }
 
             return count
         }
@@ -79,22 +81,21 @@ var extra_methods = {
 
     sockjs_server: function sockjs_server(httpserver, user_bus_func) {
         var master = this
-        //var user_bus_func = this.client_definition
-        var connections = master.fetch('connections')
         master.pub({key: 'connections'}) // Clean out old sessions
+        var connections = master.fetch('connections')
         var s = require('sockjs').createServer({
             sockjs_url: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js' })
         s.on('connection', function(conn) {
-            connections[conn.id] = {}; save(connections)
+            connections[conn.id] = {}; master.pub(connections)
             var userb = user_bus_func ? make_server_bus() : master
             //userb.label = userb.label || 'client ' + conn.id
             if (user_bus_func) user_bus_func(userb, conn)
 
             var our_fetches_in = {}  // Every key that every client has fetched.
             console.log('sockjs_s: New connection from', conn.remoteAddress)
-            function pubber (obj) {
-                console.log('sockjs_s.pubber:', obj.key, 'from', userb)
+            function sockjs_pubber (obj) {
                 conn.write(JSON.stringify({method: 'pub', obj: obj}))
+                console.log('sockjs: SENT', obj.key)
             }
             conn.on('data', function(message) {
                 try {
@@ -114,11 +115,11 @@ var extra_methods = {
                 case 'delete': message.method = 'del';     break
                 }
 
-                userb[message.method](arg, pubber)
+                userb[message.method](arg, sockjs_pubber)
 
                 // validate that our fetches_in are all in the bus
                 for (var key in our_fetches_in)
-                    if (!userb.fetches_in.contains(key, master.funk_key(pubber)))
+                    if (!userb.fetches_in.contains(key, master.funk_key(sockjs_pubber)))
                         console.trace("***\n****\nFound errant key", key,
                                       'when receiving a sockjs', message.method, 'on', arg)
                 //console.log('sockjs_s: done with message')
@@ -126,22 +127,33 @@ var extra_methods = {
             conn.on('close', function() {
                 console.log('sockjs_s: disconnected from', conn.remoteAddress, conn.id, userb.id)
                 for (var key in our_fetches_in)
-                    userb.forget(key, pubber)
-                delete connections[conn.id]; save(connections)
+                    userb.forget(key, sockjs_pubber)
+                delete connections[conn.id]; master.pub(connections)
                 userb.delete_bus()
             })
-            userb('connection').on_fetch = function () { return {mine: conn.id} }
+            if (user_bus_func) {
+                userb('/connection').on_fetch = function () {
+                    var c = userb.clone(connections[conn.id])
+                    if (c.user) c.user = userb.fetch(c.user.key)
+                    return {mine: c}
+                }
+                userb('/connections').on_save = function noop () {}
+                userb('/connections').on_fetch = function () {
+                    var result = []
+                    var conns = master.fetch('connections')
+                    for (connid in conns)
+                        if (connid !== 'key') {
+                            var c = master.clone(conns[connid])
+                            if (c.user) c.user = userb.fetch(c.user)
+                            result.push(c)
+                        }
+                    
+                    return {all: result}
+                }
+            }
         })
 
         s.installHandlers(httpserver, {prefix:'/statebus'});
-
-        master('/connections').on_fetch = function (key) {
-            var result = []
-            for (c in fetch('connections'))
-                if (c !== 'key') result.push(c)
-            return {all: result}
-        }
-        master('/connections').on_save = function () {}
     },
 
     ws_server: function ws_server(httpserver, ws, user_bus_func) {
@@ -161,8 +173,8 @@ var extra_methods = {
 
             var our_fetches_in = {}  // Every key that every client has fetched.
             console.log('ws: New connection from', socket.remoteAddress)
-            function pubber (obj) {
-                console.log('ws_server.pubber:', obj.key)
+            function ws_pubber (obj) {
+                console.log('ws_pubber:', obj.key)
                 socket.write(JSON.stringify({method: 'pub', obj: obj}))
             }
             socket.on('data', function(message) {
@@ -184,29 +196,29 @@ var extra_methods = {
                 case 'delete': message.method = 'del';     break
                 }
 
-                userb[message.method](arg, pubber)
+                userb[message.method](arg, ws_pubber)
 
                 // validate that our fetches_in are all in the bus
                 for (var key in our_fetches_in)
-                    if (!userb.fetches_in.contains(key, master.funk_key(pubber)))
+                    if (!userb.fetches_in.contains(key, master.funk_key(ws_pubber)))
                         console.trace("***\n****\nFound errant key", key,
                                       'when receiving a ws', message.method, 'on', arg)
             })
             socket.on('close', function() {
                 console.log('ws: disconnected from', socket.remoteAddress, socket.id, userb.id)
                 for (var key in our_fetches_in)
-                    userb.forget(key, pubber)
+                    userb.forget(key, ws_pubber)
                 delete connections[socket.id]; save(connections)
                 userb.delete_bus()
             })
-            userb('connection').on_fetch = function () { return {mine: socket.id} }
+            userb('/connection').on_fetch = function () { return {mine: connections[socket.id]} }
         })
 
         // s.installHandlers(httpserver, {prefix:'/statebus'});
 
         master('/connections').on_fetch = function (key) {
             var result = []
-            for (c in fetch('connections'))
+            for (c in master.fetch('connections'))
                 if (c !== 'key') result.push(c)
             return {all: result}
         }
@@ -304,7 +316,7 @@ var extra_methods = {
             console.log('bad db file')
         }
 
-        bus(prefix).on_save = function (obj) {
+        bus(prefix).on_save = function file_store (obj) {
             db[obj.key]=obj
             save_timer = save_timer || setTimeout(save_db, 100)
         }
@@ -589,6 +601,7 @@ var extra_methods = {
         }
 
         userb('/current_user').on_fetch = function () {
+            //console.log('/current_user.on_fetch is defining it')
             if (!conn.client) return
             var user = master.fetch('clients')[conn.client]
             // console.log('Giving a /current_user for', conn.client,
@@ -599,7 +612,7 @@ var extra_methods = {
         userb('/current_user').on_save = function (o) {
             console.log('current_user: saving', o)
 
-            if (o.client) {
+            if (o.client && !conn.client) {
                 // Set the client
                 conn.client = o.client
 
@@ -664,11 +677,10 @@ var extra_methods = {
             userb.dirty(o.key)
         }
 
-        userb('/user/*').on_fetch = function (k) {
+        userb('/user/*').on_fetch = function filtered_user (k) {
             //console.trace('/user/*.on_fetch', k)
             var o = master.fetch(k)
             var c = userb.fetch('/current_user')
-            var conn = userb.fetch('connection')
             //console.log('/user/*: fetch', k)
             if (c.user && c.user.key === k)
                 return {name: o.name, email: o.email}
@@ -681,9 +693,6 @@ var extra_methods = {
 
     route_defaults_to: function route_defaults_to (master_bus) {
         var bus = this
-        function pubber (o) {
-            console.log('default_route_pubber:', o.key, bus)
-            bus.pub(o) }
 
         // Custom route
         var OG_route = bus.route
@@ -695,9 +704,9 @@ var extra_methods = {
             if (count === 0 && key[0] === '/') {
                 count++
                 if (method === 'fetch')
-                    bus.run_handler(function (k) { return master_bus.fetch(k) }, method, arg)
+                    bus.run_handler(function get_from_master (k) { return master_bus.fetch(k) }, method, arg)
                 else if (method === 'save')
-                    bus.run_handler(function (o) { master_bus.save(bus.clone(o)) }, method, arg)
+                    bus.run_handler(function save_to_master (o) { master_bus.save(bus.clone(o)) }, method, arg)
             }
             return count
         }
