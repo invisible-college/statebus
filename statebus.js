@@ -6,8 +6,6 @@
 }('statebus', function() { var busses = {}, executing_funk, global_funk, funks = {}; return function make_bus () {
     var log = console.log.bind(console)
 
-    var Executing_funk=function(){return executing_funk}// Delete this line
-
     // ****************
     // The statebus object we will return
     function bus (arg) {
@@ -55,11 +53,11 @@
         var funk = callback || executing_funk
 
         // Remove this limitation at some point.  One reason for it is
-        // that add_handler() doesn't check if a wildcard handler
+        // that bind() doesn't check if a wildcard handler
         // already exists... it just pushes a new one.  That'll grow
         // unbounded.  I can later use regexps for wildcard handlers,
         // and start escaping the patterns between fetch() and
-        // add_handler() and solve these issues robustly.
+        // bind() and solve these issues robustly.
         console.assert(key[key.length-1] !== '*')
 
         // ** Call fetchers upstream **
@@ -80,7 +78,7 @@
         if (called_from_reactive_funk)
             funk.depends_on(bus, key)
         fetches_in.add(key, funk_key(funk))
-        add_handler(key, 'pub', funk)
+        bind(key, 'pub', funk)
 
         // ** Return a value **
 
@@ -167,7 +165,7 @@
             return obj
         })
 
-        publishable_keys_queue.push.apply(publishable_keys_queue, modified_keys.all())
+        publishable_keys.push.apply(publishable_keys, modified_keys.all())
         key_publisher = key_publisher ||
             setTimeout(function () {
                 //console.log('pub:', object.key+ '. Listeners on these keys need update:', keys)
@@ -187,18 +185,18 @@
                 // So I'm not bothering with this optimization yet.
                 // We will just have duplicate-running functions for a
                 // while.
-                for (var i=0; i<publishable_keys_queue.length; i++) {
+                for (var i=0; i<publishable_keys.length; i++) {
                     //console.log('pub: In loop', i + ', updating listeners on \''+keys[i]+"'")
-                    var key = publishable_keys_queue[i]
+                    var key = publishable_keys[i]
                     bus.route(key, 'pub', cache[key])
                 }
-                publishable_keys_queue = []
+                publishable_keys = []
                 key_publisher = null
                 //console.log('pub: done looping through', keys, ' and done with', object.key)
             }, 0)
     }
     var key_publisher = null
-    var publishable_keys_queue = []
+    var publishable_keys = []
 
     function forget (key, pub_handler) {
         pub_handler = pub_handler || global_funk
@@ -206,8 +204,7 @@
         //console.log('Fetches in is', fetches_in.hash)
         if (!fetches_in.contains(key, fkey)) {
             console.error("***\n****\nTrying to forget lost key", key,
-                          'from',
-                          pub_handler.statebus_name || pub_handler,
+                          'from', funk_name(pub_handler),
                           "that hasn't fetched that key.",
                           funks[fetches_in.get(key)[0]],
                           funks[fetches_in.get(key)[0]] && funks[fetches_in.get(key)[0]].statebus_id
@@ -217,7 +214,7 @@
         }
 
         fetches_in.del(key, fkey)
-        del_handler(key, 'pub', pub_handler)
+        unbind(key, 'pub', pub_handler)
 
         // If this is the last handler listening to this key, then we
         // can delete the cache entry and send a forget upstream.
@@ -263,7 +260,7 @@
             for (var i=0; i<keys.length; i++)
                 // If anybody is fetching this key
                 if (fetches_in.has_any(keys[i])) {
-                    log('dirty_sweeper: calling on_fetch for', key)
+                    log('dirty_sweeper: routing a fetch for', key)
                     bus.route(key, 'fetch', key)
                 }
         }, 0)
@@ -278,10 +275,10 @@
                         'delete':null, forget:null})
             (function (method) {
                 Object.defineProperty(result, 'on_' + method, {
-                    set: function (func) { add_handler(key, method, func) },
+                    set: function (func) { bind(key, method, func) },
                     get: function () {
-                        var result = handlers_for(key, method)
-                        result.remove = function (func) { del_handler (key, method, func) }
+                        var result = bindings(key, method)
+                        result.remove = function (func) { unbind (key, method, func) }
                         return result
                     }
                 })
@@ -304,12 +301,17 @@
         return funk.statebus_id
     }
     function funk_name (f) {
-        return f.statebus_name || (f.toString().substr(0,30) + '...')
+        if (f.statebus_binding)
+            return ("('"+f.statebus_binding.key+"').on_"
+                    + f.statebus_binding.method
+                    + (f.name? ' = function '+f.name+'() {...}' : ''))
+        else
+            return f.toString().substr(0,30) + '...'
     }
-    function add_handler (key, method, func) {
-        func.statebus_name = func.statebus_name ||
-            ("('"+key+"').on_"+method
-             + (func.name? ' = function '+func.name+'() {...}' : ''))
+    function bind (key, method, func) {
+        // func.statebus_name = func.statebus_name ||
+        //     ("('"+key+"').on_"+method
+        //      + (func.name? ' = function '+func.name+'() {...}' : ''))
 
         if (key[key.length-1] !== '*')
             handlers.add(method + ' ' + key, funk_key(func))
@@ -327,7 +329,7 @@
         // key in this space, and if so call the handler.
     }
     var forget_timer
-    function del_handler (key, method, funk) {
+    function unbind (key, method, funk) {
         if (key[key.length-1] !== '*')
             // Delete direct connection
             handlers.del(method + ' ' + key, funk_key(funk))
@@ -345,19 +347,21 @@
             }
     }
 
-    function handlers_for(key, method) {
+    function bindings(key, method) {
         if (typeof key !== 'string') {
             console.error('Error:', key, 'is not a string')
             console.trace()
         }
 
-        //console.log('handlers_for:', key, method)
+        //console.log('bindings:', key, method)
         var result = []
 
         // First get the exact key matches
         var exacts = handlers.get(method + ' ' + key)
-        for (var i=0; i < exacts.length; i++)
+        for (var i=0; i < exacts.length; i++) {
+            funks[exacts[i]].statebus_binding = {key:key, method:method}
             result.push(funks[exacts[i]])
+        }
 
         // Now iterate through prefixes
         for (var i=0; i < wildcard_handlers.length; i++) {
@@ -365,8 +369,10 @@
 
             var prefix = handler.prefix.slice(0, -1)       // Cut off the *
             if (prefix === key.substr(0,prefix.length)     // If the prefix matches
-                && method === handler.method)              // And it has the right method
+                && method === handler.method) {             // And it has the right method
+                handler.funk.statebus_binding = {key:key, method:method}
                 result.push(handler.funk)
+            }
         }
 
         return result
@@ -378,8 +384,8 @@
         // if (funk.statebus_name === undefined || funk.statebus_name === 'undefined')
         //     console.log('WEIRDO FUNK', funk, typeof funk.statebus_name)
 
-        if (funk.statebus_name !== 'global_funk')
-            console.log('run_handler: a', method+"('"+(arg.key||arg)
+        if (!funk.global_funk)  // \u26A1 
+            console.log('> a', method+"('"+(arg.key||arg)
                         +"') is triggering", funk_name(funk))
 
         if (method === 'fetch') {
@@ -424,16 +430,16 @@
                 && !f.is_loading())
                 f.forget()
         })
-        f.statebus_name = funk.statebus_name
+        f.statebus_binding = funk.statebus_binding
 
         // on_fetch handlers stop re-running when the key is forgotten
         if (method === 'fetch') {
             var key = arg
-            function done () {
+            function handler_done () {
                 f.forget()
-                del_handler(key, 'forget', done)
+                unbind(key, 'forget', handler_done)
             }
-            add_handler(key, 'forget', done)
+            bind(key, 'forget', handler_done)
         }
 
         return f()
@@ -441,7 +447,7 @@
 
     // route() can be overridden
     bus.route = function (key, method, arg) {
-        var funcs = bus.handlers_for(key, method)
+        var funcs = bus.bindings(key, method)
         for (var i=0; i<funcs.length; i++)
             bus.run_handler(funcs[i], method, arg)
 
@@ -461,7 +467,7 @@
 
     if (!global_funk) {
         global_funk = reactive(function global_funk () {})
-        global_funk.statebus_name = 'global_funk'
+        global_funk.global_funk = true
         executing_funk = global_funk
         funks[global_funk.statebus_id = 'global'] = global_funk
     }
@@ -656,12 +662,12 @@
 
     // Make the private methods accessible under "window.statebus"
     var api = ['cache fetch save forget del pub dirty',
-               'subspace handlers wildcard_handlers handlers_for',
-               'run_handler del_handler reactive',
+               'subspace handlers wildcard_handlers bindings',
+               'run_handler bind unbind reactive',
                'funk_key funks key_id key_name id',
                'pending_fetches fetches_in loading_keys',
                'global_funk executing_funk',
-               'Set One_To_Many clone extend deep_map Executing_funk'
+               'Set One_To_Many clone extend deep_map'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)
         bus[api[i]] = eval(api[i])

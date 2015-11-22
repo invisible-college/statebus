@@ -445,7 +445,7 @@
             //coffeescript: 'https://cdnjs.cloudflare.com/ajax/libs/coffee-script/1.10.0/coffee-script.min.js'
         }
         for (name in js_urls)
-            document.write('<script src="' + js_urls[name] + '"></script>')
+            document.write('<script src="' + js_urls[name] + 'charset="utf-8""></script>')
 
         document.addEventListener('DOMContentLoaded', scripts_ready, false)
     }

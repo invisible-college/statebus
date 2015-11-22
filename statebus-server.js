@@ -87,9 +87,9 @@ var extra_methods = {
             sockjs_url: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js' })
         s.on('connection', function(conn) {
             connections[conn.id] = {}; master.pub(connections)
-            var userb = user_bus_func ? make_server_bus() : master
-            //userb.label = userb.label || 'client ' + conn.id
-            if (user_bus_func) user_bus_func(userb, conn)
+            var user = user_bus_func ? make_server_bus() : master
+            //user.label = user.label || 'client ' + conn.id
+            if (user_bus_func) user_bus_func(user, conn)
 
             var our_fetches_in = {}  // Every key that every client has fetched.
             console.log('sockjs_s: New connection from', conn.remoteAddress)
@@ -115,36 +115,40 @@ var extra_methods = {
                 case 'delete': message.method = 'del';     break
                 }
 
-                userb[message.method](arg, sockjs_pubber)
+                user[message.method](arg, sockjs_pubber)
 
                 // validate that our fetches_in are all in the bus
                 for (var key in our_fetches_in)
-                    if (!userb.fetches_in.contains(key, master.funk_key(sockjs_pubber)))
+                    if (!user.fetches_in.contains(key, master.funk_key(sockjs_pubber)))
                         console.trace("***\n****\nFound errant key", key,
                                       'when receiving a sockjs', message.method, 'on', arg)
                 //console.log('sockjs_s: done with message')
             })
             conn.on('close', function() {
-                console.log('sockjs_s: disconnected from', conn.remoteAddress, conn.id, userb.id)
+                console.log('sockjs_s: disconnected from', conn.remoteAddress, conn.id, user.id)
                 for (var key in our_fetches_in)
-                    userb.forget(key, sockjs_pubber)
+                    user.forget(key, sockjs_pubber)
                 delete connections[conn.id]; master.pub(connections)
-                userb.delete_bus()
+                user.delete_bus()
             })
             if (user_bus_func) {
-                userb('/connection').on_fetch = function () {
-                    var c = userb.clone(connections[conn.id])
-                    if (c.user) c.user = userb.fetch(c.user.key)
+                user('/connection').on_fetch = function () {
+                    var c = user.clone(connections[conn.id])
+                    if (c.user) c.user = user.fetch(c.user.key)
                     return {mine: c}
                 }
-                userb('/connections').on_save = function noop () {}
-                userb('/connections').on_fetch = function () {
+                user('/connection').on_save = function (o) {
+                    connections[conn.id] = o.mine
+                    master.pub(connections)
+                }
+                user('/connections').on_save = function noop () {}
+                user('/connections').on_fetch = function () {
                     var result = []
                     var conns = master.fetch('connections')
                     for (connid in conns)
                         if (connid !== 'key') {
                             var c = master.clone(conns[connid])
-                            if (c.user) c.user = userb.fetch(c.user)
+                            if (c.user) c.user = user.fetch(c.user)
                             result.push(c)
                         }
                     
@@ -168,8 +172,8 @@ var extra_methods = {
             socket.write = socket.write || socket.send
             socket.id = next_id++
             connections[socket.id] = {}; save(connections)
-            var userb = user_bus_func ? make_bus() : master
-            if (user_bus_func) user_bus_func(userb, socket)
+            var user = user_bus_func ? make_bus() : master
+            if (user_bus_func) user_bus_func(user, socket)
 
             var our_fetches_in = {}  // Every key that every client has fetched.
             console.log('ws: New connection from', socket.remoteAddress)
@@ -196,22 +200,22 @@ var extra_methods = {
                 case 'delete': message.method = 'del';     break
                 }
 
-                userb[message.method](arg, ws_pubber)
+                user[message.method](arg, ws_pubber)
 
                 // validate that our fetches_in are all in the bus
                 for (var key in our_fetches_in)
-                    if (!userb.fetches_in.contains(key, master.funk_key(ws_pubber)))
+                    if (!user.fetches_in.contains(key, master.funk_key(ws_pubber)))
                         console.trace("***\n****\nFound errant key", key,
                                       'when receiving a ws', message.method, 'on', arg)
             })
             socket.on('close', function() {
-                console.log('ws: disconnected from', socket.remoteAddress, socket.id, userb.id)
+                console.log('ws: disconnected from', socket.remoteAddress, socket.id, user.id)
                 for (var key in our_fetches_in)
-                    userb.forget(key, ws_pubber)
+                    user.forget(key, ws_pubber)
                 delete connections[socket.id]; save(connections)
-                userb.delete_bus()
+                user.delete_bus()
             })
-            userb('/connection').on_fetch = function () { return {mine: connections[socket.id]} }
+            user('/connection').on_fetch = function () { return {mine: connections[socket.id]} }
         })
 
         // s.installHandlers(httpserver, {prefix:'/statebus'});
@@ -546,8 +550,7 @@ var extra_methods = {
     },
 
     serves_auth: function serves_auth (conn, master) {
-        var bus = this
-        var userb = bus // just to keep me straight while programming
+        var user = this // to keep me straight while programming
 
         // Initialize salt
         var a = master.fetch('auth')
@@ -578,11 +581,11 @@ var extra_methods = {
                 return {all: result}
             }
         }
-        userb('/online_users').on_fetch = function (k) {
+        user('/online_users').on_fetch = function (k) {
             var result = master.fetch(k)
             for (var i=0; i<result.all.length; i++) {
                 console.log(result.all[i].key)
-                result.all[i] = userb.fetch(result.all[i])
+                result.all[i] = user.fetch(result.all[i])
             }
             return result
         }
@@ -600,16 +603,16 @@ var extra_methods = {
                 return master.fetch(userpass.user)
         }
 
-        userb('/current_user').on_fetch = function () {
+        user('/current_user').on_fetch = function () {
             //console.log('/current_user.on_fetch is defining it')
             if (!conn.client) return
-            var user = master.fetch('clients')[conn.client]
+            var u = master.fetch('logged_in_clients')[conn.client]
             // console.log('Giving a /current_user for', conn.client,
-            //             master.fetch('clients'))
-            return {user: user || null, salt: salt, logged_in: !!user}
+            //             master.fetch('logged_in_clients'))
+            return {user: u || null, salt: salt, logged_in: !!u}
         }
 
-        userb('/current_user').on_save = function (o) {
+        user('/current_user').on_save = function (o) {
             console.log('current_user: saving', o)
 
             if (o.client && !conn.client) {
@@ -617,7 +620,7 @@ var extra_methods = {
                 conn.client = o.client
 
                 var connections = master.fetch('connections')
-                connections[conn.id].user = master.fetch('clients')[conn.client]
+                connections[conn.id].user = master.fetch('logged_in_clients')[conn.client]
                 master.save(connections)
             }
 
@@ -634,7 +637,7 @@ var extra_methods = {
                         // Associate this user with this session
                         console.log('Logging the user in!', u)
 
-                        var clients     = master.fetch('clients')
+                        var clients     = master.fetch('logged_in_clients')
                         var connections = master.fetch('connections')
 
                         clients[conn.client]      = u
@@ -647,22 +650,22 @@ var extra_methods = {
             }
 
             else if (o.logout) {
-                var clients = master.fetch('clients')
+                var clients = master.fetch('logged_in_clients')
                 delete clients[conn.client]
                 save(clients)
             }
 
-            userb.dirty('/current_user')
+            user.dirty('/current_user')
         }
 
         // setTimeout(function () {
         //     console.log('DIRTYING!!!!!')
-        //     userb.dirty('/current_user')
+        //     user.dirty('/current_user')
         //     console.log('DIRTIED!!!!!')
         // }, 4000)
 
-        userb('/user/*').on_save = function (o) {
-            var c = userb.fetch('/current_user')
+        user('/user/*').on_save = function (o) {
+            var c = user.fetch('/current_user')
             console.log(o.key + '.on_save:', o, c.logged_in, c.user)
             if (c.logged_in && c.user.key === o.key) {
                 var u = master.fetch(o.key)
@@ -670,25 +673,25 @@ var extra_methods = {
                 u.name = o.name
                 u.pass = o.pass || u.pass
                 master.save(u)
-                o = userb.clone(u)
+                o = user.clone(u)
                 console.log(o.key + '.on_save: saved user to master')
             }
 
-            userb.dirty(o.key)
+            user.dirty(o.key)
         }
 
-        userb('/user/*').on_fetch = function filtered_user (k) {
+        user('/user/*').on_fetch = function filtered_user (k) {
             //console.trace('/user/*.on_fetch', k)
             var o = master.fetch(k)
-            var c = userb.fetch('/current_user')
+            var c = user.fetch('/current_user')
             //console.log('/user/*: fetch', k)
             if (c.user && c.user.key === k)
                 return {name: o.name, email: o.email}
             else
                 return {name: o.name}
         }
-        userb('/users').on_fetch = function () {}
-        userb('/users').on_save = function () {}
+        user('/users').on_fetch = function () {}
+        user('/users').on_save = function () {}
     },
 
     route_defaults_to: function route_defaults_to (master_bus) {
