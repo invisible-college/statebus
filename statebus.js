@@ -300,13 +300,14 @@
         }
         return funk.statebus_id
     }
-    function funk_name (f) {
+    function funk_name (f, char_limit) {
+        char_limit = char_limit || 30
         if (f.statebus_binding)
             return ("('"+f.statebus_binding.key+"').on_"
                     + f.statebus_binding.method
                     + (f.name? ' = function '+f.name+'() {...}' : ''))
         else
-            return f.toString().substr(0,30) + '...'
+            return f.toString().substr(0,char_limit) + '...'
     }
     function bind (key, method, func) {
         // func.statebus_name = func.statebus_name ||
@@ -513,7 +514,6 @@
                 //executing_funk = null // Or should this be last_executing_funk?
                 if (funk.is_loading()) return null
                 else {
-                    console.error('Error!', e)
                     var result = func.apply(dis, args)
                     // If code reaches here, there was an error
                     // triggering the error.  We should warn the
@@ -524,6 +524,8 @@
                     // happened because he/she can't see it in the
                     // result, which might also be fucked up, and
                     // might be informative.
+                    console.error('Non-deterministic Error!', e.stack || e)
+                    console.warn("A non-deterministic error is when your reactive function triggers an error only some of the times it's called.\nThe error originated from calling:", funk_name(func, 400))
                 }
             } finally {
                 executing_funk = last_executing_funk
