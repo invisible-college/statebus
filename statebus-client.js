@@ -313,6 +313,7 @@
                     // Register on any keys passed in objects in props.
                     for (k in this.props)
                         if (this.props.hasOwnProperty(k)
+                            && this.props[k] !== null
                             && typeof this.props[k] === 'object'
                             && this.props[k].key)
                             
