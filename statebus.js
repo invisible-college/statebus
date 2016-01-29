@@ -666,7 +666,7 @@
     // ########### Browser Code ##############
     // #######################################
 
-    // Make the private methods accessible under "window.statebus"
+    // Make these private methods accessible
     var api = ['cache fetch save forget del pub dirty',
                'subspace handlers wildcard_handlers bindings',
                'run_handler bind unbind reactive',

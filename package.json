@@ -1,8 +1,8 @@
 {
   "name": "statebus",
-  "version": "3.0.8",
+  "version": "3.0.9",
   "description": "Synchronize state.",
-  "main": "server.js",
+  "main": "statebus.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
