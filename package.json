@@ -1,0 +1,11 @@
+{
+  "name": "statebus",
+  "version": "3.0.8",
+  "description": "Synchronize state.",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Michael Toomim",
+  "repository": "invisible-college/statebus"
+}
