@@ -717,7 +717,7 @@ var extra_methods = {
 }
 
 function make_server_bus () {
-    var bus = require('statebus')()
+    var bus = require('./statebus')()
     for (m in extra_methods)
         bus[m] = extra_methods[m]
     return bus
