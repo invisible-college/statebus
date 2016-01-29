@@ -256,8 +256,8 @@
         var data = get_query_string_value(key)
         data = (data && JSON.parse(data)) || {key : key}
         // Then I would need to:
-        //  • Change the key prefix
-        //  • Save this into the cache
+        //  - Change the key prefix
+        //  - Save this into the cache
 
         bus(prefix).on_save = function (obj) {
             window.history.replaceState(
@@ -358,7 +358,7 @@
         }
         
         component.loading = function loading () {
-            return this.render.is_loading()
+            return this.render.loading()
         }
 
         // Now create the actual React class with this definition, and
