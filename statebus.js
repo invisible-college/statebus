@@ -589,7 +589,7 @@
         }
 
         // for backwards compatibility
-        funk.loading = funk.is_loading
+        funk.is_loading = funk.loading
 
         return funk
     }
