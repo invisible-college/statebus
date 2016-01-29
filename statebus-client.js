@@ -410,14 +410,14 @@
     // ###
 
     function make_client_statebus_maker () {
-        var extra_methods = ['socketio_client sockjs_client localstorage_client',
-                             'handle_sockjs_urls url_store'].join(' ').split(' ')
+        var extra_stuff = ['socketio_client sockjs_client localstorage_client',
+                           'handle_sockjs_urls url_store components'].join(' ').split(' ')
         if (window.statebus) {
             var orig_statebus = statebus
             window.statebus = function make_client_bus () {
                 var bus = orig_statebus()
-                for (var i=0; i<extra_methods.length; i++)
-                    bus[extra_methods[i]] = eval(extra_methods[i])
+                for (var i=0; i<extra_stuff.length; i++)
+                    bus[extra_stuff[i]] = eval(extra_stuff[i])
                 return bus
             }
         }
@@ -458,6 +458,7 @@
 
         improve_react()
         window.dom = {}
+        window.ignore_flashbacks = true
         bus.localstorage_client('ls/*')
         bus.sockjs_client ('/*', statebus_server)
         bus('*').on_save = function (obj) { bus.pub(obj) }
