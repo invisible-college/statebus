@@ -358,7 +358,7 @@
         }
         
         component.loading = function loading () {
-            return this.render.is_loading()
+            return this.render.loading()
         }
 
         // Now create the actual React class with this definition, and

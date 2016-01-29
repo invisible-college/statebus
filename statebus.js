@@ -385,7 +385,7 @@
         // if (funk.statebus_name === undefined || funk.statebus_name === 'undefined')
         //     console.log('WEIRDO FUNK', funk, typeof funk.statebus_name)
 
-        if (!funk.global_funk)  // \u26A1 
+        if (!funk.global_funk && bus.printly)  // \u26A1 
             console.log('> a', method+"('"+(arg.key||arg)
                         +"') is triggering", funk_name(funk))
 
@@ -413,7 +413,7 @@
             var result = funk(arg)
 
             // For fetch
-            if (method === 'fetch' && result instanceof Object && !f.is_loading()) {
+            if (method === 'fetch' && result instanceof Object && !f.loading()) {
                 result.key = arg
                 // console.log('run_handler: pubbing', arg,
                 //             'after fetched RETURN from fetch('+arg+')')
@@ -421,14 +421,14 @@
                 return result
             }
 
-            // Save aborts changes if still is_loading()
+            // Save aborts changes if still loading()
             // ... implement here ...
 
             // Save, forget and delete handlers stop re-running once
             // they've completed without anything loading.
             // ... with f.forget()
             if ((method === 'save' || method === 'forget' || method === 'delete')
-                && !f.is_loading())
+                && !f.loading())
                 f.forget()
         })
         f.statebus_binding = funk.statebus_binding
@@ -512,7 +512,7 @@
                     process.exit()
                 }
                 //executing_funk = null // Or should this be last_executing_funk?
-                if (funk.is_loading()) return null
+                if (funk.loading()) return null
                 else {
                     var result = func.apply(dis, args)
                     // If code reaches here, there was an error
@@ -578,7 +578,7 @@
             // for (var i=0; i<keys.length; i++) forget(keys[i], funk)
             // funk.fetched_keys.clear()
         }
-        funk.is_loading = function () {
+        funk.loading = function () {
             var buss_ids = Object.keys(funk.fetched_keys.hash)
             for (var i=0; i<buss_ids.length; i++) {
                 var b = buss_ids[i]
@@ -587,6 +587,10 @@
             }
             return false
         }
+
+        // for backwards compatibility
+        funk.loading = funk.is_loading
+
         return funk
     }
 
