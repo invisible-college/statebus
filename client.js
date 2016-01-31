@@ -432,19 +432,22 @@
             break
         }
 
+    // Travis: under what circumstances is full_featured false? 
+    //         It doesn't seem like it would load statebus in that case...
     if (full_featured) load_full_features()
     else               make_client_statebus_maker()
 
     function load_full_features() {
         console.log('client: Loading full features')
 
-        var js_urls = {
-            react: 'https://cdnjs.cloudflare.com/ajax/libs/react/0.12.2/react.js',
-            sockjs: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js',
-            statebus: 'https://dl.dropboxusercontent.com/u/1000932/libs/statebus3.1.js',
-            coffeescript: 'https://dl.dropboxusercontent.com/u/1000932/libs/coffee-script.js'
-            //coffeescript: 'https://cdnjs.cloudflare.com/ajax/libs/coffee-script/1.10.0/coffee-script.min.js'
-        }
+        var js_urls = scripts_to_load || {}
+
+        // make sure that these required scripts will be loaded
+        js_urls.react = js_urls.react || 'https://cdnjs.cloudflare.com/ajax/libs/react/0.12.2/react.js'
+        js_urls.sockjs = js_urls.sockjs || 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js'
+        js_urls.statebus = js_urls.statebus || 'https://rawgit.com/invisible-college/statebus/master/statebus.js'
+        js_urls.coffee = js_urls.coffee || 'https://d2rtgkroh5y135.cloudfront.net/coffee.js'
+
         for (name in js_urls)
             document.write('<script src="' + js_urls[name] + '" charset="utf-8""></script>')
 
