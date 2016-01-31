@@ -18,6 +18,8 @@ npm install sockjs
 
 ## Example
 
+A barebones statebus app can be found in https://github.com/invisible-college/statebus/tree/master/starter_app.
+
 A simple statebus client and server can be found at https://github.com/invisible-college/considerit-data. 
 
 ## Coding
