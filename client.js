@@ -439,9 +439,7 @@
         console.log('client: Loading full features')
 
         var statebus_dir = document.querySelector('script[src$="client.js"]')
-              .getAttribute('src').split('/')
-        statebus_dir.pop()
-        statebus_dir = statebus_dir.join('/')
+              .match(/(.*)[\/\\]/)[1]||''
 
         var js_urls = {
             react: 'https://cdnjs.cloudflare.com/ajax/libs/react/0.12.2/react.js',
