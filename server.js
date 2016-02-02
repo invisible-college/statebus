@@ -56,7 +56,8 @@ var extra_methods = {
             var http = require('https')
             var protocol = 'https'
             var ssl_options = {
-                ca: require('split-ca')('certs/certificate-bundle'),
+                ca: (fs.existsSync('certs/certificate-bundle')
+                     && require('split-ca')('certs/certificate-bundle')),
                 key:  fs.readFileSync('certs/private-key'),
                 cert: fs.readFileSync('certs/certificate'),
                 ciphers: "ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384"
