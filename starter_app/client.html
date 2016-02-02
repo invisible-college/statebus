@@ -1,0 +1,33 @@
+<script type="statebus"># -*- mode: coffee -*-
+
+# Develop your application in this script block!    
+
+dom.BODY = ->  
+  DIV 
+    style: 
+      fontSize: 50
+      padding: 50
+
+    'Hello, world!'
+
+
+
+#</script><script>
+  //********************
+  // Initialize statebus
+
+  // The statebus server we will connect to. Read by statebus_client. 
+  // Defaults to 'https://stateb.us:3003'. If you want to run your own server...
+  // window.statebus_server = 'http://localhost:9375'
+
+  // External scripts that statebus_client will load. You can also 
+  // override default locations for scripts here. 
+  window.scripts_to_load = {
+    example: 'https://awesomecdn.org/my_dependency.js'
+  }
+
+  // Load the statebus client
+  var statebus_client = "https://rawgit.com/invisible-college/statebus/master/client.js"   
+  document.write( '<script src="' + statebus_client + '" charset="utf-8"><\/script>')
+
+</script>
