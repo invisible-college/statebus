@@ -148,6 +148,7 @@
                 } catch (err) {
                     console.error('Received bad sockjs message from '
                                   +url+': ', event.data, err)
+                    return
                 }
             }
 
@@ -431,6 +432,7 @@
             full_featured = true
             break
         }
+
 
     if (full_featured) load_full_features()
     else               make_client_statebus_maker()

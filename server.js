@@ -108,6 +108,7 @@ var extra_methods = {
                 } catch (e) {
                     console.error('Received bad sockjs message from '
                                   + conn.remoteAddress +': ', message, e)
+                    return
                 }
 
                 switch (message.method) {
@@ -228,6 +229,116 @@ var extra_methods = {
             return {all: result}
         }
         master('/connections').on_save = function () {}
+    },
+
+    ws_client: function ws_client (prefix, url) {
+        var WebSocket = require('websocket').w3cwebsocket
+        url = url || 'wss://stateb.us:3003'
+        var recent_saves = []
+        var sock
+        var attempts = 0
+        var outbox = []
+        var fetched_keys = new bus.Set()
+        if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
+        function send (o) {
+            console.log('ws.send:', JSON.stringify(o))
+            outbox.push(JSON.stringify(o))
+            flush_outbox()
+        }
+        function flush_outbox() {
+            if (sock.readyState === 1)
+                while (outbox.length > 0)
+                    sock.send(outbox.shift())
+            else
+                setTimeout(flush_outbox, 400)
+        }
+        bus(prefix).on_save   = function (obj) { send({method: 'save', obj: obj})
+                                                 if (global.ignore_flashbacks)
+                                                     recent_saves.push(JSON.stringify(obj))
+                                                 if (recent_saves.length > 100) {
+                                                     var extra = recent_saves.length - 100
+                                                     recent_saves.splice(0, extra)
+                                                 }
+                                               }
+        bus(prefix).on_fetch  = function (key) { send({method: 'fetch', key: key}),
+                                                 fetched_keys.add(key) }
+        bus(prefix).on_forget = function (key) { send({method: 'forget', key: key}),
+                                                 fetched_keys.del(key) }
+        bus(prefix).on_delete = function (key) { send({method: 'delete', key: key}) }
+
+        function connect () {
+            console.log('[ ] trying to open')
+            sock = new WebSocket(url + '/statebus/websocket')
+            sock.onopen = function()  {
+                console.log('[*] open', sock.protocol)
+
+                var me = fetch('ls/me')
+                console.log('connect: me is', me)
+                if (!me.client) {
+                    me.client = (Math.random().toString(36).substring(2)
+                                 + Math.random().toString(36).substring(2)
+                                 + Math.random().toString(36).substring(2))
+                    save(me)
+                }
+                send({method: 'save', obj: {key: '/current_user', client: me.client}})
+
+                if (attempts > 0) {
+                    // Then we need to refetch everything, cause it
+                    // might have changed
+                    recent_saves = []
+                    var keys = fetched_keys.all()
+                    for (var i=0; i<keys.length; i++)
+                        send({method: 'fetch', key: keys[i]})
+                }
+
+                attempts = 0
+            }
+            sock.onclose   = function()  {
+                console.log('[*] close')
+                setTimeout(connect, attempts++ < 3 ? 1500 : 5000)
+            }
+
+            sock.onmessage = function(event) {
+                // Todo: Perhaps optimize processing of many messages
+                // in batch by putting new messages into a queue, and
+                // waiting a little bit for more messages to show up
+                // before we try to re-render.  That way we don't
+                // re-render 100 times for a function that depends on
+                // 100 items from server while they come in.  This
+                // probably won't make things render any sooner, but
+                // will probably save energy.
+
+                //console.log('[.] message')
+                try {
+                    var message = JSON.parse(event.data)
+
+                    // We only take pubs from the server for now
+                    if (message.method.toLowerCase() !== 'pub') throw 'barf'
+                    console.log('ws_client received', message.obj)
+
+                    var is_recent_save = false
+                    if (global.ignore_flashbacks) {
+                        var s = JSON.stringify(message.obj)
+                        for (var i=0; i<recent_saves.length; i++)
+                            if (s === recent_saves[i]) {
+                                is_recent_save = true
+                                recent_saves.splice(i, 1)
+                            }
+                        console.log('Msg', message.obj.key,
+                                    is_recent_save?'is':'is NOT', 'a flashback')
+                    }
+
+                    if (!is_recent_save)
+                        bus.pub(message.obj)
+                        //setTimeout(function () {bus.pub(message.obj)}, 1000)
+                } catch (err) {
+                    console.error('Received bad ws message from '
+                                  +url+': ', event.data, err)
+                }
+            }
+
+        }
+        connect()
     },
 
     socketio_server: function socketio_server (http_server, socket_io_module) {
