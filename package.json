@@ -1,11 +1,14 @@
 {
   "name": "statebus",
-  "version": "3.0.10",
+  "version": "3.0.11",
   "description": "Synchronize state.",
   "main": "statebus.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Michael Toomim",
-  "repository": "invisible-college/statebus"
+  "repository": "invisible-college/statebus",
+  "dependencies": {
+    "websocket": "^1.0.22"
+  }
 }
