@@ -11,7 +11,7 @@
     function bus (arg) {
         // Called with a function to react to
         if (typeof arg === 'function') {
-            var f = reactive(funk)
+            var f = reactive(arg)
             f()
             return f
         }
