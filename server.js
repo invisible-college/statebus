@@ -232,6 +232,7 @@ var extra_methods = {
     },
 
     ws_client: function ws_client (prefix, url) {
+        var bus = this
         var WebSocket = require('websocket').w3cwebsocket
         url = url || 'wss://stateb.us:3003'
         var recent_saves = []
@@ -241,7 +242,7 @@ var extra_methods = {
         var fetched_keys = new bus.Set()
         if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
         function send (o) {
-            console.log('ws.send:', JSON.stringify(o))
+            // console.log('ws.send:', JSON.stringify(o))
             outbox.push(JSON.stringify(o))
             flush_outbox()
         }
@@ -267,13 +268,13 @@ var extra_methods = {
         bus(prefix).on_delete = function (key) { send({method: 'delete', key: key}) }
 
         function connect () {
-            console.log('[ ] trying to open')
+            // console.log('[ ] trying to open')
             sock = new WebSocket(url + '/statebus/websocket')
             sock.onopen = function()  {
-                console.log('[*] open', sock.protocol)
+                // console.log('[*] open')
 
                 var me = fetch('ls/me')
-                console.log('connect: me is', me)
+                // console.log('connect: me is', me)
                 if (!me.client) {
                     me.client = (Math.random().toString(36).substring(2)
                                  + Math.random().toString(36).substring(2)
@@ -314,7 +315,7 @@ var extra_methods = {
 
                     // We only take pubs from the server for now
                     if (message.method.toLowerCase() !== 'pub') throw 'barf'
-                    console.log('ws_client received', message.obj)
+                    // console.log('ws_client received', message.obj)
 
                     var is_recent_save = false
                     if (global.ignore_flashbacks) {
@@ -324,8 +325,8 @@ var extra_methods = {
                                 is_recent_save = true
                                 recent_saves.splice(i, 1)
                             }
-                        console.log('Msg', message.obj.key,
-                                    is_recent_save?'is':'is NOT', 'a flashback')
+                        // console.log('Msg', message.obj.key,
+                        //             is_recent_save?'is':'is NOT', 'a flashback')
                     }
 
                     if (!is_recent_save)
