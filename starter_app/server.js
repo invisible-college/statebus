@@ -1,4 +1,4 @@
-var bus = require('statebus-server')()
+var bus = require('statebus/server')()
 
 // By default, the server's state will persist in a file called "db".
 
