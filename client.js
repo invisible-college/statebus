@@ -451,7 +451,7 @@
         }
 
         for (name in js_urls)
-            document.write('<script src="' + js_urls[name] + '" charset="utf-8""></script>')
+            document.write('<script src="' + js_urls[name] + '" charset="utf-8"></script>')
 
         document.addEventListener('DOMContentLoaded', scripts_ready, false)
     }

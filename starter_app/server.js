@@ -1,15 +1,13 @@
 var bus = require('statebus-server')()
 
-// By default, data is stored in a sqlite database
+// By default, the server's state will persist in a file called "db".
 
-bus('*').on_save = function (obj) {
+bus('/funny/*').on_save = function (obj) {
     // process some save by a client to your server...
-    // if (obj.key.match('/awesome')) ...
 }
 
-bus('*').on_fetch = function (obj) {
-    // process some fetch by a client to your server...
-    // if (obj.key.match('/awesome')) ...
+bus('/funny/*').on_fetch = function (key) {
+    return {joke: 'Why did the state cross the bus?'}
 }
 
 // Run this server so that client apps can connect to it and access data
