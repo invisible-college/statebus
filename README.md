@@ -177,7 +177,7 @@ node server.js
 Now tell your client that all `/*` state comes from this server by
 adding this line to end of its html file:
 
-```
+```html
 <script> statebus_server = "http://localhost:3942" </script>
 ```
 
