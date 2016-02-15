@@ -53,6 +53,11 @@
         var attempts = 0
         var outbox = []
         var fetched_keys = new bus.Set()
+        var heartbeat
+        console.log('Replacing URL', url)
+        url = url.replace(/^state:\/\//, 'https://')
+        url = url.replace(/^statei:\/\//, 'http://')
+        console.log('...with', url)
         if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
         function send (o) {
             console.log('sockjs.send:', JSON.stringify(o))
@@ -106,9 +111,11 @@
                 }
 
                 attempts = 0
+                //heartbeat = setInterval(function () {send({method: 'ping'})}, 5000)
             }
             sock.onclose   = function()  {
                 console.log('[*] close')
+                heartbeat && clearInterval(heartbeat); heartbeat = null
                 setTimeout(connect, attempts++ < 3 ? 1500 : 5000)
             }
 
@@ -125,9 +132,10 @@
                 //console.log('[.] message')
                 try {
                     var message = JSON.parse(event.data)
+                    var method = message.method.toLowerCase()
 
                     // We only take pubs from the server for now
-                    if (message.method.toLowerCase() !== 'pub') throw 'barf'
+                    if (method !== 'pub' && method !== 'pong') throw 'barf'
                     console.log('sockjs_client received', message.obj)
 
                     var is_recent_save = false
@@ -201,31 +209,26 @@
         else                         window.attachEvent("onstorage", update)
     }
 
-    function handle_sockjs_urls () {
-        function get_domain(key) {
-            var m = key.match(/^sockjs\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
-            if (!m) throw Error('Bad url: ', key)
-            return m[1]
-        }
-        bus('sockjs://*').on_fetch = function (key) {
-            // First look up the connection
-            c = connection_for(key)
-
-            // Now ask the connection for it
-            return c.fetch(key)
-        }
-        bus('sockjs://*').on_save = function (o) {
-            connection_for(o.key).save(o)
-        }
-        bus('sockjs://*').on_forget = function (key) {
-            connection_for(key).forget(key)
-        }
+    function universal_sockjs () {
+        var old_route = bus.route
         var connections = {}
-        function connection_for (key) {
-            var domain = get_domain(key)
-            return connections[domain] = connections[domain] || new sockjs_client(domain)
+        bus.route = function (key, method, arg) {
+            var d = get_domain(key)
+            if (d && !connections[d]) {
+                bus.sockjs_client(d + '*', d)
+                connections[d] = true
+            }
+
+            return old_route(key, method, arg)
+        }
+        function get_domain(key) {
+            var m = key.match(/^state\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
+            // if (!m) throw Error('Bad url: ', key)
+            return m && m[0]
         }
 
+        // Now, if I implement proxy, then we can implement /* using a
+        // proxy on top of this universal_sockjs
         if (window.slashcut) {
             // Proxy shortcut defined with:
             bus('/*').to_fetch = function (key) {
@@ -412,7 +415,7 @@
 
     function make_client_statebus_maker () {
         var extra_stuff = ['socketio_client sockjs_client localstorage_client',
-                           'handle_sockjs_urls url_store components'].join(' ').split(' ')
+                           'universal_sockjs url_store components'].join(' ').split(' ')
         if (window.statebus) {
             var orig_statebus = statebus
             window.statebus = function make_client_bus () {

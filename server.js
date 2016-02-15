@@ -162,75 +162,6 @@ var extra_methods = {
         s.installHandlers(httpserver, {prefix:'/statebus'});
     },
 
-    ws_server: function ws_server(httpserver, ws, user_bus_func) {
-        var master = this
-        var connections = master.fetch('connections')
-        var next_id = 0
-        master.pub({key: 'connections'}) // Clean out old sessions
-        var s = new ws.Server({server: httpserver})
-        s.on('connection', function(socket) {
-            socket.remoteAddress = (socket.upgradeReq.connection.remoteAddress
-                                    || socket.remoteAddress)
-            socket.write = socket.write || socket.send
-            socket.id = next_id++
-            connections[socket.id] = {}; save(connections)
-            var user = user_bus_func ? make_bus() : master
-            if (user_bus_func) user_bus_func(user, socket)
-
-            var our_fetches_in = {}  // Every key that every client has fetched.
-            console.log('ws: New connection from', socket.remoteAddress)
-            function ws_pubber (obj) {
-                console.log('ws_pubber:', obj.key)
-                socket.write(JSON.stringify({method: 'pub', obj: obj}))
-            }
-            socket.on('data', function(message) {
-                console.log('Got message', messasge)
-                try {
-                    message = JSON.parse(message)
-                    var method = message.method.toLowerCase()
-                    var arg = message.key || message.obj
-                    console.log('ws:', method, arg)
-                    if (!arg) throw 'Missing argument in message'
-                } catch (e) {
-                    console.error('Received bad ws message from '
-                                  + socket.remoteAddress +': ', message, e)
-                }
-
-                switch (message.method) {
-                case 'fetch':  our_fetches_in[arg] = true; break
-                case 'forget': delete our_fetches_in[arg]; break
-                case 'delete': message.method = 'del';     break
-                }
-
-                user[message.method](arg, ws_pubber)
-
-                // validate that our fetches_in are all in the bus
-                for (var key in our_fetches_in)
-                    if (!user.fetches_in.contains(key, master.funk_key(ws_pubber)))
-                        console.trace("***\n****\nFound errant key", key,
-                                      'when receiving a ws', message.method, 'on', arg)
-            })
-            socket.on('close', function() {
-                console.log('ws: disconnected from', socket.remoteAddress, socket.id, user.id)
-                for (var key in our_fetches_in)
-                    user.forget(key, ws_pubber)
-                delete connections[socket.id]; save(connections)
-                user.delete_bus()
-            })
-            user('/connection').on_fetch = function () { return {mine: connections[socket.id]} }
-        })
-
-        // s.installHandlers(httpserver, {prefix:'/statebus'});
-
-        master('/connections').on_fetch = function (key) {
-            var result = []
-            for (c in master.fetch('connections'))
-                if (c !== 'key') result.push(c)
-            return {all: result}
-        }
-        master('/connections').on_save = function () {}
-    },
-
     ws_client: function ws_client (prefix, url) {
         var bus = this
         var WebSocket = require('websocket').w3cwebsocket
@@ -240,6 +171,7 @@ var extra_methods = {
         var attempts = 0
         var outbox = []
         var fetched_keys = new bus.Set()
+        var heartbeat
         if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
         function send (o) {
             // console.log('ws.send:', JSON.stringify(o))
@@ -268,10 +200,10 @@ var extra_methods = {
         bus(prefix).on_delete = function (key) { send({method: 'delete', key: key}) }
 
         function connect () {
-            // console.log('[ ] trying to open')
+            console.log('[ ] trying to open')
             sock = new WebSocket(url + '/statebus/websocket')
             sock.onopen = function()  {
-                // console.log('[*] open')
+                console.log('[*] open')
 
                 var me = fetch('ls/me')
                 // console.log('connect: me is', me)
@@ -293,9 +225,11 @@ var extra_methods = {
                 }
 
                 attempts = 0
+                heartbeat = setInterval(function () {send({method: 'ping'})}, 5000)
             }
             sock.onclose   = function()  {
                 console.log('[*] close')
+                clearInterval(heartbeat); heartbeat = null
                 setTimeout(connect, attempts++ < 3 ? 1500 : 5000)
             }
 
