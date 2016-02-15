@@ -6,7 +6,8 @@ Statebus is particularly good for prototyping web applications. You only need a 
 
 ## Making a client
 
-You don't need a server.  Just put this into a .html file on your filesystem:
+You don't need a server yet.  You don't need to download anything.
+Just make a .html file on your filesystem containing this:
 
 ```coffeescript
 <script type="statebus">                                       # Initial line
@@ -187,6 +188,24 @@ this line to end of its html file:
 ```html
 <script> statebus_server = "http://localhost:3942" </script>
 ```
+
+## API
+
+### fetch(key)
+
+Send updates by re-running the enclosing reactive function, and return
+the current version of the state.
+Statebus will be responsible for unsubscribing.
+
+### fetch(key, callback)
+Send updates to callback, and return undefined.
+The programmer is responsible for unsubscribing to updates by running forget(key, callback).
+
+### save(object)
+
+### delete(object-or-key)
+
+### up(object)
 
 ## Other Examples
 
