@@ -4,23 +4,21 @@ Statebus is a reactive web framework for distributing state. It simplifies web d
 
 Statebus is particularly good for prototyping web applications. You only need a single .html file, and you can easily share that file with other people, or fork it if you want to explore different ways your idea might be brought into the world. 
 
-## Installation
+## Make a client
 
+You don't need a server yet.  Make a new `.html` file on your
+filesystem with this template:
+
+```coffeescript
+<script type="statebus">                                       # Initial line
+
+dom.BODY = ->                                                  # Your code here
+  DIV 'Hello, world!'
+
+</script><script src="https://stateb.us/client.js"></script>   # Loads statebus
 ```
-npm install statebus
-```
 
-For many statebus applications, you'll also do:
-
-```
-npm install sockjs
-```
-
-## Example
-
-A barebones statebus app can be found in https://github.com/invisible-college/statebus/tree/master/starter_app.
-
-A simple statebus client and server can be found at https://github.com/invisible-college/considerit-data. 
+Now you have a working statebus app, in a single html file!
 
 ## Coding
 
@@ -145,3 +143,31 @@ DIV null,
   child1
   child2
 ```
+
+## Create a server
+
+```
+npm install statebus
+npm install sockjs
+```
+
+And then make a server file, like this:
+
+```javascript
+var bus = require('statebus/server')
+bus.serve({port: 3942})
+
+bus('/funny/*').on_fetch = function (key) {
+    return {joke: 'Why did the state cross the bus?'}
+}
+
+bus('/funny/*').on_save = function (obj) {
+    send_email({subject: "Our funny joke changed!", body: obj.joke})
+}
+```
+
+
+## Other Examples
+
+A simple statebus client and server can be found at https://github.com/invisible-college/considerit-data. 
+
