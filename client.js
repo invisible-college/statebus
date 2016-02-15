@@ -443,7 +443,7 @@
     function load_full_features() {
         console.log('client: Loading full features')
 
-        var statebus_dir = document.querySelector('script[src$="client.js"]')
+        var statebus_dir = document.querySelector('script[src*="client.js"]')
               .getAttribute('src').match(/(.*)[\/\\]/)[1]||''
 
         var js_urls = {
