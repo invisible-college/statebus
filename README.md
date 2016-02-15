@@ -4,7 +4,7 @@ Statebus is a reactive web framework for distributing state. It simplifies web d
 
 Statebus is particularly good for prototyping web applications. You only need a single .html file, and you can easily share that file with other people, or fork it if you want to explore different ways your idea might be brought into the world. 
 
-## Make a client
+## Making a statebus client
 
 You don't need a server yet.  Just make a new `.html` file on your
 filesystem, and put this template in it:
@@ -21,8 +21,7 @@ dom.BODY = ->                                                  # Your code here
 Now you have a working statebus app, in a single html file!  Just
 double-click it so it opens in your web browser with a `file:///` url.
 
-
-## Coding
+### Things to know
 
 In statebus code, we: 
 - Don't use CSS. We just inline all of our styles.
