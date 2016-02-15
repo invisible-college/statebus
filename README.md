@@ -1,35 +1,35 @@
 # Statebus
 
-Statebus is a reactive web framework for distributing state. It simplifies web development and will eliminate much of the web stack. Many projects of the invisible.college use statebus. 
+Statebus is a reactive framework for distributed state. It simplifies web development and will eliminate much of the web stack. Many projects of the invisible.college use statebus. 
 
 Statebus is particularly good for prototyping web applications. You only need a single .html file, and you can easily share that file with other people, or fork it if you want to explore different ways your idea might be brought into the world. 
 
-## Making a statebus client
+## Making a client
 
-You don't need a server yet.  Just make a new `.html` file on your
-filesystem, and put this template in it:
+You don't need a server.  Just put this into a .html file on your filesystem:
 
 ```coffeescript
 <script type="statebus">                                       # Initial line
 
 dom.BODY = ->                                                  # Your code here
-  DIV 'Hello, world!'
+  DIV 'Hello, World!'
 
 #</script><script src="https://stateb.us/client.js"></script>  # Loads statebus
 ```
 
-Now you have a working statebus app, in a single html file!  Just
-double-click it so it opens in your web browser with a `file:///` url.
+Now you have a working statebus app, in a single html file!
+Double-click to open it in your web browser with a `file:///` url.
 
-### Things to know
+## Writing code
 
-In statebus code, we: 
+In statebus we:
+
 - Don't use CSS. We just inline all of our styles.
-- Don't directly write HTML. The html is generated in the javascript with e.g. DIV {style: position: 'absolute'}, 'My div'
+- Don't directly write HTML. The html is generated in the javascript with e.g. `DIV {style: position: 'absolute'}, 'My div'`
 - We're using coffeescript, which is nicer syntax than javascript. It compiles down to javascript, but you don't have to worry about the compilation. That's taken care of by statebus.
 - The web framework uses facebook's Reactjs behind the scenes.
 
-### You write code in coffeescript
+## You write code in coffeescript
 
 [Coffeescript](http://coffeescript.org) lets you execute javascript functions without curly braces and using indentation. You also don't need return statements.
 
@@ -145,14 +145,16 @@ DIV null,
   child2
 ```
 
-## Create a server
+## Making a statebus server
+
+Install statebus on your server:
 
 ```
 npm install statebus
 npm install sockjs
 ```
 
-And then make a `server.js` file, like this:
+Make a `server.js` file:
 
 ```javascript
 var bus = require('statebus/server')
@@ -167,14 +169,14 @@ bus('/funny/*').on_save = function (obj) {
 }
 ```
 
-And run it:
+Run it:
 
 ```
 node server.js
 ```
 
-Now tell your client that all `/*` state comes from this server by
-adding this line to end of its html file:
+Tell your client that all `/*` state comes from this server by adding
+this line to end of its html file:
 
 ```html
 <script> statebus_server = "http://localhost:3942" </script>
