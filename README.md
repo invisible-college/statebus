@@ -153,7 +153,7 @@ npm install statebus
 npm install sockjs
 ```
 
-And then make a server file, like this:
+And then make a `server.js` file, like this:
 
 ```javascript
 var bus = require('statebus/server')
@@ -168,6 +168,18 @@ bus('/funny/*').on_save = function (obj) {
 }
 ```
 
+And run it:
+
+```
+node server.js
+```
+
+Now tell your client that all `/*` state comes from this server by
+adding this line to end of its html file:
+
+```
+<script> statebus_server = "http://localhost:3942" </script>
+```
 
 ## Other Examples
 
