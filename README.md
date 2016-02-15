@@ -21,6 +21,28 @@ dom.BODY = ->                                                      # Your code h
 Now you have a working statebus app, in a single html file!
 Double-click to open it in your web browser with a `file:///` url.
 
+Want to turn this into a simple blog?  Replace the body with this:
+
+```coffeescript
+dom.BODY = ->
+  blog = fetch('state://stateb.us/your/blog')
+  DIV {},
+    for post in blog.posts
+      DIV {},
+        H1 post.title
+        DIV post.body
+```
+
+It'll be empty until you add some content though.  Open your
+javascript dev console and run this:
+
+```javascript
+save({
+  key: 'state://stateb.us/your/blog',
+  posts: [{title: 'hello', body: 'world'}]
+})
+```
+
 ## Writing code
 
 In statebus we:
