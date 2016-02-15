@@ -122,9 +122,15 @@ example = ->
 
 This example resizes a square when you click on it. [Play with it here](https://cheeseburgertherapy.com/emo/square).
 
-`fetch` returns an object located at the key '/morgan/example', and subscribes to that object. What that means is that any time the state at /morgan/example changes, example will re-execute. `save(state)` will save changes and propagate them to any function that is subscribed.
+`fetch` returns an object located at the key `/morgan/example`, and
+subscribes to that object. What that means is that any time the state
+at `/morgan/example` changes, example will re-execute. `save(state)`
+will save changes and propagate them to any function that is
+subscribed.
 
-Important: *the leading / in '/morgan/example' means that the state will synchronize with the server. A key 'morgan/example' would only be available to the client.*
+**Important:** the leading `/` in `/morgan/example` means that the state
+will synchronize with the server. A key `morgan/example` would only be
+available to the client.
 
 #### ...and a dumb quirk
 
