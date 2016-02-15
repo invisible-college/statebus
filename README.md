@@ -6,8 +6,8 @@ Statebus is particularly good for prototyping web applications. You only need a 
 
 ## Make a client
 
-You don't need a server yet.  Make a new `.html` file on your
-filesystem with this template:
+You don't need a server yet.  Just make a new `.html` file on your
+filesystem, and put this template in it:
 
 ```coffeescript
 <script type="statebus">                                       # Initial line
@@ -15,10 +15,12 @@ filesystem with this template:
 dom.BODY = ->                                                  # Your code here
   DIV 'Hello, world!'
 
-</script><script src="https://stateb.us/client.js"></script>   # Loads statebus
+#</script><script src="https://stateb.us/client.js"></script>  # Loads statebus
 ```
 
-Now you have a working statebus app, in a single html file!
+Now you have a working statebus app, in a single html file!  Just
+double-click it so it opens in your web browser with a `file:///` url.
+
 
 ## Coding
 
