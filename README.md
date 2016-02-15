@@ -10,12 +10,12 @@ You don't need a server yet.  You don't need to download anything.
 Just make a .html file on your filesystem containing this:
 
 ```coffeescript
-<script type="statebus">                                       # Initial line
+<script type="statebus">                                           # Initial line
 
-dom.BODY = ->                                                  # Your code here
+dom.BODY = ->                                                      # Your code here
   DIV 'Hello, World!'
 
-#</script><script src="https://stateb.us/client.js"></script>  # Loads statebus
+#</script><script src="https://stateb.us/client.js?v=3"></script>  # Loads statebus
 ```
 
 Now you have a working statebus app, in a single html file!
