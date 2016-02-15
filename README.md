@@ -13,7 +13,7 @@ Just make a .html file on your filesystem containing this:
 <script type="statebus">                                           # Initial line
 
 dom.BODY = ->                                                      # Your code here
-  DIV 'Hello, World!'
+  DIV 'Hello, World!'    # Return a div
 
 #</script><script src="https://stateb.us/client.js?v=3"></script>  # Loads statebus
 ```
@@ -34,7 +34,7 @@ dom.BODY = ->
 ```
 
 It'll be empty until you add some content though.  Open your
-javascript dev console and run this:
+javascript console and run:
 
 ```javascript
 save({
