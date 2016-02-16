@@ -4,7 +4,10 @@
     else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
     else this[name] = definition()
 }('statebus', function() { var busses = {}, executing_funk, global_funk, funks = {}; return function make_bus () {
-    var log = console.log.bind(console)
+    function log () {
+        if (bus.honk)
+            console.log.apply(console, arguments)
+    }
 
     // ****************
     // The statebus object we will return
@@ -232,7 +235,7 @@
     function del(obj_or_key) {
         var key = obj_or_key.key || obj_or_key
         delete cache[key]
-        console.log('del:', obj_or_key)
+        log('del:', obj_or_key)
         bus.route(key, 'delete', key)
         //forget(key /*, bus??*/)
     }
@@ -385,9 +388,9 @@
         // if (funk.statebus_name === undefined || funk.statebus_name === 'undefined')
         //     console.log('WEIRDO FUNK', funk, typeof funk.statebus_name)
 
-        if (!funk.global_funk && bus.printly)  // \u26A1 
-            console.log('> a', method+"('"+(arg.key||arg)
-                        +"') is triggering", funk_name(funk))
+        if (!funk.global_funk)  // \u26A1 
+            log('> a', method+"('"+(arg.key||arg)
+                +"') is triggering", funk_name(funk))
 
         if (method === 'fetch') {
             fetches_out[arg] = true
@@ -673,7 +676,7 @@
                'funk_key funks key_id key_name id',
                'pending_fetches fetches_in loading_keys',
                'global_funk executing_funk',
-               'Set One_To_Many clone extend deep_map'
+               'Set One_To_Many clone extend deep_map log'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)
         bus[api[i]] = eval(api[i])

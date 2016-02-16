@@ -3,12 +3,12 @@
     // ****************
     // Connecting over the Network
     function socketio_client (bus, prefix, url) {
-        console.log('socketio to', url)
+        bus.log('socketio to', url)
         var socket = io(url)
         var fetched_keys = new Set()
 
         bus(prefix).on_fetch = function (key) {
-            console.log('fetching', key, 'from', url)
+            bus.log('fetching', key, 'from', url)
             // Error check
             // if (pending_fetches[key]) {
             //     console.error('Duplicate request for '+key)
@@ -20,7 +20,7 @@
         }
 
         var saver = bus(prefix).on_save = function (object) {
-            console.log('sending save', object)
+            bus.log('sending save', object)
             socket.emit('save', object)
         }
         bus(prefix).on_delete = function (key)    { socket.emit('delete', key) }
@@ -31,7 +31,7 @@
 
         // Receive stuff
         socket.on('save', function(message) {
-            console.log('socketio_client: received SAVE', message.obj.key)
+            bus.log('socketio_client: received SAVE', message.obj.key)
             var obj = message.obj
             //delete pending_fetches[obj.key]
             save(obj, saver)
@@ -54,13 +54,11 @@
         var outbox = []
         var fetched_keys = new bus.Set()
         var heartbeat
-        console.log('Replacing URL', url)
         url = url.replace(/^state:\/\//, 'https://')
         url = url.replace(/^statei:\/\//, 'http://')
-        console.log('...with', url)
         if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
         function send (o) {
-            console.log('sockjs.send:', JSON.stringify(o))
+            bus.log('sockjs.send:', JSON.stringify(o))
             outbox.push(JSON.stringify(o))
             flush_outbox()
         }
@@ -86,13 +84,13 @@
         bus(prefix).on_delete = function (key) { send({method: 'delete', key: key}) }
 
         function connect () {
-            console.log('[ ] trying to open')
+            console.log('%c[ ] trying to open ' + url, 'color: blue')
             sock = sock = new SockJS(url + '/statebus')
             sock.onopen = function()  {
-                console.log('[*] open', sock.protocol)
+                console.log('%c[*] open ' + url, 'color: blue')
 
                 var me = fetch('ls/me')
-                console.log('connect: me is', me)
+                bus.log('connect: me is', me)
                 if (!me.client) {
                     me.client = (Math.random().toString(36).substring(2)
                                  + Math.random().toString(36).substring(2)
@@ -114,7 +112,7 @@
                 //heartbeat = setInterval(function () {send({method: 'ping'})}, 5000)
             }
             sock.onclose   = function()  {
-                console.log('[*] close')
+                console.log('%c[*] close ' + url, 'color: blue')
                 heartbeat && clearInterval(heartbeat); heartbeat = null
                 setTimeout(connect, attempts++ < 3 ? 1500 : 5000)
             }
@@ -136,7 +134,7 @@
 
                     // We only take pubs from the server for now
                     if (method !== 'pub' && method !== 'pong') throw 'barf'
-                    console.log('sockjs_client received', message.obj)
+                    bus.log('sockjs_client received', message.obj)
 
                     var is_recent_save = false
                     if (window.ignore_flashbacks) {
@@ -146,8 +144,8 @@
                                 is_recent_save = true
                                 recent_saves.splice(i, 1)
                             }
-                        console.log('Msg', message.obj.key,
-                                    is_recent_save?'is':'is NOT', 'a flashback')
+                        bus.log('Msg', message.obj.key,
+                                is_recent_save?'is':'is NOT', 'a flashback')
                     }
 
                     if (!is_recent_save)
@@ -169,7 +167,7 @@
         // We can do that by adding a list of dirty keys and 
 
         var bus = this
-        console.log(this)
+        bus.log(this)
 
         // GET returns the value immediately in a PUT
         // PUTs are queued up, to store values with a delay, in batch
@@ -177,7 +175,7 @@
         var pending_saves = {}
 
         function save_the_pending_saves() {
-            console.log('localstore: saving', pending_saves)
+            bus.log('localstore: saving', pending_saves)
             for (var k in pending_saves)
                 localStorage.setItem(k, JSON.stringify(pending_saves[k]))
             saves_are_pending = false
@@ -189,7 +187,7 @@
         }
         bus(prefix).on_save = function (obj) {
             // Do I need to make this recurse into the object?
-            console.log('localStore: on_save:', obj.key)
+            bus.log('localStore: on_save:', obj.key)
             pending_saves[obj.key] = obj
             if (!saves_are_pending) {
                 setTimeout(save_the_pending_saves, 50)
@@ -202,7 +200,7 @@
 
         // Hm... this update stuff doesn't seem to work on file:/// urls in chrome
         function update (event) {
-            console.log('Got a localstorage update', event)
+            bus.log('Got a localstorage update', event)
             this.get(event.key.substr('statebus '.length))
         }
         if (window.addEventListener) window.addEventListener("storage", update, false)
@@ -441,8 +439,6 @@
     else               make_client_statebus_maker()
 
     function load_full_features() {
-        console.log('client: Loading full features')
-
         var statebus_dir = document.querySelector('script[src*="client.js"]')
               .getAttribute('src').match(/(.*)[\/\\]/)[1]||''
 
@@ -531,7 +527,7 @@
                 }
                 if (children.length === 0) children = undefined
                 if (attrs['ref'] === 'input')
-                    console.log(attrs, children)
+                    bus.log(attrs, children)
                 return el(attrs, children)
             }
         }
