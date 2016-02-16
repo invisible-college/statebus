@@ -1,6 +1,7 @@
 var extra_methods = {
     setup: function setup (options) {
         var bus = this
+        bus.honk = true
         options = options || {}
         var c = options.client_definition
         if (!('file_store' in options) || options.file_store)
@@ -22,6 +23,7 @@ var extra_methods = {
     },
     serve: function serve (options) {
         var bus = this
+        bus.honk = true
         options = options || {}
         var c = options.client_definition
         if (!('file_store' in options) || options.file_store)
@@ -82,6 +84,7 @@ var extra_methods = {
 
     sockjs_server: function sockjs_server(httpserver, user_bus_func) {
         var master = this
+        var log = master.log
         master.pub({key: 'connections'}) // Clean out old sessions
         var connections = master.fetch('connections')
         var s = require('sockjs').createServer({
@@ -93,17 +96,17 @@ var extra_methods = {
             if (user_bus_func) user_bus_func(user, conn)
 
             var our_fetches_in = {}  // Every key that every client has fetched.
-            console.log('sockjs_s: New connection from', conn.remoteAddress)
+            log('sockjs_s: New connection from', conn.remoteAddress)
             function sockjs_pubber (obj) {
                 conn.write(JSON.stringify({method: 'pub', obj: obj}))
-                console.log('sockjs: SENT', obj.key)
+                log('sockjs: SENT', obj.key)
             }
             conn.on('data', function(message) {
                 try {
                     message = JSON.parse(message)
                     var method = message.method.toLowerCase()
                     var arg = message.key || message.obj
-                    console.log('sockjs_s:', method, arg)
+                    log('sockjs_s:', method, arg)
                     if (!arg) throw 'Missing argument in message'
                 } catch (e) {
                     console.error('Received bad sockjs message from '
@@ -124,10 +127,10 @@ var extra_methods = {
                     if (!user.fetches_in.contains(key, master.funk_key(sockjs_pubber)))
                         console.trace("***\n****\nFound errant key", key,
                                       'when receiving a sockjs', message.method, 'on', arg)
-                //console.log('sockjs_s: done with message')
+                //log('sockjs_s: done with message')
             })
             conn.on('close', function() {
-                console.log('sockjs_s: disconnected from', conn.remoteAddress, conn.id, user.id)
+                log('sockjs_s: disconnected from', conn.remoteAddress, conn.id, user.id)
                 for (var key in our_fetches_in)
                     user.forget(key, sockjs_pubber)
                 delete connections[conn.id]; master.pub(connections)
@@ -174,7 +177,7 @@ var extra_methods = {
         var heartbeat
         if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
         function send (o) {
-            // console.log('ws.send:', JSON.stringify(o))
+            // bus.log('ws.send:', JSON.stringify(o))
             outbox.push(JSON.stringify(o))
             flush_outbox()
         }
@@ -206,7 +209,7 @@ var extra_methods = {
                 console.log('[*] open')
 
                 var me = fetch('ls/me')
-                // console.log('connect: me is', me)
+                // bus.log('connect: me is', me)
                 if (!me.client) {
                     me.client = (Math.random().toString(36).substring(2)
                                  + Math.random().toString(36).substring(2)
@@ -243,13 +246,12 @@ var extra_methods = {
                 // probably won't make things render any sooner, but
                 // will probably save energy.
 
-                //console.log('[.] message')
                 try {
                     var message = JSON.parse(event.data)
 
                     // We only take pubs from the server for now
                     if (message.method.toLowerCase() !== 'pub') throw 'barf'
-                    // console.log('ws_client received', message.obj)
+                    // bus.log('ws_client received', message.obj)
 
                     var is_recent_save = false
                     if (global.ignore_flashbacks) {
@@ -259,8 +261,8 @@ var extra_methods = {
                                 is_recent_save = true
                                 recent_saves.splice(i, 1)
                             }
-                        // console.log('Msg', message.obj.key,
-                        //             is_recent_save?'is':'is NOT', 'a flashback')
+                        // bus.log('Msg', message.obj.key,
+                        //         is_recent_save?'is':'is NOT', 'a flashback')
                     }
 
                     if (!is_recent_save)
@@ -277,11 +279,12 @@ var extra_methods = {
     },
 
     socketio_server: function socketio_server (http_server, socket_io_module) {
+        var bus = this
         var io = socket_io_module.listen(http_server)
         
         var fetches_in = {}  // Every key that every client has fetched.
         io.on('connection', function(client){
-            console.log('New connection from', client.id)
+            bus.log('New connection from', client.id)
 
             function save_cb (obj) {
                 // Error check
@@ -293,33 +296,33 @@ var extra_methods = {
                 }
 
                 // Do the save
-                console.log('Sending', obj.key, 'to', client.id)
+                bus.log('Sending', obj.key, 'to', client.id)
                 client.emit('save', obj)
             }
 
             function disconnect_everything() {
-                console.log(client.id, 'just disconnected')
+                bus.log(client.id, 'just disconnected')
                 for (var key in fetches_in)
                     forget(key, save_cb)
             }
             client.on('disconnect', disconnect_everything)
 
             client.on('fetch', function (key) {
-                console.log('socketio_server: fetching', key, 'for', client.id)
+                bus.log('socketio_server: fetching', key, 'for', client.id)
                 fetch(key, save_cb)
                 fetches_in[key] = true
             })
             client.on('save', function (obj) {
-                console.log('Saving', obj, 'for', client.id)
+                bus.log('Saving', obj, 'for', client.id)
                 save(obj, save_cb)
             })
             client.on('forget', function (key) {
-                console.log('Forgetting', key, 'for', client.id)
+                bus.log('Forgetting', key, 'for', client.id)
                 forget(key, save_cb)
                 delete fetches_in[key]
             })
             client.on('delete', function (key) {
-                console.log('Deleting', key)
+                bus.log('Deleting', key)
                 del(key)
                 // del(key) doesn't need a second arg, because all
                 // that does is skip any .on_del listeners, and we
@@ -350,21 +353,21 @@ var extra_methods = {
                     console.log('Crap! DB IS DYING!!!!')
                     db_is_ok = false
                 }
-                console.log(err || 'saved db')
+                bus.log(err || 'saved db')
             })
         }
         try {
             if (fs.existsSync && !fs.existsSync('db'))
-                (fs.writeFileSync('db', '{}'), console.log('Made a new db file'))
+                (fs.writeFileSync('db', '{}'), bus.log('Made a new db file'))
             db = JSON.parse(fs.readFileSync('db'))
             db_is_ok = true
             // If we put before anything else is connected, we'll get this
             // into the cache but not affect anything else
             pub(db)
-            console.log('Read db')
+            bus.log('Read db')
         } catch (e) {
-            console.log(e)
-            console.log('bad db file')
+            console.error(e)
+            console.error('bad db file')
         }
 
         bus(prefix).on_save = function file_store (obj) {
@@ -387,7 +390,7 @@ var extra_methods = {
                 if (day < 10) day = '0' + day
                 var date = y + '-' + m + '-' + day
 
-                //console.log('Backing up db on', date)
+                //bus.log('Backing up db on', date)
 
                 require('child_process').execFile(
                     '/bin/cp', [filename, backup_dir+'/'+filename+'.'+date])
