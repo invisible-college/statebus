@@ -87,7 +87,7 @@
             console.log('%c[ ] trying to open ' + url, 'color: blue')
             sock = sock = new SockJS(url + '/statebus')
             sock.onopen = function()  {
-                console.log('%c[*] open ' + url, 'color: blue')
+                console.log('%c[*] opened ' + url, 'color: blue')
 
                 var me = fetch('ls/me')
                 bus.log('connect: me is', me)
@@ -112,7 +112,7 @@
                 //heartbeat = setInterval(function () {send({method: 'ping'})}, 5000)
             }
             sock.onclose   = function()  {
-                console.log('%c[*] close ' + url, 'color: blue')
+                console.log('%c[*] closed ' + url, 'color: blue')
                 heartbeat && clearInterval(heartbeat); heartbeat = null
                 setTimeout(connect, attempts++ < 3 ? 1500 : 5000)
             }
