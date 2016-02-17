@@ -15,7 +15,7 @@ Just make a .html file on your filesystem containing this:
 dom.BODY = ->                                                      # Your code here
   DIV 'Hello, World!'    # Return a div
 
-#</script><script src="https://stateb.us/client.js?v=3"></script>  # Loads statebus
+#</script><script src="https://stateb.us/client.js?v3"></script>   # Loads statebus
 ```
 
 Now you have a working statebus app, in a single html file!

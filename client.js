@@ -144,8 +144,8 @@
                                 is_recent_save = true
                                 recent_saves.splice(i, 1)
                             }
-                        bus.log('Msg', message.obj.key,
-                                is_recent_save?'is':'is NOT', 'a flashback')
+                        // bus.log('Msg', message.obj.key,
+                        //         is_recent_save?'is':'is NOT', 'a flashback')
                     }
 
                     if (!is_recent_save)
@@ -200,8 +200,8 @@
 
         // Hm... this update stuff doesn't seem to work on file:/// urls in chrome
         function update (event) {
-            bus.log('Got a localstorage update', event)
-            this.get(event.key.substr('statebus '.length))
+            console.log('Got a localstorage update', event)
+            //this.get(event.key.substr('statebus '.length))
         }
         if (window.addEventListener) window.addEventListener("storage", update, false)
         else                         window.attachEvent("onstorage", update)
