@@ -200,7 +200,7 @@
 
         // Hm... this update stuff doesn't seem to work on file:/// urls in chrome
         function update (event) {
-            console.log('Got a localstorage update', event)
+            bus.log('Got a localstorage update', event)
             //this.get(event.key.substr('statebus '.length))
         }
         if (window.addEventListener) window.addEventListener("storage", update, false)
