@@ -425,20 +425,8 @@
         }
     }
 
-    // Check to see if we wanna do the coffee conversions
-    var full_featured = false
-    var scripts = document.getElementsByTagName("script")
-    for (var i=0; i<scripts.length; i++)
-        if (scripts[i].getAttribute('type') === 'statebus') {
-            full_featured = true
-            break
-        }
-
-
-    if (full_featured) load_full_features()
-    else               make_client_statebus_maker()
-
-    function load_full_features() {
+    load_scripts() // This function could actually be inlined
+    function load_scripts() {
         var statebus_dir = document.querySelector('script[src*="client.js"]')
               .getAttribute('src').match(/(.*)[\/\\]/)[1]||''
 
@@ -476,9 +464,8 @@
             save(o)
         }
         load_coffee()
-        var body = window.Body || window.body || window.BODY
-        if (body)
-            React.render(body(), document.body)
+        if (dom.Body || dom.body || dom.BODY)
+            React.render((window.Body || window.body || window.BODY)(), document.body)
     }
 
     function improve_react() {
