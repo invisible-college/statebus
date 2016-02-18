@@ -271,6 +271,20 @@
         }
     }
 
+    function live_reload_from (base_dir) {
+        if (!window.live_reload_initialized) {
+            console.log('live reload', base_dir, window.live_reload_initialized)
+            this(function () {
+                var re = new RegExp(".*/" + base_dir + "/(.*)")
+                var file = window.location.pathname.match(re)[1]
+                var code = fetch('/code/invisible.college/' + file).code
+                console.log('live reload inner', re, file, code.substr(0,10))
+                if (!code) return
+                document.body.innerHTML = code
+            })
+            window.live_reload_initialized = true
+        }
+    }
 
     // ****************
     // Wrapper for React Components
@@ -413,7 +427,7 @@
 
     function make_client_statebus_maker () {
         var extra_stuff = ['socketio_client sockjs_client localstorage_client',
-                           'universal_sockjs url_store components'].join(' ').split(' ')
+                           'universal_sockjs url_store components live_reload_from'].join(' ').split(' ')
         if (window.statebus) {
             var orig_statebus = statebus
             window.statebus = function make_client_bus () {
