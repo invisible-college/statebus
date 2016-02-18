@@ -271,11 +271,11 @@
         }
     }
 
-    function live_reload_from (base_dir) {
+    function live_reload_from (prefix) {
         if (!window.live_reload_initialized) {
             this(function () {
-                var re = new RegExp(".*/" + base_dir + "/(.*)")
-                var file = window.location.pathname.match(re)[1]
+                var re = new RegExp(".*/" + prefix + "/(.*)")
+                var file = window.location.href.match(re)[1]
                 var code = fetch('/code/invisible.college/' + file).code
                 if (!code) return
                 document.body.innerHTML = code
