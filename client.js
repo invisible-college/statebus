@@ -273,11 +273,13 @@
 
     function live_reload_from (prefix) {
         if (!window.live_reload_initialized) {
+            var first_time = true
             this(function () {
                 var re = new RegExp(".*/" + prefix + "/(.*)")
                 var file = window.location.href.match(re)[1]
                 var code = fetch('/code/invisible.college/' + file).code
                 if (!code) return
+                if (first_time) {first_time = false; return}
                 var old_scroll_position = window.pageYOffset
                 document.body.innerHTML = code
                 var i = 0
