@@ -285,7 +285,6 @@
                 var interval = setInterval(function () {
                     if (i > 750) clearInterval(interval)
                     i += d
-                    console.log('going to', old_scroll_position)
                     window.scrollTo(0, old_scroll_position)
                 }, d)
             })
