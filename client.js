@@ -283,7 +283,7 @@
                 var i = 0
                 var d = 100
                 var interval = setInterval(function () {
-                    if (i > 750) clearInterval(interval)
+                    if (i > 500) clearInterval(interval)
                     i += d
                     window.scrollTo(0, old_scroll_position)
                 }, d)
