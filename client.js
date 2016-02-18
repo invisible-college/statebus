@@ -280,10 +280,14 @@
                 if (!code) return
                 var old_scroll_position = window.pageYOffset
                 document.body.innerHTML = code
-                setTimeout(function () {
+                var i = 0
+                var d = 100
+                var interval = setInterval(function () {
+                    if (i > 1000) clearInterval(interval)
+                    i += d
                     console.log('going to', old_scroll_position)
                     window.scrollTo(0, old_scroll_position)
-                }, 10)
+                }, d)
             })
             window.live_reload_initialized = true
         }
