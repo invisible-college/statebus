@@ -278,7 +278,12 @@
                 var file = window.location.href.match(re)[1]
                 var code = fetch('/code/invisible.college/' + file).code
                 if (!code) return
+                var old_scroll_position = window.pageYOffset
                 document.body.innerHTML = code
+                setTimeout(function () {
+                    console.log('going to', old_scroll_position)
+                    window.scrollTo(0, old_scroll_position)
+                }, 10)
             })
             window.live_reload_initialized = true
         }
