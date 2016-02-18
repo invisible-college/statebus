@@ -273,12 +273,10 @@
 
     function live_reload_from (base_dir) {
         if (!window.live_reload_initialized) {
-            console.log('live reload', base_dir, window.live_reload_initialized)
             this(function () {
                 var re = new RegExp(".*/" + base_dir + "/(.*)")
                 var file = window.location.pathname.match(re)[1]
                 var code = fetch('/code/invisible.college/' + file).code
-                console.log('live reload inner', re, file, code.substr(0,10))
                 if (!code) return
                 document.body.innerHTML = code
             })
