@@ -22,7 +22,7 @@
         // Called with a key to produce a subspace
         else return subspace(arg)
     }
-    var id = 'bus ' + (Math.random()+'').substring(7)
+    var id = 'bus ' + Math.random().toString(36).substring(7)
     bus.toString = function () { return id + (bus.label || '') }
     bus.delete_bus = function () {
         // // Forget all wildcard handlers
@@ -81,6 +81,10 @@
         if (called_from_reactive_funk)
             funk.depends_on(bus, key)
         fetches_in.add(key, funk_key(funk))
+        // log('Fetch: Executing_funk is', executing_funk && executing_funk.statebus_id)
+        // log('fetches in adding', key, funk_key(funk),
+        //     callback && funk_key(callback),
+        //     executing_funk && funk_key(executing_funk))
         bind(key, 'pub', funk)
 
         // ** Return a value **
@@ -202,12 +206,13 @@
     var publishable_keys = []
 
     function forget (key, pub_handler) {
+        //console.log('pub_handler is', pub_handler)
         pub_handler = pub_handler || global_funk
         var fkey = funk_key(pub_handler)
         //console.log('Fetches in is', fetches_in.hash)
         if (!fetches_in.contains(key, fkey)) {
             console.error("***\n****\nTrying to forget lost key", key,
-                          'from', funk_name(pub_handler),
+                          'from', funk_name(pub_handler), fkey,
                           "that hasn't fetched that key.",
                           funks[fetches_in.get(key)[0]],
                           funks[fetches_in.get(key)[0]] && funks[fetches_in.get(key)[0]].statebus_id
@@ -298,7 +303,7 @@
     var to_be_forgotten = {}
     function funk_key (funk) {
         if (!funk.statebus_id) {
-            funk.statebus_id = Math.random() + ''
+            funk.statebus_id = Math.random().toString(36).substring(7)
             funks[funk.statebus_id] = funk
         }
         return funk.statebus_id
@@ -390,7 +395,7 @@
 
         if (!funk.global_funk)  // \u26A1 
             log('> a', method+"('"+(arg.key||arg)
-                +"') is triggering", funk_name(funk))
+                +"') is triggering", funk_name(funk), funk_key(funk))
 
         if (method === 'fetch') {
             fetches_out[arg] = true
@@ -473,7 +478,7 @@
         global_funk = reactive(function global_funk () {})
         global_funk.global_funk = true
         executing_funk = global_funk
-        funks[global_funk.statebus_id = 'global'] = global_funk
+        funks[global_funk.statebus_id = 'global funk'] = global_funk
     }
     //global_funk.fetched_keys = new Set()
 
@@ -553,7 +558,7 @@
             return result
         }
         funk.forget = function () {
-            if (funk.statebus_id === 'global') return
+            if (funk.statebus_id === 'global funk') return
 
             //console.log('Funk.forget() on', funk_name(funk))
 
@@ -673,13 +678,15 @@
     var api = ['cache fetch save forget del pub dirty',
                'subspace handlers wildcard_handlers bindings',
                'run_handler bind unbind reactive',
-               'funk_key funks key_id key_name id',
+               'funk_key funk_name funks key_id key_name id',
                'pending_fetches fetches_in loading_keys',
-               'global_funk executing_funk',
+               'global_funk',
                'Set One_To_Many clone extend deep_map log'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)
         bus[api[i]] = eval(api[i])
+
+    bus.executing_funk = function () {return executing_funk}
 
     // Export globals
     if (Object.keys(busses).length === 0) {
