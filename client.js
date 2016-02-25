@@ -450,12 +450,13 @@
     load_scripts() // This function could actually be inlined
     function load_scripts() {
         var statebus_dir = document.querySelector('script[src*="client.js"]')
-              .getAttribute('src').match(/(.*)[\/\\]/)[1]||''
+            .getAttribute('src').match(/(.*)[\/\\]/)
+        statebus_dir = (statebus_dir && statebus_dir[1] + '/')||''
 
         var js_urls = {
+            statebus: statebus_dir + 'statebus.js',
             react: 'https://cdnjs.cloudflare.com/ajax/libs/react/0.12.2/react.js',
             sockjs: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js',
-            statebus: statebus_dir + '/statebus.js',
             coffee: 'https://d2rtgkroh5y135.cloudfront.net/coffee.js'
         }
 
