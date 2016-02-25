@@ -355,7 +355,7 @@
         wrap('componentWillUnmount', function new_cwu (orig_func) {
             orig_func && orig_func.apply(this, arguments)
             // Clean up
-            delete bus.cache[this.key]
+            bus.del(this.key)
             delete components[this.key]
             delete dirty_components[this.key]
         })
