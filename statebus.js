@@ -240,6 +240,11 @@
     function del(obj_or_key) {
         var key = obj_or_key.key || obj_or_key
         delete cache[key]
+
+        var idx = publishable_keys.indexOf(key)
+        if (idx > -1)
+            publishable_keys.splice(idx, 1)
+        
         log('del:', obj_or_key)
         bus.route(key, 'delete', key)
         //forget(key /*, bus??*/)
