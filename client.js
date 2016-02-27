@@ -454,12 +454,12 @@
         statebus_dir = (statebus_dir && statebus_dir[1] + '/')||''
 
         var js_urls = {
-            statebus: statebus_dir + 'statebus.js',
-            react: 'https://cdnjs.cloudflare.com/ajax/libs/react/0.12.2/react.js',
-            sockjs: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js',
-            coffee: 'https://d2rtgkroh5y135.cloudfront.net/coffee.js'
+            react: statebus_dir + '/libraries/react.js',
+            sockjs: statebus_dir + '/libraries/sockjs.js',
+            coffee: statebus_dir + '/libraries/coffee.js'
+            statebus: statebus_dir + '/statebus.js',
         }
-
+        
         for (name in js_urls)
             document.write('<script src="' + js_urls[name] + '" charset="utf-8"></script>')
 
