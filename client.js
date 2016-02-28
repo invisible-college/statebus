@@ -454,10 +454,10 @@
         statebus_dir = (statebus_dir && statebus_dir[1] + '/')||''
 
         var js_urls = {
-            react: statebus_dir + '/libraries/react.js',
-            sockjs: statebus_dir + '/libraries/sockjs.js',
-            coffee: statebus_dir + '/libraries/coffee.js',
-            statebus: statebus_dir + '/statebus.js'
+            react: statebus_dir + 'libraries/react.js',
+            sockjs: statebus_dir + 'libraries/sockjs.js',
+            coffee: statebus_dir + 'libraries/coffee.js',
+            statebus: statebus_dir + 'statebus.js'
         }
         
         for (name in js_urls)
