@@ -26,7 +26,7 @@
         bus(prefix).on_delete = function (key)    { socket.emit('delete', key) }
         bus(prefix).on_forget = function (key) {
             socket.emit('forget', key)
-            fetched_keys.del(key)
+            fetched_keys.delete(key)
         }
 
         // Receive stuff
@@ -41,7 +41,7 @@
 
         // Reconnect needs to re-establish dependencies
         socket.on('reconnect', function() {
-            var keys = fetched_keys.all()
+            var keys = fetched_keys.values()
             for (var i=0; i<keys.length; i++)
                 socket.emit('fetch', keys[i])
         })
@@ -80,7 +80,7 @@
         bus(prefix).on_fetch  = function (key) { send({method: 'fetch', key: key}),
                                                  fetched_keys.add(key) }
         bus(prefix).on_forget = function (key) { send({method: 'forget', key: key}),
-                                                 fetched_keys.del(key) }
+                                                 fetched_keys.delete(key) }
         bus(prefix).on_delete = function (key) { send({method: 'delete', key: key}) }
 
         function connect () {
@@ -103,7 +103,7 @@
                     // Then we need to refetch everything, cause it
                     // might have changed
                     recent_saves = []
-                    var keys = fetched_keys.all()
+                    var keys = fetched_keys.values()
                     for (var i=0; i<keys.length; i++)
                         send({method: 'fetch', key: keys[i]})
                 }
@@ -355,7 +355,7 @@
         wrap('componentWillUnmount', function new_cwu (orig_func) {
             orig_func && orig_func.apply(this, arguments)
             // Clean up
-            bus.del(this.key)
+            bus.delete(this.key)
             delete components[this.key]
             delete dirty_components[this.key]
         })
@@ -454,9 +454,9 @@
         statebus_dir = (statebus_dir && statebus_dir[1] + '/')||''
 
         var js_urls = {
-            react: statebus_dir + 'libraries/react.js',
-            sockjs: statebus_dir + 'libraries/sockjs.js',
-            coffee: statebus_dir + 'libraries/coffee.js',
+            react: statebus_dir + 'extras/react.js',
+            sockjs: statebus_dir + 'extras/sockjs.js',
+            coffee: statebus_dir + 'extras/coffee.js',
             statebus: statebus_dir + 'statebus.js'
         }
         

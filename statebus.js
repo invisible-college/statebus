@@ -41,6 +41,7 @@
 
     // The Data Almighty!!
     var cache = {}
+    var backup_cache = {}
 
     // ****************
     // Reactive REST API
@@ -90,26 +91,92 @@
         // ** Return a value **
 
         // If called reactively, we always return a value.
-        if (called_from_reactive_funk)
+        if (called_from_reactive_funk) {
+            backup_cache[key] = backup_cache[key] || {key: key}
             return cache[key] = cache[key] || {key: key}
+        }
 
         // Otherwise, we want to make sure that a pub gets called on
         // the handler.  If there's a pending fetch, then it'll get
         // called later.  Otherwise, let's call it now.
-        else if (!pending_fetches[key])
+        else if (!pending_fetches[key]) {
+            backup_cache[key] = backup_cache[key] || {key: key}
             run_handler(funk, 'pub', cache[key] = cache[key] || {key: key})
+        }
 
     }
 
-    function save (obj) { bus.route(obj.key, 'save', obj) }
+    function save (obj) {
+        if ((executing_funk !== global_funk) && executing_funk.loading()) {
+            abort_changes([obj.key])
+            return
+        }
+
+        bus.route(obj.key, 'save', obj)
+    }
 
     function pub (object) {
         delete pending_fetches[object.key]
+        log('pub:', object)
 
-        var modified_keys = new Set()
+        // Ignore if nothing happened
+        if (object.key && !changed(object)) {
+            log('Well, this is a boring pub.',
+                object,
+                cache[object.key],
+                backup_cache[object.key])
+            return
+        }
 
         // Recursively add all of object, and its sub-objects, into the cache
-        deep_map(object, function (obj) {
+        var modified_keys = update_cache(object, cache)
+
+        if ((executing_funk !== global_funk) && executing_funk.loading()) {
+            abort_changes(modified_keys)
+        } else {
+            // Now put it into the backup
+            update_cache(object, backup_cache)
+
+            publishable_keys.push.apply(publishable_keys, modified_keys)
+            key_publisher = key_publisher ||
+                setTimeout(function () {
+                    //console.log('pub:', object.key+ '. Listeners on these keys need update:', keys)
+
+                    // Note: this can be made more efficient.  There may
+                    // be duplicate handler calls in here, because a
+                    // single handler might react to multiple keys.  For
+                    // instance, it might fetch multiple keys, where each
+                    // key has been modified.  To make this more
+                    // efficient, we should first find all the handlers
+                    // affected by these keys, and then collapse them, and
+                    // call each one once.  Unfortunately, doing so would
+                    // require digging into the bus.route() API and
+                    // changing it.  We'd probably need to make it accept
+                    // an array of keys instead of a single key, and then
+                    // have search_handlers take an array of keys as well.
+                    // So I'm not bothering with this optimization yet.
+                    // We will just have duplicate-running functions for a
+                    // while.
+                    for (var i=0; i<publishable_keys.length; i++) {
+                        log('pub: In loop', i + ', updating listeners on \''
+                            + publishable_keys[i] + "'")
+                        var key = publishable_keys[i]
+                        bus.route(key, 'pub', cache[key])
+                    }
+                    publishable_keys = []
+                    key_publisher = null
+                    //console.log('pub: done looping through', keys, ' and done with', object.key)
+                }, 0)
+        }
+    }
+    var key_publisher = null
+    var publishable_keys = []
+
+    // Folds object into the cache recursively and returns the keys
+    // for all mutated staet
+    function update_cache (object, cache) {
+        var modified_keys = new Set()
+        function update_object (obj) {
 
             // Two ways to optimize this in future:
             //
@@ -148,7 +215,10 @@
 
             // Fold cacheable objects into cache
             if (obj && obj.key) {
-                modified_keys.add(obj.key)
+                if (cache !== backup_cache && changed(obj))
+                    modified_keys.add(obj.key)
+                else
+                    console.warn('Boring modified key', obj.key)
                 if (!cache[obj.key])
                     // This object is new.  Let's store it.
                     cache[obj.key] = obj
@@ -170,44 +240,26 @@
             }
 
             return obj
-        })
-
-        publishable_keys.push.apply(publishable_keys, modified_keys.all())
-        key_publisher = key_publisher ||
-            setTimeout(function () {
-                //console.log('pub:', object.key+ '. Listeners on these keys need update:', keys)
-
-                // Note: this can be made more efficient.  There may
-                // be duplicate handler calls in here, because a
-                // single handler might react to multiple keys.  For
-                // instance, it might fetch multiple keys, where each
-                // key has been modified.  To make this more
-                // efficient, we should first find all the handlers
-                // affected by these keys, and then collapse them, and
-                // call each one once.  Unfortunately, doing so would
-                // require digging into the bus.route() API and
-                // changing it.  We'd probably need to make it accept
-                // an array of keys instead of a single key, and then
-                // have search_handlers take an array of keys as well.
-                // So I'm not bothering with this optimization yet.
-                // We will just have duplicate-running functions for a
-                // while.
-                for (var i=0; i<publishable_keys.length; i++) {
-                    //console.log('pub: In loop', i + ', updating listeners on \''+keys[i]+"'")
-                    var key = publishable_keys[i]
-                    bus.route(key, 'pub', cache[key])
-                }
-                publishable_keys = []
-                key_publisher = null
-                //console.log('pub: done looping through', keys, ' and done with', object.key)
-            }, 0)
+        }
+        deep_map(object, update_object)
+        return modified_keys.values()
     }
-    var key_publisher = null
-    var publishable_keys = []
+
+    function changed (object) {
+        return true
+        return !(object.key in cache)
+            || !(object.key in backup_cache)
+            || !(deep_equals(object, backup_cache[object.key]))
+    }
+    function abort_changes (keys) {
+        for (var i=0; i < keys.length; i++)
+            update_cache(backup_cache[keys[i]], cache)
+    }
+        
 
     function forget (key, pub_handler) {
-        //console.log('pub_handler is', pub_handler)
-        pub_handler = pub_handler || global_funk
+        //log('forget:', key, funk_name(pub_handler), funk_name(executing_funk))
+        pub_handler = pub_handler || executing_funk
         var fkey = funk_key(pub_handler)
         //console.log('Fetches in is', fetches_in.hash)
         if (!fetches_in.contains(key, fkey)) {
@@ -221,7 +273,7 @@
             throw Error('asdfalsdkfajsdf')
         }
 
-        fetches_in.del(key, fkey)
+        fetches_in.delete(key, fkey)
         unbind(key, 'pub', pub_handler)
 
         // If this is the last handler listening to this key, then we
@@ -237,8 +289,14 @@
             }, 200)
         }
     }
-    function del(obj_or_key) {
+    function del (obj_or_key) {
         var key = obj_or_key.key || obj_or_key
+
+        if ((executing_funk !== global_funk) && executing_funk.loading()) {
+            abort_changes([key])
+            return
+        }
+
         delete cache[key]
 
         var idx = publishable_keys.indexOf(key)
@@ -265,7 +323,7 @@
             // Let's grab the dirty keys and clear it, so that
             // anything that gets dirty during this sweep will be able
             // to sweep again afterward
-            var keys = dirty_keys.all()
+            var keys = dirty_keys.values()
             dirty_keys.clear()
             dirty_sweeper = null
             
@@ -291,7 +349,7 @@
                     set: function (func) { bind(key, method, func) },
                     get: function () {
                         var result = bindings(key, method)
-                        result.remove = function (func) { unbind (key, method, func) }
+                        result.delete = function (func) { unbind (key, method, func) }
                         return result
                     }
                 })
@@ -315,6 +373,7 @@
     }
     function funk_name (f, char_limit) {
         char_limit = char_limit || 30
+        if (f.proxies_for) f = f.proxies_for
         if (f.statebus_binding)
             return ("('"+f.statebus_binding.key+"').on_"
                     + f.statebus_binding.method
@@ -346,7 +405,7 @@
     function unbind (key, method, funk) {
         if (key[key.length-1] !== '*')
             // Delete direct connection
-            handlers.del(method + ' ' + key, funk_key(funk))
+            handlers.delete(method + ' ' + key, funk_key(funk))
         else
             // Delete wildcard connection
             for (var i=0; i<wildcard_handlers.length; i++) {
@@ -434,9 +493,6 @@
                 return result
             }
 
-            // Save aborts changes if still loading()
-            // ... implement here ...
-
             // Save, forget and delete handlers stop re-running once
             // they've completed without anything loading.
             // ... with f.forget()
@@ -444,7 +500,7 @@
                 && !f.loading())
                 f.forget()
         })
-        f.statebus_binding = funk.statebus_binding
+        f.proxies_for = funk
 
         // on_fetch handlers stop re-running when the key is forgotten
         if (method === 'fetch') {
@@ -549,6 +605,7 @@
         funk.func = func  // just for debugging
         funk.called_directly = true
         funk.fetched_keys = new One_To_Many() // maps bus to keys
+        funk.abortable_keys = []
         funk.depends_on = function (bus, key) {
             this.fetched_keys.add(bus, key)
         }
@@ -584,7 +641,7 @@
                     if (buss_ids[i] in busses)
                         busses[buss_ids[i]].forget(keys[j], funk)
                 }
-                funk.fetched_keys.del_all(buss_ids[i])
+                funk.fetched_keys.delete_all(buss_ids[i])
             }
             // var keys = funk.fetched_keys.all()
             // //console.log('react: forgetting', keys)
@@ -615,6 +672,8 @@
         return false
     }
 
+    // Tells you whether the currently executing funk is loading
+    function loading () { return executing_funk.loading() }
 
     // ******************
     // Utility funcs
@@ -628,19 +687,23 @@
             if (!hash[k][v]) counts[k]++
             hash[k][v] = true
         }
-        this.del = function (k, v) { delete hash[k][v]; counts[k]-- }
-        this.del_all = function (k) { delete hash[k]; delete counts[k] }
+        this.delete = function (k, v) { delete hash[k][v]; counts[k]-- }
+        this.delete_all = function (k) { delete hash[k]; delete counts[k] }
         this.contains = function (k, v) { return hash[k] && hash[k][v] }
         this.has_any = function (k) { return counts[k] }
+        this.del = this.delete // for compatibility; remove this soon
     }
-    function Set() {
+    function Set () {
         var hash = {}
         this.add = function (a) { hash[a] = true }
         //this.has = function (a) { return a in hash }
-        this.all = function () { return Object.keys(hash) }
-        this.del = function (a) { delete hash[a] }
+        this.values = function () { return Object.keys(hash) }
+        this.delete = function (a) { delete hash[a] }
         this.clear = function () { hash = {} }
+        this.del = this.delete // for compatibility; remove this soon
+        this.all = this.values // for compatibility; remove this soon
     }
+    //Set = window.Set || Set
     function clone(obj) {
         if (obj == null) return obj
         var copy = obj.constructor()
@@ -670,7 +733,46 @@
 
         return object
     }
+    function deep_equals (a, b) {
+        // Equal Primitives?
+        if (a === b
+            // But because NaN === NaN returns false:
+            || (isNaN(a) && isNaN(b)
+                // And because isNaN(undefined) return true:
+                && typeof a === 'number' && typeof b === 'number'))
+            return true
 
+        // Equal Arrays?
+        var a_array = Array.isArray(a), b_array = Array.isArray(b)
+        if (a_array !== b_array) return false
+        if (a_array) {
+            if (a.length !== b.length) return false
+            for (var i=0; i < a.length; i++)
+                if (!deep_equals (a[i], b[i]))
+                    return false
+            return true
+        }
+
+        // Equal Objects?
+        var a_obj = a && typeof a === 'object',  // Note: typeof null === 'object'
+            b_obj = b && typeof b === 'object'
+        if (a_obj !== b_obj) return false
+        if (a_obj) {
+            var a_length = 0, b_length = 0
+            for (var k in a) {
+                a_length++
+                if (!deep_equals(a[k], b[k]))
+                    return false
+            }
+            for (var k in b) b_length++
+            if (a_length !== b_length)
+                return false
+            return true
+        }
+
+        // Then Not Equal.
+        return false
+    }
     function key_id(string) { return string.match(/\/?[^\/]+\/(\d+)/)[1] }
     function key_name(string) { return string.match(/\/?([^\/]+).*/)[1] }
 
@@ -680,17 +782,18 @@
     // #######################################
 
     // Make these private methods accessible
-    var api = ['cache fetch save forget del pub dirty',
+    var api = ['cache backup_cache fetch save forget del pub dirty',
                'subspace handlers wildcard_handlers bindings',
                'run_handler bind unbind reactive',
                'funk_key funk_name funks key_id key_name id',
-               'pending_fetches fetches_in loading_keys',
+               'pending_fetches fetches_in loading_keys loading',
                'global_funk',
-               'Set One_To_Many clone extend deep_map log'
+               'Set One_To_Many clone extend deep_map deep_equals log'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)
         bus[api[i]] = eval(api[i])
 
+    bus.delete = bus.del
     bus.executing_funk = function () {return executing_funk}
 
     // Export globals

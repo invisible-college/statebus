@@ -50,6 +50,7 @@ var extra_methods = {
     make_http_server: function make_http_server (options) {
         options = options || {}
         var port = options.port || 3000
+        var request_listern = options.request_listern || undefined
         var fs = require('fs')
 
         if (fs.existsSync('certs')) {
@@ -199,7 +200,7 @@ var extra_methods = {
         bus(prefix).on_fetch  = function (key) { send({method: 'fetch', key: key}),
                                                  fetched_keys.add(key) }
         bus(prefix).on_forget = function (key) { send({method: 'forget', key: key}),
-                                                 fetched_keys.del(key) }
+                                                 fetched_keys.delete(key) }
         bus(prefix).on_delete = function (key) { send({method: 'delete', key: key}) }
 
         function connect () {
