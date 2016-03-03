@@ -246,7 +246,7 @@
     }
 
     function changed (object) {
-        return true
+        return true   // Disabling, because it caused problems in cheeseburger
         return !(object.key in cache)
             || !(object.key in backup_cache)
             || !(deep_equals(object, backup_cache[object.key]))
