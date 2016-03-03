@@ -218,7 +218,7 @@
                 if (cache !== backup_cache && changed(obj))
                     modified_keys.add(obj.key)
                 else
-                    console.warn('Boring modified key', obj.key)
+                    log('Boring modified key', obj.key)
                 if (!cache[obj.key])
                     // This object is new.  Let's store it.
                     cache[obj.key] = obj
