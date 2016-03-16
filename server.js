@@ -229,7 +229,7 @@ var extra_methods = {
                 }
 
                 attempts = 0
-                heartbeat = setInterval(function () {send({method: 'ping'})}, 5000)
+                //heartbeat = setInterval(function () {send({method: 'ping'})}, 5000)
             }
             sock.onclose   = function()  {
                 console.log('[*] close')
