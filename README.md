@@ -1,8 +1,8 @@
 # Statebus
 
-Statebus is a reactive framework for distributed state. It simplifies web development and will eliminate much of the web stack. Many projects of the invisible.college use statebus. 
+Statebus is a protocol and library for distributing state.
 
-Statebus is particularly good for prototyping web applications. You only need a single .html file, and you can easily share that file with other people, or fork it if you want to explore different ways your idea might be brought into the world. 
+This readme explains how to use Statebus to prototype web applications. You only need a single .html file, and you can easily share that file with other people, or fork it if you want to explore different ways your idea might be brought into the world.
 
 ## Making a client
 

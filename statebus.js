@@ -50,8 +50,11 @@
     var fetches_out = {}                // Maps `key' to `true' iff we've fetched `key'
     var fetches_in = new One_To_Many()  // Maps `key' to `pub_funcs' subscribed to our key
     function fetch (key, callback) {
-        //console.log('fetch:', key, 'on', bus)
+        //log('fetch:', key)
         key = key.key || key    // You can pass in an object instead of key
+
+        if (typeof key !== 'string')
+            throw ('Error: fetch(key) called with a non-string key: '+key)
 
         var called_from_reactive_funk = !callback
         var funk = callback || executing_funk
@@ -116,20 +119,21 @@
     }
 
     function pub (object) {
-        delete pending_fetches[object.key]
-        log('pub:', object)
-
         // Ignore if nothing happened
         if (object.key && !changed(object)) {
-            log('Well, this is a boring pub.',
-                object,
-                cache[object.key],
-                backup_cache[object.key])
+            log('Boring pub:',
+                object
+                // ,cache[object.key]
+                // ,backup_cache[object.key]
+               )
             return
-        }
+        } else
+            log('pub:', object)
 
         // Recursively add all of object, and its sub-objects, into the cache
         var modified_keys = update_cache(object, cache)
+
+        delete pending_fetches[object.key]
 
         if ((executing_funk !== global_funk) && executing_funk.loading()) {
             abort_changes(modified_keys)
@@ -158,8 +162,8 @@
                     // We will just have duplicate-running functions for a
                     // while.
                     for (var i=0; i<publishable_keys.length; i++) {
-                        log('pub: In loop', i + ', updating listeners on \''
-                            + publishable_keys[i] + "'")
+                        // log('pub: In loop', i + ', updating listeners on \''
+                        //     + publishable_keys[i] + "'")
                         var key = publishable_keys[i]
                         bus.route(key, 'pub', cache[key])
                     }
@@ -246,8 +250,9 @@
     }
 
     function changed (object) {
-        return true   // Disabling, because it caused problems in cheeseburger
-        return !(object.key in cache)
+        //return true   // Disabling, because it caused problems in cheeseburger
+        return pending_fetches[object.key]
+            || !(object.key in cache)
             || !(object.key in backup_cache)
             || !(deep_equals(object, backup_cache[object.key]))
     }
@@ -422,7 +427,7 @@
 
     function bindings(key, method) {
         if (typeof key !== 'string') {
-            console.error('Error:', key, 'is not a string')
+            console.error('Error:', key, 'is not a string', method)
             console.trace()
         }
 

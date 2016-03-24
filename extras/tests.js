@@ -88,26 +88,29 @@ var tests = [
         }, 100)
     },
 
-    // Identity pubs shouldn't trigger
+    // Identity pubs shouldn't infinite loop
     function identity (next) {
         var key = 'kooder'
         var count = 0
         function fire () { bus.pub({key: 'kooder', count: count}) }
         bus(key).on_fetch = function () { setTimeout(fire, 10) }
         function cb() {
-            if (count++ > 0) console.assert(false, 'cb1 too many calls')
-            log('cb1 called', count, 'times')
+            count++
+            log('cb called', count, 'times')
             pub(fetch('new'))
         }
         fetch(key, cb)
 
         // Next
         setTimeout(function () {
-            console.assert(count === 1, 'cb1 should be called only once')
+            // Calls:
+            //  1. Initial call
+            //  2. First return from pending fetch
+            console.assert(count === 1, 'cb called '+count+'!=1 times')
             bus.forget(key, cb)
             bus(key).on_fetch.delete(fire)
             next()
-        }, 200)
+        }, 40)
     },
 
 
@@ -132,15 +135,15 @@ var tests = [
 
         //bus.honk = true
         fetch(key, cb)
+        setTimeout(fire, 70)
         setTimeout(fire, 80)
-        setTimeout(fire, 90)
 
         // Next
         setTimeout(function () {
             //console.assert(count === 2, "Count should be 2 but is", count)
             bus(key).on_fetch.delete(fire)
             next()
-        }, 200)
+        }, 100)
     },
 
     // Can we return an object that fetches another?
@@ -211,7 +214,7 @@ var tests = [
         function wait () { setTimeout(function () {
             log('Pubbing wait')
             pub({key: 'wait', count: count})
-        }, 100) }
+        }, 60) }
         bus('wait').on_fetch = wait
 
         // Initialize
@@ -246,19 +249,19 @@ var tests = [
         setTimeout(function () {
                       console.assert(bus.cache['undo me'].state === 'start')
                    },
-                   50)
+                   30)
 
         // The state should finally progress after 100ms
         setTimeout(function () {
                       log('state is', bus.cache['undo me'].state)
                       console.assert(bus.cache['undo me'].state === 'progressing')
                    },
-                   150)
+                   90)
 
         setTimeout(function () {
             bus('wait').on_fetch.delete(wait)
             next()
-        }, 200)
+        }, 120)
     },
 
     function rollback_del (next) {
@@ -327,7 +330,35 @@ var tests = [
         log('Now candy is', bus.cache['candy'])
         done = true
         next()
-    }        
+    },
+
+    function loading_quirk (next) {
+        // Make sure a function that called loading() gets re-run even
+        // if the return from a fetch didn't actually change state
+
+        // First define a delayed pub
+        bus('wait a sec').on_fetch = function (k) {
+            setTimeout(function () { bus.pub({key: k}) }, 80)
+        }
+
+        // Now run the test
+        var loaded = false
+        var num_calls = 0
+        bus(function () {
+            num_calls++
+            log('called', num_calls, 'times')
+            fetch('wait a sec')
+            loaded = !bus.loading()
+        })
+
+        // Finish
+        setTimeout(function () {
+            console.assert(loaded, 'We never got loaded.')
+            console.assert(num_calls == 2,
+                           'We got called '+num_calls+'!=2 times')
+            next()
+        }, 140)
+    }
 ]
 
 // Run all tests
