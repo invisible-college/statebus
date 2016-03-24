@@ -5,6 +5,7 @@ function log () {
     a.unshift('   ')
     console.log.apply(console, a)
 }
+function assert () { console.assert.apply(console, arguments) }
 
 // Each test is a function in this array
 var tests = [
@@ -38,15 +39,15 @@ var tests = [
         ]
 
         for (var i=0; i<equality_tests.length; i++) {
-            console.assert(bus.deep_equals(equality_tests[i][0],
-                                           equality_tests[i][1])
-                           === equality_tests[i][2],
-                           'Equality test failed forward', equality_tests[i])
+            assert(bus.deep_equals(equality_tests[i][0],
+                                   equality_tests[i][1])
+                   === equality_tests[i][2],
+                   'Equality test failed forward', equality_tests[i])
 
-            console.assert(bus.deep_equals(equality_tests[i][1],
-                                           equality_tests[i][0])
-                           === equality_tests[i][2],
-                           'Equality test failed backward', equality_tests[i])
+            assert(bus.deep_equals(equality_tests[i][1],
+                                   equality_tests[i][0])
+                   === equality_tests[i][2],
+                   'Equality test failed backward', equality_tests[i])
         }
 
         next()
@@ -57,35 +58,98 @@ var tests = [
         var count = 0
         function cb (o) {
             count++
-            log('cb called', count, 'times')
-            if (count === 5) console.trace('Where did 5 come from?')
             var bar = fetch('bar')
-            log('bar is', bar, 'foo is', o)
-
-            if (count > 3)
-                log('### Too many cb calls! Figure this out sometime.')
+            log('cb called', count, 'times', 'bar is', bar, 'foo is', o)
         }
-        fetch('foo', cb)
 
+        // Fetch a foo
+        fetch('foo', cb)                             // Call 1
+        assert(count === 1, '1!=' + count)
+
+        // Pub a foo
         setTimeout(function () {
             log('pubbing a new foo')
-            bus.pub({key: 'foo', count:count})
+            bus.pub({key: 'foo', count:count})       // Call 2
         }, 30)
 
+        // Pub a bar, which the callback depends on
         setTimeout(function () {
             log('pubbing a new bar')
-            bus.pub({key: 'bar', count:count})
+            assert(count === 2, '2!=' + count)
+               bus.pub({key: 'bar', count:count})       // Call 3
+            log('pubbed the new bar')
         }, 50)
 
         // Next
         setTimeout(function () {
-            log('done with this test')
-            if (count !== 3)
-                log("### I want only 3 runs of cb! Figure this out!")
+            assert(count === 3, '3!=' + count)
             bus.forget('foo', cb)
             //bus.forget('bar', cb)
             next()
         }, 100)
+    },
+
+    // If there's an on_fetch handler, the callback doesn't return
+    // until the handler pubs a value
+    function fetch_remote (next) {
+        var count = 0
+
+        // The moon responds in 30ms
+        bus('moon').on_fetch =
+            function (k) { setTimeout(function () {bus.pub({key:k})},30) }
+        function cb (o) {
+            count++
+            var moon = fetch('hey over there')
+            log('cb called', count, 'times')
+        }
+
+        // Fetch a moon
+        fetch('moon', cb)       // Doesn't call back yet
+        assert(count === 0, '0!=' + count)
+
+        // There should be a moonshot by now
+        setTimeout(function () {
+            assert(count === 1, '1!=' + count)
+            bus.forget('moon', cb)
+            next()
+        }, 50)
+    },
+
+    // Multiple batched pubs should not trigger duplicate reactions
+    function duplicate_pub (next) {
+        var calls = new Set()
+        var count = 0
+        var dupes = []
+        function cb (o) {
+            count++
+            if (calls.has(o.n)) dupes.push(o.n)
+            calls.add(o.n)
+            log('cb called', count, 'times with', calls)
+        }
+
+        // Fetch a foo
+        fetch('foo', cb)                   // Call 1
+        assert(count === 1, '1!=' + count)
+
+        // Pub a foo
+        setTimeout(function () {
+            log('pubbing a few new foos')
+            bus.pub({key: 'foo', n:0})     // Skipped
+            bus.pub({key: 'foo', n:1})     // Skipped
+            bus.pub({key: 'foo', n:2})     // Skipped
+            bus.pub({key: 'foo', n:3})     // Call 2
+            log("ok, now let's see what happens.")
+        }, 30)
+
+        // Next
+        setTimeout(function () {
+            assert(count === 2, '2!=' + count)
+            assert(dupes.length === 0, 'CB got duplicate calls', dupes)
+            log('Well, that went smoothly!')
+            bus.forget('foo', cb)
+            //bus.forget('bar', cb)
+            next()
+        }, 60)
     },
 
     // Identity pubs shouldn't infinite loop
@@ -106,7 +170,7 @@ var tests = [
             // Calls:
             //  1. Initial call
             //  2. First return from pending fetch
-            console.assert(count === 1, 'cb called '+count+'!=1 times')
+            assert(count === 1, 'cb called '+count+'!=1 times')
             bus.forget(key, cb)
             bus(key).on_fetch.delete(fire)
             next()
@@ -125,7 +189,7 @@ var tests = [
             count++
             log('cb2 called', count, 'times', 'on', o)
 
-            if (count > 2) console.assert(false, 'cb2 too many calls')
+            if (count > 2) assert(false, 'cb2 too many calls')
             if (count > 1) {
                 log('cb2 forgetting', key)
                 bus.forget(key, cb)
@@ -140,7 +204,7 @@ var tests = [
 
         // Next
         setTimeout(function () {
-            //console.assert(count === 2, "Count should be 2 but is", count)
+            //assert(count === 2, "Count should be 2 but is", count)
             bus(key).on_fetch.delete(fire)
             next()
         }, 100)
@@ -153,9 +217,9 @@ var tests = [
         log('fetching')
         var obj = fetch('outer')
         log('we got', obj)
-        console.assert(obj.inner.key === 'inner')
+        assert(obj.inner.key === 'inner')
         pub({key: 'inner', c: 1})
-        console.assert(obj.inner.c === 1)
+        assert(obj.inner.c === 1)
 
         // Next
         setTimeout(function () {
@@ -239,22 +303,22 @@ var tests = [
         })
         bus.honk = false
         
-        console.assert(!error)
+        assert(!error)
 
         var state = bus.cache['undo me'].state
         log('After first reaction, the state is', state)
-        console.assert(state === 'start', 'The state did not roll back.')
+        assert(state === 'start', 'The state did not roll back.')
 
         // The state should still be start until 100ms
         setTimeout(function () {
-                      console.assert(bus.cache['undo me'].state === 'start')
+                      assert(bus.cache['undo me'].state === 'start')
                    },
                    30)
 
         // The state should finally progress after 100ms
         setTimeout(function () {
                       log('state is', bus.cache['undo me'].state)
-                      console.assert(bus.cache['undo me'].state === 'progressing')
+                      assert(bus.cache['undo me'].state === 'progressing')
                    },
                    90)
 
@@ -274,14 +338,14 @@ var tests = [
             fetch('wait forever')  // Never finishes loading
             del('kill me')         // Will roll back
         })
-        console.assert(bus.cache['kill me'].alive === true)
+        assert(bus.cache['kill me'].alive === true)
 
         // Now a del that goes through
         bus(function () {
             log('Doing a real delete on', bus.cache['kill me'])
             del('kill me')         // Will not roll back
         })
-        console.assert(!('kill me' in bus.cache))
+        assert(!('kill me' in bus.cache))
         log('Now kill me is', bus.cache['kill me'])
         next()
     },
@@ -302,8 +366,8 @@ var tests = [
             log('...and the candy is', bus.cache['candy'])
             forget('candy')
         })
-        console.assert(bus.cache['candy'].flavor === 'lemon')
-        console.assert(saves.length === 0)
+        assert(bus.cache['candy'].flavor === 'lemon')
+        assert(saves.length === 0)
 
         // Try rolling back another style of save
         bus(function () { if (done) return
@@ -316,16 +380,16 @@ var tests = [
             log('...and now it\'s rolled back to', bus.cache['candy'])
             forget('candy')
         })
-        console.assert(bus.cache['candy'].flavor === 'lemon')
-        console.assert(saves.length === 0)
+        assert(bus.cache['candy'].flavor === 'lemon')
+        assert(saves.length === 0)
 
         // Now a save that goes through
         bus(function () {
             log('Doing a real save on', bus.cache['candy'])
             save({key:'candy', flavor: 'orangina'})  // Will go through
         })
-        console.assert(bus.cache['candy'].flavor = 'orangina')
-        console.assert(saves.length === 1)
+        assert(bus.cache['candy'].flavor = 'orangina')
+        assert(saves.length === 1)
 
         log('Now candy is', bus.cache['candy'])
         done = true
@@ -353,9 +417,9 @@ var tests = [
 
         // Finish
         setTimeout(function () {
-            console.assert(loaded, 'We never got loaded.')
-            console.assert(num_calls == 2,
-                           'We got called '+num_calls+'!=2 times')
+            assert(loaded, 'We never got loaded.')
+            assert(num_calls == 2,
+                   'We got called '+num_calls+'!=2 times')
             next()
         }, 140)
     }

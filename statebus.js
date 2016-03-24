@@ -157,15 +157,19 @@
                     // require digging into the bus.route() API and
                     // changing it.  We'd probably need to make it accept
                     // an array of keys instead of a single key, and then
-                    // have search_handlers take an array of keys as well.
+                    // have bindings() take an array of keys as well.
                     // So I'm not bothering with this optimization yet.
                     // We will just have duplicate-running functions for a
                     // while.
+                    var seen = {}
                     for (var i=0; i<publishable_keys.length; i++) {
-                        // log('pub: In loop', i + ', updating listeners on \''
-                        //     + publishable_keys[i] + "'")
+                        log('pub: In loop', i + ', updating listeners on \''
+                            + publishable_keys[i] + "'")
                         var key = publishable_keys[i]
-                        bus.route(key, 'pub', cache[key])
+                        if (!seen[key]) {
+                            bus.route(key, 'pub', cache[key])
+                            seen[key] = true
+                        }
                     }
                     publishable_keys = []
                     key_publisher = null
@@ -376,12 +380,17 @@
         }
         return funk.statebus_id
     }
+    function funk_keyr (funk) {
+        while (funk.proxies_for) funk = funk.proxies_for
+        return funk_key(funk)
+    }
     function funk_name (f, char_limit) {
         char_limit = char_limit || 30
         if (f.proxies_for) f = f.proxies_for
         if (f.statebus_binding)
             return ("('"+f.statebus_binding.key+"').on_"
                     + f.statebus_binding.method
+                    //+ f.toString().substr(0,char_limit))
                     + (f.name? ' = function '+f.name+'() {...}' : ''))
         else
             return f.toString().substr(0,char_limit) + '...'
@@ -433,12 +442,17 @@
 
         //console.log('bindings:', key, method)
         var result = []
+        var seen = {}
 
         // First get the exact key matches
         var exacts = handlers.get(method + ' ' + key)
         for (var i=0; i < exacts.length; i++) {
-            funks[exacts[i]].statebus_binding = {key:key, method:method}
-            result.push(funks[exacts[i]])
+            var f = funks[exacts[i]]
+            if (!seen[funk_keyr(f)]) {
+                f.statebus_binding = {key:key, method:method}
+                result.push(f)
+                seen[funk_keyr(f)] = true
+            }
         }
 
         // Now iterate through prefixes
@@ -447,9 +461,11 @@
 
             var prefix = handler.prefix.slice(0, -1)       // Cut off the *
             if (prefix === key.substr(0,prefix.length)     // If the prefix matches
-                && method === handler.method) {             // And it has the right method
+                && method === handler.method               // And it has the right method
+                && !seen[funk_keyr(handler.funk)]) {
                 handler.funk.statebus_binding = {key:key, method:method}
                 result.push(handler.funk)
+                seen[funk_keyr(handler.funk)] = true
             }
         }
 
@@ -523,6 +539,8 @@
     // route() can be overridden
     bus.route = function (key, method, arg) {
         var funcs = bus.bindings(key, method)
+        // log('route: got bindings',
+        //     funcs.map(function (f) {return funk_keyr(f)}))
         for (var i=0; i<funcs.length; i++)
             bus.run_handler(funcs[i], method, arg)
 
