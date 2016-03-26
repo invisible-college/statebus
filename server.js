@@ -625,7 +625,7 @@ var extra_methods = {
                 return result
             }
 
-            master('/online_users').on_fetch = function () {
+            if (false) master('/online_users').on_fetch = function () {
                 var result = []
                 var conns = master.fetch('connections')
                 log('online: conns', conns)
@@ -633,7 +633,7 @@ var extra_methods = {
                 return {all: result}
             }
         }
-        user('/online_users').on_fetch = function (k) {
+        if (false) user('/online_users').on_fetch = function (k) {
             var result = master.fetch(k)
             for (var i=0; i<result.all.length; i++) {
                 log(result.all[i].key)
@@ -701,44 +701,44 @@ var extra_methods = {
                 connections[conn.id].user = master.fetch('logged_in_clients')[conn.client]
                 master.save(connections)
             }
+            else {
+                if (o.create_account) {
+                    log('current_user: creating account')
+                    var tmp = create_account(o.create_account)
+                    log('Result of creating account is', tmp)
+                }
 
-            else if (o.login_as) {
-                // Then client is trying to log in
-                log('current_user: trying to log in')
-                var creds = o.login_as
+                if (o.login_as) {
+                    // Then client is trying to log in
+                    log('current_user: trying to log in')
+                    var creds = o.login_as
 
-                if (creds.name && creds.pass) {
-                    // With a username and password
-                    var u = authenticate(creds.name, creds.pass)
-                    if (u) {
-                        // Success!
-                        // Associate this user with this session
-                        log('Logging the user in!', u)
+                    if (creds.name && creds.pass) {
+                        // With a username and password
+                        var u = authenticate(creds.name, creds.pass)
+                        if (u) {
+                            // Success!
+                            // Associate this user with this session
+                            log('Logging the user in!', u)
 
-                        var clients     = master.fetch('logged_in_clients')
-                        var connections = master.fetch('connections')
+                            var clients     = master.fetch('logged_in_clients')
+                            var connections = master.fetch('connections')
 
-                        clients[conn.client]      = u
-                        connections[conn.id].user = u
+                            clients[conn.client]      = u
+                            connections[conn.id].user = u
 
-                        master.save(clients)
-                        master.save(connections)
+                            master.save(clients)
+                            master.save(connections)
+                        }
                     }
                 }
-            }
 
-            else if (o.create_account) {
-                log('current_user: creating account')
-                console.assert(!o.logged_in)
-                var tmp = create_account(o.create_account)
-                log('Result of creating account is', tmp)
-            }
-
-            else if (o.logout) {
-                log('current_user: logging out')
-                var clients = master.fetch('logged_in_clients')
-                delete clients[conn.client]
-                save(clients)
+                else if (o.logout) {
+                    log('current_user: logging out')
+                    var clients = master.fetch('logged_in_clients')
+                    delete clients[conn.client]
+                    save(clients)
+                }
             }
 
             user.dirty('/current_user')

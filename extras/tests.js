@@ -517,7 +517,7 @@ var tests = [
                 log('In 1')
                 assert(u.logged_in, '1 not logged in')
                 u.logout = true; c.save(u)
-                break;
+                break
             case 2:
                 log('In 2')
                 assert(!u.logged_in, '2 logged in')
@@ -525,7 +525,7 @@ var tests = [
                 c.save(u)
                 u.login_as = {name: 'bob', pass: 'boob'}
                 c.save(u)
-                break;
+                break
             case 3:
                 log('In 3')
                 assert(u.logged_in)
@@ -539,21 +539,92 @@ var tests = [
                 log('Almost done 3')
                 u.logout = true; c.save(u)
                 log('Done 3')
-                break;
+                break
             case 4:
                 assert(!u.logged_in, '4. still logged in')
                 u.login_as = {name: 'bob', pass:'boob'}
                 c.save(u)
-                break;
+                break
             case 5:
                 assert(u.logged_in, '5 not logged in')
                 forget()
                 setTimeout(function () {next()})
-                break;
+                break
             default:
                 assert(false)
-                break;
+                break
             }
+        })
+    },
+
+    function email_read_permissions (next) {
+        var phase = -1
+        var u, user1, user2, user3
+        
+        var states = function () { return [
+            [true,
+             function () {
+                 log('Logging in as mike')
+                 //s.honk=true
+                 u.login_as = {name: 'mike', pass: 'yeah'}; c.save(u)
+             }],
+
+            // Logged in as mike
+            [(u.logged_in
+              && u.user.name === 'mike'
+              && u.user.key === '/user/1'
+
+              // We can see our email
+              && u.user.email
+              && user1.email
+
+              // We can't see other emails
+              && !user2.email
+              && !user3.email),
+
+             function () {
+                 log('Logging in as j')
+                 u.login_as = {name: 'j', pass: 'yeah'}; c.save(u)
+             }],
+
+            // Logged in as j
+            [(u.logged_in
+              && u.user.name === 'j'
+              && u.user.key === '/user/2'
+
+              // We can see j's email
+              && u.user.email
+              && user2.email
+
+              // We can't see other emails
+              && !user1.email
+              && !user3.email),
+
+             // That's all, Doc
+             function () { setTimeout(function () {next()}) }]
+        ]}
+
+        c('/user/*').on_pub = function (o) {
+            log('-> Got new', o.key, o.email ? 'with email' : '')
+        }
+        c('/current_user').on_pub = function (o) {
+            log('-> Got new /current_user')
+        }
+        c(function () {
+            u = c.fetch('/current_user')
+            user1 = c.fetch('/user/1')
+            user2 = c.fetch('/user/2')
+            user3 = c.fetch('/user/3')
+            var s = states()
+
+            if (s[phase + 1][0]) {
+                phase++
+                log()
+                log('## Shifting to phase', phase)
+            }
+            
+            //log('Phase', phase, 'logged_in:', u.logged_in && u.user.name)
+            s[phase][1]()
         })
     },
 
