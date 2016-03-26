@@ -614,6 +614,7 @@ var extra_methods = {
             master('users/passwords').on_fetch = function (k) {
                 var result = {key: 'users/passwords'}
                 var users = master.fetch('/users')
+                users.all = users.all || []
                 for (var i=0; i<users.all.length; i++) {
                     var u = master.fetch(users.all[i])
                     if (u.name !== 'key')
