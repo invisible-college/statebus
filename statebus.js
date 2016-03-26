@@ -4,10 +4,7 @@
     else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
     else this[name] = definition()
 }('statebus', function() { var busses = {}, executing_funk, global_funk, funks = {}; return function make_bus () {
-    function log () {
-        if (bus.honk)
-            console.log.apply(console, arguments)
-    }
+    function log () { if (bus.honk) console.log.apply(console, arguments) }
 
     // ****************
     // The statebus object we will return
@@ -163,8 +160,8 @@
                     // while.
                     var seen = {}
                     for (var i=0; i<publishable_keys.length; i++) {
-                        log('pub: In loop', i + ', updating listeners on \''
-                            + publishable_keys[i] + "'")
+                        // log('pub: In loop', i + ', updating listeners on \''
+                        //     + publishable_keys[i] + "'")
                         var key = publishable_keys[i]
                         if (!seen[key]) {
                             bus.route(key, 'pub', cache[key])
@@ -267,6 +264,14 @@
         
 
     function forget (key, pub_handler) {
+        if (arguments.length === 0) {
+            // Then we're forgetting the executing funk
+            console.assert(executing_funk !== global_funk,
+                           'forget() with no arguments forgets the currently executing reactive function.\nHowever, there is no currently executing reactive function.')
+            executing_funk.forget()
+            return
+        }
+
         //log('forget:', key, funk_name(pub_handler), funk_name(executing_funk))
         pub_handler = pub_handler || executing_funk
         var fkey = funk_key(pub_handler)
@@ -480,7 +485,7 @@
 
         if (!funk.global_funk)  // \u26A1 
             log('> a', method+"('"+(arg.key||arg)
-                +"') is triggering", funk_name(funk), funk_key(funk))
+                +"') is triggering", funk_name(funk), funk_keyr(funk))
 
         if (method === 'fetch') {
             fetches_out[arg] = true
@@ -540,7 +545,7 @@
     bus.route = function (key, method, arg) {
         var funcs = bus.bindings(key, method)
         // log('route: got bindings',
-        //     funcs.map(function (f) {return funk_keyr(f)}))
+        //     funcs.map(function (f) {return funk_key(f)+':'+funk_keyr(f)}))
         for (var i=0; i<funcs.length; i++)
             bus.run_handler(funcs[i], method, arg)
 
@@ -606,18 +611,27 @@
                 //executing_funk = null // Or should this be last_executing_funk?
                 if (funk.loading()) return null
                 else {
-                    var result = func.apply(dis, args)
-                    // If code reaches here, there was an error
-                    // triggering the error.  We should warn the
-                    // programmer, and then probably move on, because
-                    // maybe the error went away... and it doesn't do
-                    // us any good to just crash now, does it?  Then
-                    // the programmer has less information on what
-                    // happened because he/she can't see it in the
-                    // result, which might also be fucked up, and
-                    // might be informative.
-                    console.error('Non-deterministic Error!', e.stack || e)
-                    console.warn("A non-deterministic error is when your reactive function triggers an error only some of the times it's called.\nThe error originated from calling:", funk_name(func, 400))
+                    // If we ware on node, then just print out the error
+                    if (typeof window === 'undefined') {
+                        console.error(e.stack)
+                        process.exit()
+                    } else {
+                        // This is the best way to print errors in
+                        // browsers, so that they get clickable line
+                        // numbers
+                        var result = func.apply(dis, args)
+                        // If code reaches here, there was an error
+                        // triggering the error.  We should warn the
+                        // programmer, and then probably move on, because
+                        // maybe the error went away... and it doesn't do
+                        // us any good to just crash now, does it?  Then
+                        // the programmer has less information on what
+                        // happened because he/she can't see it in the
+                        // result, which might also be fucked up, and
+                        // might be informative.
+                        console.error('Non-deterministic Error!', e.stack || e)
+                        console.warn("A non-deterministic error is when your reactive function triggers an error only some of the times it's called.\nThe error originated from calling:", funk_name(func, 400))
+                    }
                 }
             } finally {
                 executing_funk = last_executing_funk
@@ -821,9 +835,9 @@
 
     // Export globals
     if (Object.keys(busses).length === 0) {
-        var globals = 'fetch save pub del'.split(' ')
+        var globals = 'fetch save pub del forget'.split(' ')
         for (var i=0; i<globals.length; i++)
-            this[globals[i]] = /*window[globals[i]] ||*/ eval(globals[i])
+            this[globals[i]] = eval(globals[i])
     }
     busses[bus.id] = bus
     return bus

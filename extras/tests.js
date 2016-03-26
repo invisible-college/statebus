@@ -197,7 +197,6 @@ var tests = [
             }
         }
 
-        //bus.honk = true
         fetch(key, cb)
         setTimeout(fire, 70)
         setTimeout(fire, 80)
@@ -251,7 +250,6 @@ var tests = [
             })}, 10)
 
         setTimeout(function () {
-            //bus.honk = true
             fetch('big', function ruskie (o) {
                 nothing = 50
                 var small = fetch('small')
@@ -264,7 +262,6 @@ var tests = [
 
         // Next
         setTimeout(function () {
-            bus.honk = false
             bus('big').on_fetch.delete(big)
             bus('middle').on_fetch.delete(middle)
             bus('small').on_fetch.delete(small)
@@ -294,14 +291,12 @@ var tests = [
             // Save some middling state
             pub({key: 'undo me', state: 'progressing'})
 
-            //bus.honk = true
             if (count === 1 && !bus.loading()) {
                 log('### Error! We should be loading!')
                 error = true
             }
             log('Done with this reaction')
         })
-        bus.honk = false
         
         assert(!error)
 
@@ -356,15 +351,15 @@ var tests = [
         bus('candy').on_save = function (o) {saves.push(o); pub(o)}
         pub({key: 'candy', flavor: 'lemon'})
 
-        console.log('Trying some rollbacks starting with', bus.cache['candy'])
+        log('Trying some rollbacks starting with', bus.cache['candy'])
 
         // First do a save that will roll back
-        bus(function () { if (done) return
+        bus(function () { if (done) return;
             log('Doing a rollback on bananafied candy')
             fetch('wait forever')                  // Never finishes loading
             save({key:'candy', flavor: 'banana'})  // Will roll back
             log('...and the candy is', bus.cache['candy'])
-            forget('candy')
+            //forget('candy')
         })
         assert(bus.cache['candy'].flavor === 'lemon')
         assert(saves.length === 0)
@@ -422,6 +417,172 @@ var tests = [
                    'We got called '+num_calls+'!=2 times')
             next()
         }, 140)
+    },
+
+    function requires (next) {
+        try {
+            require.resolve('sockjs') // Will throw error if not found
+            require.resolve('websocket')
+        } catch (e) {
+            console.warn('#### Yo!  You need to run "npm install sockjs websocket"')
+            process.exit()
+        }
+        next()
+    },
+
+    function setup_server (next) {
+        function User (client, conn) {
+            client.serves_auth(conn, s)
+            client.route_defaults_to (s)
+
+            client('/foo').on_fetch = function (k) { return s.fetch('/fooo') }
+
+            function is_admin() {
+                var u = client.fetch('/current_user')
+                return (u.logged_in && u.admin)
+            }
+
+            client('/poopie').on_fetch = function () {
+                return client.fetch('/current_user').logged_in
+                    ? {AlRight:'Hell yeah!'}
+                : {NOTGottit: 'Ugly duckling!'}
+            }
+
+            client('/blog').on_save = function (o) { if (is_admin) s.pub(o) }
+            client('/blog/*').on_save = function (o) { if (is_admin) s.pub(o) }
+        }
+
+        s = require('../server.js')()
+        s.serve({port: 3948, client_definition: User})
+        s.pub({key: '/far', away:'is this'})
+        c = require('../server.js')()
+        c.ws_client('/*', 'state://localhost:3948')
+        c.fetch('/far', function (o) {
+            if (o.away === 'is this') {
+                log('We got '+o.key+' from the server!')
+                // log('Because handlers is\n', c.handlers.hash,
+                //     '\n....and wildcards is\n', c.wildcard_handlers)
+                setTimeout(function () {next()})
+            }
+        })
+    },
+
+    function login (next) {
+        s.pub({key: '/users',
+               all: [ {  key: '/user/1',
+                         name: 'mike',
+                         email: 'toomim@gmail.com',
+                         admin: true,
+                         pass: 'yeah' }
+
+                      ,{ key: '/user/2',
+                         name: 'j',
+                         email: 'jtoomim@gmail.com',
+                         admin: true,
+                         pass: 'yeah' }
+
+                      ,{ key: '/user/3',
+                         name: 'boo',
+                         email: 'boo@gmail.com',
+                         admin: false,
+                         pass: 'yea' } ] })
+
+        c(function () {
+            var u = c.fetch('/current_user')
+            if (u.logged_in) {
+                log('Yay! We are logged in as', u.user.name)
+                forget()
+                setTimeout(function () {next()})
+            } else
+                log("Ok... we aren't logged in yet.  We be patient.")
+        })
+        var u = c.fetch('/current_user')
+        u.login_as = {name: 'mike', pass: 'yeah'}
+        log('Logging in')
+        c.save(u)
+    },
+
+    function create_account (next) {
+        assert(c.fetch('/current_user').logged_in)
+
+        var count = 0
+        c(function () {
+            count++
+            var u = c.fetch('/current_user')
+
+            log('Phase', count, 'logged_in:', u.logged_in)
+
+            switch (count) {
+            case 1:
+                log('In 1')
+                assert(u.logged_in, '1 not logged in')
+                u.logout = true; c.save(u)
+                break;
+            case 2:
+                log('In 2')
+                assert(!u.logged_in, '2 logged in')
+                u.create_account = {name: 'bob', email: 'b@o.b', pass: 'boob'}
+                c.save(u)
+                u.login_as = {name: 'bob', pass: 'boob'}
+                c.save(u)
+                break;
+            case 3:
+                log('In 3')
+                assert(u.logged_in)
+                assert(u.user.name === 'bob'
+                       && u.user.email === 'b@o.b'
+                       && u.user.pass === 'boob'
+                       && u.user.key.match(/\/user\/.*/),
+                      'Bad user')
+                log('Big foo 3')
+                // Now let's log out
+                log('Almost done 3')
+                u.logout = true; c.save(u)
+                log('Done 3')
+                break;
+            case 4:
+                assert(!u.logged_in, '4. still logged in')
+                u.login_as = {name: 'bob', pass:'boob'}
+                c.save(u)
+                break;
+            case 5:
+                assert(u.logged_in, '5 not logged in')
+                forget()
+                setTimeout(function () {next()})
+                break;
+            default:
+                assert(false)
+                break;
+            }
+        })
+    },
+
+    function ambiguous_ordering (next) {
+        // Not fully implemented yet
+
+        /*
+          Let's save within an on-save handler.  Which will trigger
+          first... the dirty(), or the new save()?  Hm, do we really
+          care?
+         */
+
+        var user = 3
+        bus('user').on_fetch =
+            function (k) {
+                return {user: user}
+            }
+
+        bus('user').on_save =
+            function (o) {
+                if (o.funny)
+                    bus.save({key: 'user', user: 'funny'})
+
+                user = o.user
+                bus.dirty('user')
+            }
+
+
+        next()
     }
 ]
 
@@ -432,7 +593,8 @@ function run_next () {
         console.log('\nTesting:', f.name)
         f(run_next)
     } else
-        console.log('\nDone with all tests.')
+        (console.log('\nDone with all tests.'), process.exit())
+
     
 }
 run_next()

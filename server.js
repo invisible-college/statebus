@@ -1,7 +1,8 @@
+var bus
 var extra_methods = {
     setup: function setup (options) {
         var bus = this
-        bus.honk = true
+        //bus.honk = true
         options = options || {}
         var c = options.client_definition
         if (!('file_store' in options) || options.file_store)
@@ -23,7 +24,7 @@ var extra_methods = {
     },
     serve: function serve (options) {
         var bus = this
-        bus.honk = true
+        //bus.honk = true
         options = options || {}
         var c = options.client_definition
         if (!('file_store' in options) || options.file_store)
@@ -252,7 +253,7 @@ var extra_methods = {
 
                     // We only take pubs from the server for now
                     if (message.method.toLowerCase() !== 'pub') throw 'barf'
-                    // bus.log('ws_client received', message.obj)
+                    bus.log('ws_client received', message.obj)
 
                     var is_recent_save = false
                     if (global.ignore_flashbacks) {
@@ -620,14 +621,13 @@ var extra_methods = {
                     else
                         console.error("upass: can't have a user named key, dude.", u.key)
                 }
-                //console.log('upass: ', result)
                 return result
             }
 
             master('/online_users').on_fetch = function () {
                 var result = []
                 var conns = master.fetch('connections')
-                console.log('online: conns', conns)
+                log('online: conns', conns)
                 for (var conn in conns) if (conn !== 'key') result.push(conns[conn].user)
                 return {all: result}
             }
@@ -635,7 +635,7 @@ var extra_methods = {
         user('/online_users').on_fetch = function (k) {
             var result = master.fetch(k)
             for (var i=0; i<result.all.length; i++) {
-                console.log(result.all[i].key)
+                log(result.all[i].key)
                 result.all[i] = user.fetch(result.all[i])
             }
             return result
@@ -645,26 +645,52 @@ var extra_methods = {
             var userpass = master.fetch('users/passwords')[name]
             if (!userpass) return null
 
-            console.log('authenticate: we see',
-                        userpass.pass,
-                        pass,
-                        userpass.pass === pass
-                       )
+            log('authenticate: we see',
+                master.fetch('users/passwords'),
+                userpass.pass,
+                pass,
+                userpass.pass === pass
+               )
             if (userpass.pass === pass)
                 return master.fetch(userpass.user)
         }
+        function create_account (params) {
+            if (!(typeof params.name === 'string'
+                  && typeof params.pass === 'string'
+                  && typeof params.email === 'string'))
+                return false
+
+            var passes = master.fetch('users/passwords')
+            if ([params.name] in passes)
+                return false
+
+            var new_account = {key: '/user/' +
+                               Math.random().toString(36).substring(7),
+                               name: params.name,
+                               pass: params.pass,
+                               email: params.email,
+                               admin: false }
+
+            var users = master.fetch('/users')
+            users.all.push(new_account)
+            passes[params.name] = {user: new_account.key,
+                                   pass: new_account.pass}
+            master.save(users)
+            master.save(passes)
+            return true
+        }
 
         user('/current_user').on_fetch = function () {
-            //console.log('/current_user.on_fetch is defining it')
+            //log('/current_user.on_fetch is defining it')
             if (!conn.client) return
             var u = master.fetch('logged_in_clients')[conn.client]
-            // console.log('Giving a /current_user for', conn.client,
-            //             master.fetch('logged_in_clients'))
+            // log('Giving a /current_user for', conn.client,
+            //     master.fetch('logged_in_clients'))
             return {user: u || null, salt: salt, logged_in: !!u}
         }
 
         user('/current_user').on_save = function (o) {
-            console.log('current_user: saving', o)
+            log('current_user: saving', o)
 
             if (o.client && !conn.client) {
                 // Set the client
@@ -677,7 +703,7 @@ var extra_methods = {
 
             else if (o.login_as) {
                 // Then client is trying to log in
-                console.log('current_user: trying to log in')
+                log('current_user: trying to log in')
                 var creds = o.login_as
 
                 if (creds.name && creds.pass) {
@@ -686,7 +712,7 @@ var extra_methods = {
                     if (u) {
                         // Success!
                         // Associate this user with this session
-                        console.log('Logging the user in!', u)
+                        log('Logging the user in!', u)
 
                         var clients     = master.fetch('logged_in_clients')
                         var connections = master.fetch('connections')
@@ -700,7 +726,15 @@ var extra_methods = {
                 }
             }
 
+            else if (o.create_account) {
+                log('current_user: creating account')
+                console.assert(!o.logged_in)
+                var tmp = create_account(o.create_account)
+                log('Result of creating account is', tmp)
+            }
+
             else if (o.logout) {
+                log('current_user: logging out')
                 var clients = master.fetch('logged_in_clients')
                 delete clients[conn.client]
                 save(clients)
@@ -710,14 +744,14 @@ var extra_methods = {
         }
 
         // setTimeout(function () {
-        //     console.log('DIRTYING!!!!!')
+        //     log('DIRTYING!!!!!')
         //     user.dirty('/current_user')
-        //     console.log('DIRTIED!!!!!')
+        //     log('DIRTIED!!!!!')
         // }, 4000)
 
         user('/user/*').on_save = function (o) {
             var c = user.fetch('/current_user')
-            console.log(o.key + '.on_save:', o, c.logged_in, c.user)
+            log(o.key + '.on_save:', o, c.logged_in, c.user)
             if (c.logged_in && c.user.key === o.key) {
                 var u = master.fetch(o.key)
                 u.email = o.email
@@ -725,7 +759,7 @@ var extra_methods = {
                 u.pass = o.pass || u.pass
                 master.save(u)
                 o = user.clone(u)
-                console.log(o.key + '.on_save: saved user to master')
+                log(o.key + '.on_save: saved user to master')
             }
 
             user.dirty(o.key)
@@ -735,7 +769,7 @@ var extra_methods = {
             //console.trace('/user/*.on_fetch', k)
             var o = master.fetch(k)
             var c = user.fetch('/current_user')
-            //console.log('/user/*: fetch', k)
+            //log('/user/*: fetch', k)
             if (c.user && c.user.key === k)
                 return {name: o.name, email: o.email}
             else
@@ -767,8 +801,9 @@ var extra_methods = {
     }
 }
 
+function log () { bus.log.apply(arguments) }
 function make_server_bus () {
-    var bus = require('./statebus')()
+    bus = require('./statebus')()
     for (m in extra_methods)
         bus[m] = extra_methods[m]
     return bus
