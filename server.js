@@ -665,8 +665,13 @@ var extra_methods = {
             if ([params.name] in passes)
                 return false
 
-            var new_account = {key: '/user/' +
-                               Math.random().toString(36).substring(7),
+            // Choose account key
+            var key = '/user/' + params.name
+            if (key in master.cache)
+                key = '/user/' + Math.random().toString(36).substring(7)
+
+            // Make account object
+            var new_account = {key: key,
                                name: params.name,
                                pass: params.pass,
                                email: params.email,
@@ -685,6 +690,7 @@ var extra_methods = {
             //log('/current_user.on_fetch is defining it')
             if (!conn.client) return
             var u = master.fetch('logged_in_clients')[conn.client]
+            u = u && user_obj(u.key, true)
             // log('Giving a /current_user for', conn.client,
             //     master.fetch('logged_in_clients'))
             return {user: u || null, salt: salt, logged_in: !!u}
@@ -766,15 +772,16 @@ var extra_methods = {
             user.dirty(o.key)
         }
 
-        user('/user/*').on_fetch = function filtered_user (k) {
-            //console.trace('/user/*.on_fetch', k)
+        function user_obj (k, logged_in) {
             var o = master.fetch(k)
-            var c = user.fetch('/current_user')
-            //log('/user/*: fetch', k)
-            if (c.user && c.user.key === k)
-                return {name: o.name, email: o.email}
+            if (logged_in)
+                return {key: k, name: o.name, email: o.email}
             else
-                return {name: o.name}
+                return {key: k, name: o.name}
+        }
+        user('/user/*').on_fetch = function filtered_user (k) {
+            var c = user.fetch('/current_user')
+            return user_obj(k, c.logged_in && c.user.key === k)
         }
         user('/users').on_fetch = function () {}
         user('/users').on_save = function () {}

@@ -531,9 +531,9 @@ var tests = [
                 assert(u.logged_in)
                 assert(u.user.name === 'bob'
                        && u.user.email === 'b@o.b'
-                       && u.user.pass === 'boob'
+                       && u.user.pass === undefined
                        && u.user.key.match(/\/user\/.*/),
-                      'Bad user')
+                       'Bad user', u)
                 log('Big foo 3')
                 // Now let's log out
                 log('Almost done 3')
@@ -616,6 +616,9 @@ var tests = [
             user2 = c.fetch('/user/2')
             user3 = c.fetch('/user/3')
             var s = states()
+
+            if (phase===1)
+                log('\n',u.user, '\n', user1,'\n', user2,'\n', user3)
 
             if (s[phase + 1][0]) {
                 phase++
