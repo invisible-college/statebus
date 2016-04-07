@@ -650,8 +650,7 @@ var extra_methods = {
                 master.fetch('users/passwords'),
                 userpass.pass,
                 pass,
-                userpass.pass === pass
-               )
+                userpass.pass === pass)
             if (userpass.pass === pass)
                 return master.fetch(userpass.user)
         }
@@ -687,12 +686,10 @@ var extra_methods = {
         }
 
         user('/current_user').on_fetch = function () {
-            //log('/current_user.on_fetch is defining it')
+            //console.log('Computing new /current_user')
             if (!conn.client) return
             var u = master.fetch('logged_in_clients')[conn.client]
             u = u && user_obj(u.key, true)
-            // log('Giving a /current_user for', conn.client,
-            //     master.fetch('logged_in_clients'))
             return {user: u || null, salt: salt, logged_in: !!u}
         }
 
@@ -780,6 +777,7 @@ var extra_methods = {
                 return {key: k, name: o.name}
         }
         user('/user/*').on_fetch = function filtered_user (k) {
+            //console.log('Computing new user for', k)
             var c = user.fetch('/current_user')
             return user_obj(k, c.logged_in && c.user.key === k)
         }

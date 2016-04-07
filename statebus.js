@@ -118,11 +118,7 @@
     function pub (object) {
         // Ignore if nothing happened
         if (object.key && !changed(object)) {
-            log('Boring pub:',
-                object
-                // ,cache[object.key]
-                // ,backup_cache[object.key]
-               )
+            log('Boring pub:', object)
             return
         } else
             log('pub:', object)
@@ -251,7 +247,6 @@
     }
 
     function changed (object) {
-        //return true   // Disabling, because it caused problems in cheeseburger
         return pending_fetches[object.key]
             || !(object.key in cache)
             || !(object.key in backup_cache)
@@ -350,7 +345,7 @@
                 }
         }, 0)
     }
-
+    var refetch = dirty
 
     // ****************
     // Connections
@@ -812,20 +807,28 @@
     }
     function key_id(string) { return string.match(/\/?[^\/]+\/(\d+)/)[1] }
     function key_name(string) { return string.match(/\/?([^\/]+).*/)[1] }
-
+    function deps (key) {
+        // First print out everything waiting for it to pub
+        var result = '('+key+') pubs into:'
+        var pubbers = bindings(key, 'pub')
+        if (pubbers.length === 0) result += ' nothing'
+        for (var i=0; i<pubbers.length; i++)
+            result += '\n  ' + funk_name(pubbers[i])
+        return result
+    }
 
     // #######################################
     // ########### Browser Code ##############
     // #######################################
 
     // Make these private methods accessible
-    var api = ['cache backup_cache fetch save forget del pub dirty',
+    var api = ['cache backup_cache fetch save forget del pub dirty refetch',
                'subspace handlers wildcard_handlers bindings',
                'run_handler bind unbind reactive',
                'funk_key funk_name funks key_id key_name id',
                'pending_fetches fetches_in loading_keys loading',
                'global_funk',
-               'Set One_To_Many clone extend deep_map deep_equals log'
+               'Set One_To_Many clone extend deep_map deep_equals log deps'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)
         bus[api[i]] = eval(api[i])

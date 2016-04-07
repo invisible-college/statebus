@@ -434,22 +434,6 @@ var tests = [
         function User (client, conn) {
             client.serves_auth(conn, s)
             client.route_defaults_to (s)
-
-            client('/foo').on_fetch = function (k) { return s.fetch('/fooo') }
-
-            function is_admin() {
-                var u = client.fetch('/current_user')
-                return (u.logged_in && u.admin)
-            }
-
-            client('/poopie').on_fetch = function () {
-                return client.fetch('/current_user').logged_in
-                    ? {AlRight:'Hell yeah!'}
-                : {NOTGottit: 'Ugly duckling!'}
-            }
-
-            client('/blog').on_save = function (o) { if (is_admin) s.pub(o) }
-            client('/blog/*').on_save = function (o) { if (is_admin) s.pub(o) }
         }
 
         s = require('../server.js')()
@@ -560,7 +544,8 @@ var tests = [
     function email_read_permissions (next) {
         var phase = -1
         var u, user1, user2, user3
-        
+        var tmp1
+
         var states = function () { return [
             [true,
              function () {
@@ -584,7 +569,12 @@ var tests = [
 
              function () {
                  log('Logging in as j')
-                 u.login_as = {name: 'j', pass: 'yeah'}; c.save(u)
+                 setTimeout(function () {
+                     if (tmp1) return
+                     tmp1 = true
+                     log('Firing the actual j login')
+                     u.login_as = {name: 'j', pass: 'yeah'}; c.save(u)
+                 }, 1000)
              }],
 
             // Logged in as j
@@ -604,6 +594,12 @@ var tests = [
              function () { setTimeout(function () {next()}) }]
         ]}
 
+        c('/current_user').on_pub = function (o) {
+            //if (o.user && o.user.name === 'j') {
+                console.log(s.deps('/current_user'))
+                console.log(s.deps('/user/2'))
+            //}
+        }
         c('/user/*').on_pub = function (o) {
             log('-> Got new', o.key, o.email ? 'with email' : '')
         }
