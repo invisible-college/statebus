@@ -770,7 +770,7 @@
         if (a === b
             // But because NaN === NaN returns false:
             || (isNaN(a) && isNaN(b)
-                // And because isNaN(undefined) return true:
+                // And because isNaN(undefined) returns true:
                 && typeof a === 'number' && typeof b === 'number'))
             return true
 
