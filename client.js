@@ -364,21 +364,21 @@
             // This component definitely needs to update if it is marked as dirty
             if (dirty_components[this.key] !== undefined) return true
 
-            //   Bug: This JSON comparison won't always work --
-            //   functions will all stringify to "undefined" for
-            //   instance.
-
-            //   Todo: a better way is probably to mark a comopnent
-            //   dirty when it receives new props in the
-            //   componentWillReceiveProps React method.
-
             // Otherwise, we'll check to see if its state or props
-            // have changed.  We can do so by simply serializing them
-            // and then comparing them.  But ignore React's 'children'
-            // prop, because it often has a circular reference.
+            // have changed.  But ignore React's 'children' prop,
+            // because it often has a circular reference.
             next_props = bus.clone(next_props); this_props = bus.clone(this.props)
             delete next_props['children']; delete this_props['children']
-            return JSON.stringify([next_state, next_props]) !== JSON.stringify([this.state, this_props])
+            return !bus.deep_equals([next_state, next_props], [this.state, this_props])
+
+            // TODO:
+            //
+            //  - Check children too.  Right now we just slidently fail
+            //    on components with children.  WTF?
+            //
+            //  - A better method might be to mark a comopnent dirty when
+            //    it receives new props in the
+            //    componentWillReceiveProps React method.
         }
         
         component.loading = function loading () {
