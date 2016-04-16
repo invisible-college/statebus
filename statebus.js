@@ -134,7 +134,10 @@
             // Now put it into the backup
             update_cache(object, backup_cache)
 
-            publishable_keys.push.apply(publishable_keys, modified_keys)
+            var mod_keys = modified_keys.values()
+            for (var i=0; i < mod_keys.length; i++)
+                publishable_keys.push(mod_keys[i])
+
             key_publisher = key_publisher ||
                 setTimeout(function () {
                     //console.log('pub:', object.key+ '. Listeners on these keys need update:', keys)
