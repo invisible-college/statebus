@@ -16,8 +16,10 @@ var extra_methods = {
 
             // This whitelists anything we don't have a specific handler for,
             // reflecting it to all clients!
-            if (count === 0 && method === 'save')
+            if (count === 0 && method === 'save') {
                 bus.pub(arg)
+                count++
+            }
 
             return count
         }
