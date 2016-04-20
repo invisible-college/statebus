@@ -7,7 +7,7 @@ var extra_methods = {
         var c = options.client_definition
         if (!('file_store' in options) || options.file_store)
             bus.file_store('*')                                // Save everything to a file
-        bus('*').on_save = function reflect (o) { bus.pub(o) } // No security/validation
+        bus('*').to_save = function reflect (o) { bus.announce(o) } // No security/validation
 
         // Custom route
         var OG_route = bus.route
@@ -16,8 +16,8 @@ var extra_methods = {
 
             // This whitelists anything we don't have a specific handler for,
             // reflecting it to all clients!
-            if (count === 0 && method === 'save') {
-                bus.pub(arg)
+            if (count === 0 && method === 'to_save') {
+                bus.announce(arg)
                 count++
             }
 
@@ -33,7 +33,7 @@ var extra_methods = {
             bus.file_store('*')                          // Save everything to a file
         bus.make_http_server(options)                    // Create our own http server
         bus.sockjs_server(this.http_server, c)           // Serve via sockjs on it
-        bus('*').on_save = function reflect (o) { bus.pub(o) }   // No security/validation
+        bus('*').to_save = function reflect (o) { bus.announce(o) }   // No security/validation
 
         // Custom route
         var OG_route = bus.route
@@ -42,8 +42,8 @@ var extra_methods = {
 
             // This whitelists anything we don't have a specific handler for,
             // reflecting it to all clients!
-            if (count === 0 && method === 'save') {
-                bus.pub(arg)
+            if (count === 0 && method === 'to_save') {
+                bus.announce(arg)
                 count++
             }
 
@@ -89,12 +89,12 @@ var extra_methods = {
     sockjs_server: function sockjs_server(httpserver, user_bus_func) {
         var master = this
         var log = master.log
-        master.pub({key: 'connections'}) // Clean out old sessions
+        master.announce({key: 'connections'}) // Clean out old sessions
         var connections = master.fetch('connections')
         var s = require('sockjs').createServer({
             sockjs_url: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js' })
         s.on('connection', function(conn) {
-            connections[conn.id] = {}; master.pub(connections)
+            connections[conn.id] = {}; master.announce(connections)
             var user = user_bus_func ? make_server_bus() : master
             //user.label = user.label || 'client ' + conn.id
             if (user_bus_func) user_bus_func(user, conn)
@@ -102,7 +102,7 @@ var extra_methods = {
             var our_fetches_in = {}  // Every key that every client has fetched.
             log('sockjs_s: New connection from', conn.remoteAddress)
             function sockjs_pubber (obj) {
-                conn.write(JSON.stringify({method: 'pub', obj: obj}))
+                conn.write(JSON.stringify({method: 'save', obj: obj}))
                 log('sockjs: SENT', obj.key)
             }
             conn.on('data', function(message) {
@@ -137,21 +137,21 @@ var extra_methods = {
                 log('sockjs_s: disconnected from', conn.remoteAddress, conn.id, user.id)
                 for (var key in our_fetches_in)
                     user.forget(key, sockjs_pubber)
-                delete connections[conn.id]; master.pub(connections)
+                delete connections[conn.id]; master.announce(connections)
                 user.delete_bus()
             })
             if (user_bus_func) {
-                user('/connection').on_fetch = function () {
+                user('/connection').to_fetch = function () {
                     var c = user.clone(connections[conn.id])
                     if (c.user) c.user = user.fetch(c.user.key)
                     return {mine: c}
                 }
-                user('/connection').on_save = function (o) {
+                user('/connection').to_save = function (o) {
                     connections[conn.id] = o.mine
-                    master.pub(connections)
+                    master.announce(connections)
                 }
-                user('/connections').on_save = function noop () {}
-                user('/connections').on_fetch = function () {
+                user('/connections').to_save = function noop () {}
+                user('/connections').to_fetch = function () {
                     var result = []
                     var conns = master.fetch('connections')
                     for (connid in conns)
@@ -192,7 +192,7 @@ var extra_methods = {
             else
                 setTimeout(flush_outbox, 400)
         }
-        bus(prefix).on_save   = function (obj) { send({method: 'save', obj: obj})
+        bus(prefix).to_save   = function (obj) { send({method: 'save', obj: obj})
                                                  if (global.ignore_flashbacks)
                                                      recent_saves.push(JSON.stringify(obj))
                                                  if (recent_saves.length > 100) {
@@ -200,11 +200,11 @@ var extra_methods = {
                                                      recent_saves.splice(0, extra)
                                                  }
                                                }
-        bus(prefix).on_fetch  = function (key) { send({method: 'fetch', key: key}),
+        bus(prefix).to_fetch  = function (key) { send({method: 'fetch', key: key}),
                                                  fetched_keys.add(key) }
-        bus(prefix).on_forget = function (key) { send({method: 'forget', key: key}),
+        bus(prefix).to_forget = function (key) { send({method: 'forget', key: key}),
                                                  fetched_keys.delete(key) }
-        bus(prefix).on_delete = function (key) { send({method: 'delete', key: key}) }
+        bus(prefix).to_delete = function (key) { send({method: 'delete', key: key}) }
 
         function connect () {
             console.log('[ ] trying to open')
@@ -253,8 +253,8 @@ var extra_methods = {
                 try {
                     var message = JSON.parse(event.data)
 
-                    // We only take pubs from the server for now
-                    if (message.method.toLowerCase() !== 'pub') throw 'barf'
+                    // We only take saves from the server for now
+                    if (message.method.toLowerCase() !== 'save') throw 'barf'
                     bus.log('ws_client received', message.obj)
 
                     var is_recent_save = false
@@ -270,8 +270,8 @@ var extra_methods = {
                     }
 
                     if (!is_recent_save)
-                        bus.pub(message.obj)
-                        //setTimeout(function () {bus.pub(message.obj)}, 1000)
+                        bus.announce(message.obj)
+                        //setTimeout(function () {bus.announce(message.obj)}, 1000)
                 } catch (err) {
                     console.error('Received bad ws message from '
                                   +url+': ', event.data, err)
@@ -365,16 +365,16 @@ var extra_methods = {
                 (fs.writeFileSync('db', '{}'), bus.log('Made a new db file'))
             db = JSON.parse(fs.readFileSync('db'))
             db_is_ok = true
-            // If we put before anything else is connected, we'll get this
+            // If we save before anything else is connected, we'll get this
             // into the cache but not affect anything else
-            pub(db)
+            bus.announce(db)
             bus.log('Read db')
         } catch (e) {
             console.error(e)
             console.error('bad db file')
         }
 
-        bus(prefix).on_save = function file_store (obj) {
+        bus(prefix).to_save = function file_store (obj) {
             db[obj.key]=obj
             save_timer = save_timer || setTimeout(save_db, 100)
         }
@@ -406,7 +406,7 @@ var extra_methods = {
     sqlite_query_server: function sqlite_query_server (db) {
         var bus = this
         var fetch = bus.fetch
-        bus('/table_columns/*').on_fetch =
+        bus('/table_columns/*').to_fetch =
             function fetch_table_columns (key) {
                 if (typeof key !== 'string')
                     console.log(handlers.hash)
@@ -429,7 +429,7 @@ var extra_methods = {
             }
 
 
-        bus('/table_foreign_keys/*').on_fetch =
+        bus('/table_foreign_keys/*').to_fetch =
             function table_foreign_keys (key) {
                 var table_name = key.split('/')[2]
                 var foreign_keys = fetch('/sql/PRAGMA foreign_key_list(' + table_name + ')').rows
@@ -438,10 +438,10 @@ var extra_methods = {
                     result[foreign_keys[i].from] = foreign_keys[i]
                 delete result.id
                 result.key = key
-                pub(result)
+                bus.announce(result)
             }
 
-        bus('/sql/*').on_fetch =
+        bus('/sql/*').to_fetch =
             function sql (key) {
                 fetch('timer/60000')
                 var query = key.substr('/sql/'.length)
@@ -450,7 +450,7 @@ var extra_methods = {
                 
                 db.all(query.stmt, query.args,
                        function (err, rows) {
-                           if (rows) pub({key:key, rows: rows})
+                           if (rows) bus.announce({key:key, rows: rows})
                            else console.error('Bad sqlite query', key, err)
                        }.bind(this))
             }
@@ -502,15 +502,15 @@ var extra_methods = {
                 if (err) console.error('Problem with table!', table_name, err)
                 for (var i=0; i<rows.length; i++)
                     result[i] = row_json(rows[i])
-                pub({key: '/'+table_name, rows: result})
+                bus.announce({key: '/'+table_name, rows: result})
             })
         }
         function render_row(obj) {
-            pub(row_json(obj))
+            bus.announce(row_json(obj))
             if (remapped_keys.revs[obj.key]) {
                 var alias = bus.clone(obj)
                 alias.key = remapped_keys.revs[obj.key]
-                pub(row_json(alias))
+                bus.announce(row_json(alias))
             }
         }
 
@@ -519,7 +519,7 @@ var extra_methods = {
         // ************************
 
         // Fetching the whole table, or a single row
-        bus('/' + table_name + '*').on_fetch = function (key) {
+        bus('/' + table_name + '*').to_fetch = function (key) {
             if (key.split('/').length < 3)
                 // Return the whole table
                 return render_table()
@@ -538,7 +538,7 @@ var extra_methods = {
         }
 
         // Saving a row
-        bus('/'+ table_name + '/*').on_save = function (obj) {
+        bus('/'+ table_name + '/*').to_save = function (obj) {
             var columns = table_columns.columns
             var key = remapped_keys.keys[obj.key] || obj.key
 
@@ -564,7 +564,7 @@ var extra_methods = {
         }
 
         // Inserting a new row
-        bus('/new/' + table_name + '/*').on_save = function (obj) {
+        bus('/new/' + table_name + '/*').to_save = function (obj) {
             var columns = table_columns.columns
             var stmt = ('insert into ' + table_name + ' (' + columns.join(',')
                         + ') values (' + new Array(columns.length).join('?,') + '?)')
@@ -583,7 +583,7 @@ var extra_methods = {
         }
 
         // Deleting a row
-        bus('/'+ table_name + '/*').on_delete = function (key) {
+        bus('/'+ table_name + '/*').to_delete = function (key) {
             if (remapped_keys.keys[key]) {
                 var old_key = key
                 var new_key = remapped_keys.keys[key]
@@ -612,8 +612,8 @@ var extra_methods = {
         var salt = a.salt
             
         // Initialize master
-        if (master('users/passwords').on_fetch.length === 0) {
-            master('users/passwords').on_fetch = function (k) {
+        if (master('users/passwords').to_fetch.length === 0) {
+            master('users/passwords').to_fetch = function (k) {
                 var result = {key: 'users/passwords'}
                 var users = master.fetch('/users')
                 users.all = users.all || []
@@ -627,7 +627,7 @@ var extra_methods = {
                 return result
             }
 
-            if (false) master('/online_users').on_fetch = function () {
+            if (false) master('/online_users').to_fetch = function () {
                 var result = []
                 var conns = master.fetch('connections')
                 log('online: conns', conns)
@@ -635,7 +635,7 @@ var extra_methods = {
                 return {all: result}
             }
         }
-        if (false) user('/online_users').on_fetch = function (k) {
+        if (false) user('/online_users').to_fetch = function (k) {
             var result = master.fetch(k)
             for (var i=0; i<result.all.length; i++) {
                 log(result.all[i].key)
@@ -687,7 +687,7 @@ var extra_methods = {
             return true
         }
 
-        user('/current_user').on_fetch = function () {
+        user('/current_user').to_fetch = function () {
             //console.log('Computing new /current_user')
             if (!conn.client) return
             var u = master.fetch('logged_in_clients')[conn.client]
@@ -695,7 +695,7 @@ var extra_methods = {
             return {user: u || null, salt: salt, logged_in: !!u}
         }
 
-        user('/current_user').on_save = function (o) {
+        user('/current_user').to_save = function (o) {
             log('current_user: saving', o)
 
             if (o.client && !conn.client) {
@@ -755,9 +755,9 @@ var extra_methods = {
         //     log('DIRTIED!!!!!')
         // }, 4000)
 
-        user('/user/*').on_save = function (o) {
+        user('/user/*').to_save = function (o) {
             var c = user.fetch('/current_user')
-            log(o.key + '.on_save:', o, c.logged_in, c.user)
+            log(o.key + '.to_save:', o, c.logged_in, c.user)
             if (c.logged_in && c.user.key === o.key) {
                 var u = master.fetch(o.key)
                 u.email = o.email
@@ -765,7 +765,7 @@ var extra_methods = {
                 u.pass = o.pass || u.pass
                 master.save(u)
                 o = user.clone(u)
-                log(o.key + '.on_save: saved user to master')
+                log(o.key + '.to_save: saved user to master')
             }
 
             user.dirty(o.key)
@@ -778,13 +778,13 @@ var extra_methods = {
             else
                 return {key: k, name: o.name}
         }
-        user('/user/*').on_fetch = function filtered_user (k) {
+        user('/user/*').to_fetch = function filtered_user (k) {
             //console.log('Computing new user for', k)
             var c = user.fetch('/current_user')
             return user_obj(k, c.logged_in && c.user.key === k)
         }
-        user('/users').on_fetch = function () {}
-        user('/users').on_save = function () {}
+        user('/users').to_fetch = function () {}
+        user('/users').to_save = function () {}
     },
 
     route_defaults_to: function route_defaults_to (master_bus) {

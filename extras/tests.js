@@ -66,17 +66,17 @@ var tests = [
         fetch('foo', cb)                             // Call 1
         assert(count === 1, '1!=' + count)
 
-        // Pub a foo
+        // Save a foo
         setTimeout(function () {
             log('pubbing a new foo')
-            bus.pub({key: 'foo', count:count})       // Call 2
+            bus.announce({key: 'foo', count:count})       // Call 2
         }, 30)
 
         // Pub a bar, which the callback depends on
         setTimeout(function () {
             log('pubbing a new bar')
             assert(count === 2, '2!=' + count)
-               bus.pub({key: 'bar', count:count})       // Call 3
+               bus.announce({key: 'bar', count:count})       // Call 3
             log('pubbed the new bar')
         }, 50)
 
@@ -95,8 +95,8 @@ var tests = [
         var count = 0
 
         // The moon responds in 30ms
-        bus('moon').on_fetch =
-            function (k) { setTimeout(function () {bus.pub({key:k})},30) }
+        bus('moon').to_fetch =
+            function (k) { setTimeout(function () {bus.announce({key:k})},30) }
         function cb (o) {
             count++
             var moon = fetch('hey over there')
@@ -134,10 +134,10 @@ var tests = [
         // Pub a foo
         setTimeout(function () {
             log('pubbing a few new foos')
-            bus.pub({key: 'foo', n:0})     // Skipped
-            bus.pub({key: 'foo', n:1})     // Skipped
-            bus.pub({key: 'foo', n:2})     // Skipped
-            bus.pub({key: 'foo', n:3})     // Call 2
+            bus.announce({key: 'foo', n:0})     // Skipped
+            bus.announce({key: 'foo', n:1})     // Skipped
+            bus.announce({key: 'foo', n:2})     // Skipped
+            bus.announce({key: 'foo', n:3})     // Call 2
             log("ok, now let's see what happens.")
         }, 30)
 
@@ -156,12 +156,12 @@ var tests = [
     function identity (next) {
         var key = 'kooder'
         var count = 0
-        function fire () { bus.pub({key: 'kooder', count: count}) }
-        bus(key).on_fetch = function () { setTimeout(fire, 10) }
+        function fire () { bus.announce({key: 'kooder', count: count}) }
+        bus(key).to_fetch = function () { setTimeout(fire, 10) }
         function cb() {
             count++
             log('cb called', count, 'times')
-            pub(fetch('new'))
+            bus.announce(fetch('new'))
         }
         fetch(key, cb)
 
@@ -172,7 +172,7 @@ var tests = [
             //  2. First return from pending fetch
             assert(count === 1, 'cb called '+count+'!=1 times')
             bus.forget(key, cb)
-            bus(key).on_fetch.delete(fire)
+            bus(key).to_fetch.delete(fire)
             next()
         }, 40)
     },
@@ -182,8 +182,8 @@ var tests = [
     function forgetting (next) {
         var key = 'kooder'
         var count = 0
-        function fire () { log('firing!'); bus.pub({key: key, count: count}) }
-        bus(key).on_fetch = function () { setTimeout(fire, 10) }
+        function fire () { log('firing!'); bus.announce({key: key, count: count}) }
+        bus(key).to_fetch = function () { setTimeout(fire, 10) }
 
         function cb (o) {
             count++
@@ -204,7 +204,7 @@ var tests = [
         // Next
         setTimeout(function () {
             //assert(count === 2, "Count should be 2 but is", count)
-            bus(key).on_fetch.delete(fire)
+            bus(key).to_fetch.delete(fire)
             next()
         }, 100)
     },
@@ -212,17 +212,17 @@ var tests = [
     // Can we return an object that fetches another?
     function nested_fetch (next) {
         function outer () { return {inner: fetch('inner') } }
-        bus('outer').on_fetch = outer
+        bus('outer').to_fetch = outer
         log('fetching')
         var obj = fetch('outer')
         log('we got', obj)
         assert(obj.inner.key === 'inner')
-        pub({key: 'inner', c: 1})
+        bus.announce({key: 'inner', c: 1})
         assert(obj.inner.c === 1)
 
         // Next
         setTimeout(function () {
-            bus('outer').on_fetch.delete(outer)
+            bus('outer').to_fetch.delete(outer)
             next()
         }, 10)
     },
@@ -233,9 +233,9 @@ var tests = [
         function big () { return {middle: fetch('middle') } }
         function middle () { return {small: fetch('small') } }
         function small () { return {nothing: nothing} }
-        bus('big').on_fetch = big
-        bus('middle').on_fetch = middle
-        bus('small').on_fetch = small
+        bus('big').to_fetch = big
+        bus('middle').to_fetch = middle
+        bus('small').to_fetch = small
 
         log('fetching')
         var obj = fetch('big')
@@ -245,7 +245,7 @@ var tests = [
             fetch('big', function (o) {
                 nothing = 5
                 log('About to update small')
-                pub({key: 'small', something: nothing})
+                bus.announce({key: 'small', something: nothing})
                 log('We did it.')
             })}, 10)
 
@@ -255,31 +255,31 @@ var tests = [
                 var small = fetch('small')
                 log()
                 log('Second try.  Small starts as', small)
-                pub({key: 'small', something: nothing})
+                bus.announce({key: 'small', something: nothing})
                 log('Now it is', fetch('small'))
             })}, 15)
 
 
         // Next
         setTimeout(function () {
-            bus('big').on_fetch.delete(big)
-            bus('middle').on_fetch.delete(middle)
-            bus('small').on_fetch.delete(small)
+            bus('big').to_fetch.delete(big)
+            bus('middle').to_fetch.delete(middle)
+            bus('small').to_fetch.delete(small)
             next()
         }, 50)
     },
 
-    function rollback_pub (next) {
+    function rollback_announce (next) {
         var count = 0
         var error = false
         function wait () { setTimeout(function () {
-            log('Pubbing wait')
-            pub({key: 'wait', count: count})
+            log('Announcebing wait')
+            bus.announce({key: 'wait', count: count})
         }, 60) }
-        bus('wait').on_fetch = wait
+        bus('wait').to_fetch = wait
 
         // Initialize
-        pub({key: 'undo me', state: 'start'})
+        bus.announce({key: 'undo me', state: 'start'})
         
         // Now start the reactive function
         bus(function () {
@@ -289,7 +289,7 @@ var tests = [
             var wait = fetch('wait')
 
             // Save some middling state
-            pub({key: 'undo me', state: 'progressing'})
+            bus.announce({key: 'undo me', state: 'progressing'})
 
             if (count === 1 && !bus.loading()) {
                 log('### Error! We should be loading!')
@@ -318,14 +318,14 @@ var tests = [
                    90)
 
         setTimeout(function () {
-            bus('wait').on_fetch.delete(wait)
+            bus('wait').to_fetch.delete(wait)
             next()
         }, 120)
     },
 
     function rollback_del (next) {
-        bus('wait forever').on_fetch = function () {} // shooting blanks
-        pub({key: 'kill me', alive: true})
+        bus('wait forever').to_fetch = function () {} // shooting blanks
+        bus.announce({key: 'kill me', alive: true})
 
         // First do a del that will roll back
         bus(function () {
@@ -348,8 +348,8 @@ var tests = [
     function rollback_save (next) {
         var saves = []
         var done = false
-        bus('candy').on_save = function (o) {saves.push(o); pub(o)}
-        pub({key: 'candy', flavor: 'lemon'})
+        bus('candy').to_save = function (o) {saves.push(o); bus.announce(o)}
+        bus.announce({key: 'candy', flavor: 'lemon'})
 
         log('Trying some rollbacks starting with', bus.cache['candy'])
 
@@ -384,7 +384,7 @@ var tests = [
             save({key:'candy', flavor: 'orangina'})  // Will go through
         })
         assert(bus.cache['candy'].flavor = 'orangina')
-        assert(saves.length === 1)
+        assert(saves.length === 1, 'Saves.length 1 != '+saves.length)
 
         log('Now candy is', bus.cache['candy'])
         done = true
@@ -395,9 +395,9 @@ var tests = [
         // Make sure a function that called loading() gets re-run even
         // if the return from a fetch didn't actually change state
 
-        // First define a delayed pub
-        bus('wait a sec').on_fetch = function (k) {
-            setTimeout(function () { bus.pub({key: k}) }, 80)
+        // First define a delayed announce
+        bus('wait a sec').to_fetch = function (k) {
+            setTimeout(function () { bus.announce({key: k}) }, 80)
         }
 
         // Now run the test
@@ -438,7 +438,7 @@ var tests = [
 
         s = require('../server.js')()
         s.serve({port: 3948, client_definition: User})
-        s.pub({key: '/far', away:'is this'})
+        s.announce({key: '/far', away:'is this'})
         c = require('../server.js')()
         c.ws_client('/*', 'state://localhost:3948')
         c.fetch('/far', function (o) {
@@ -452,7 +452,7 @@ var tests = [
     },
 
     function login (next) {
-        s.pub({key: '/users',
+        s.announce({key: '/users',
                all: [ {  key: '/user/1',
                          name: 'mike',
                          email: 'toomim@gmail.com',
@@ -594,16 +594,16 @@ var tests = [
              function () { setTimeout(function () {next()}) }]
         ]}
 
-        c('/current_user').on_pub = function (o) {
+        c('/current_user').to_save = function (o) {
             //if (o.user && o.user.name === 'j') {
                 console.log(s.deps('/current_user'))
                 console.log(s.deps('/user/2'))
             //}
         }
-        c('/user/*').on_pub = function (o) {
+        c('/user/*').to_save = function (o) {
             log('-> Got new', o.key, o.email ? 'with email' : '')
         }
-        c('/current_user').on_pub = function (o) {
+        c('/current_user').to_save = function (o) {
             log('-> Got new /current_user')
         }
         c(function () {
@@ -637,12 +637,12 @@ var tests = [
          */
 
         var user = 3
-        bus('user').on_fetch =
+        bus('user').to_fetch =
             function (k) {
                 return {user: user}
             }
 
-        bus('user').on_save =
+        bus('user').to_save =
             function (o) {
                 if (o.funny)
                     bus.save({key: 'user', user: 'funny'})

@@ -4,10 +4,147 @@
     else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
     else this[name] = definition()
 }('statebus', function() { var busses = {}, executing_funk, global_funk, funks = {}; return function make_bus () {
-    function log () { if (bus.honk) console.log.apply(console, arguments) }
+
 
     // ****************
-    // The statebus object we will return
+    // Public API
+
+    function fetch (key, callback) {
+        //log('fetch:', key)
+        key = key.key || key    // You can pass in an object instead of key
+
+        if (typeof key !== 'string')
+            throw ('Error: fetch(key) called with a non-string key: '+key)
+
+        var called_from_reactive_funk = !callback
+        var funk = callback || executing_funk
+
+        // Remove this limitation at some point.  One reason for it is
+        // that bind() doesn't check if a wildcard handler
+        // already exists... it just pushes a new one.  That'll grow
+        // unbounded.  I can later use regexps for wildcard handlers,
+        // and start escaping the patterns between fetch() and
+        // bind() and solve these issues robustly.
+        console.assert(key[key.length-1] !== '*')
+
+        // ** Call fetchers upstream **
+
+        // TODO: checking fetches_out[] doesn't count keys that we got
+        // which arrived nested within a bigger object, because we
+        // never explicity fetched those keys.  But we don't need to
+        // fetch them now cause we already have them.
+        if (!fetches_out[key])
+            bus.route(key, 'to_fetch', key)
+
+        // Now there might be a new value pubbed onto this bus.
+        // Or there might be a pending fetch.
+        // ... or there weren't any fetchers upstream.
+
+        // ** Subscribe the calling funk **
+
+        if (called_from_reactive_funk)
+            funk.depends_on(bus, key)
+        fetches_in.add(key, funk_key(funk))
+        // log('Fetch: Executing_funk is', executing_funk && executing_funk.statebus_id)
+        // log('fetches in adding', key, funk_key(funk),
+        //     callback && funk_key(callback),
+        //     executing_funk && funk_key(executing_funk))
+        bind(key, 'on_save', funk)
+
+        // ** Return a value **
+
+        // If called reactively, we always return a value.
+        if (called_from_reactive_funk) {
+            backup_cache[key] = backup_cache[key] || {key: key}
+            return cache[key] = cache[key] || {key: key}
+        }
+
+        // Otherwise, we want to make sure that a pub gets called on
+        // the handler.  If there's a pending fetch, then it'll get
+        // called later.  Otherwise, let's call it now.
+        else if (!pending_fetches[key]) {
+            backup_cache[key] = backup_cache[key] || {key: key}
+            run_handler(funk, 'on_save', cache[key] = cache[key] || {key: key})
+        }
+
+    }
+    var pending_fetches = {}
+    var fetches_out = {}                // Maps `key' to `true' iff we've fetched `key'
+    var fetches_in = new One_To_Many()  // Maps `key' to `pub_funcs' subscribed to our key
+
+
+    function save (obj) {
+        if ((executing_funk !== global_funk) && executing_funk.loading()) {
+            abort_changes([obj.key])
+            return
+        }
+
+        bus.route(obj.key, 'to_save', obj)
+    }
+
+    function announce (object) {
+        // Ignore if nothing happened
+        if (object.key && !changed(object)) {
+            log('Boring finish:', object)
+            return
+        } else
+            log('finish:', object)
+
+        // Recursively add all of object, and its sub-objects, into the cache
+        var modified_keys = update_cache(object, cache)
+
+        delete pending_fetches[object.key]
+
+        if ((executing_funk !== global_funk) && executing_funk.loading()) {
+            abort_changes(modified_keys)
+        } else {
+            // Now put it into the backup
+            update_cache(object, backup_cache)
+
+            for (var i=0; i < modified_keys.length; i++)
+                publishable_keys.push(modified_keys[i])
+
+            key_publisher = key_publisher ||
+                setTimeout(function () {
+                    //console.log('finish:', object.key+ '. Listeners on these keys need update:', keys)
+
+                    // Note: this can be made more efficient.  There may
+                    // be duplicate handler calls in here, because a
+                    // single handler might react to multiple keys.  For
+                    // instance, it might fetch multiple keys, where each
+                    // key has been modified.  To make this more
+                    // efficient, we should first find all the handlers
+                    // affected by these keys, and then collapse them, and
+                    // call each one once.  Unfortunately, doing so would
+                    // require digging into the bus.route() API and
+                    // changing it.  We'd probably need to make it accept
+                    // an array of keys instead of a single key, and then
+                    // have bindings() take an array of keys as well.
+                    // So I'm not bothering with this optimization yet.
+                    // We will just have duplicate-running functions for a
+                    // while.
+                    var seen = {}
+                    for (var i=0; i<publishable_keys.length; i++) {
+                        // log('pub: In loop', i + ', updating listeners on \''
+                        //     + publishable_keys[i] + "'")
+                        var key = publishable_keys[i]
+                        if (!seen[key]) {
+                            bus.route(key, 'on_save', cache[key])
+                            seen[key] = true
+                        }
+                    }
+                    publishable_keys = []
+                    key_publisher = null
+                    //console.log('pub: done looping through', keys, ' and done with', object.key)
+                }, 0)
+        }
+    }
+
+    var key_publisher = null
+    var publishable_keys = []
+
+
+    // Now create the statebus object
     function bus (arg) {
         // Called with a function to react to
         if (typeof arg === 'function') {
@@ -40,140 +177,6 @@
     var cache = {}
     var backup_cache = {}
 
-    // ****************
-    // Reactive REST API
-
-    var pending_fetches = {}
-    var fetches_out = {}                // Maps `key' to `true' iff we've fetched `key'
-    var fetches_in = new One_To_Many()  // Maps `key' to `pub_funcs' subscribed to our key
-    function fetch (key, callback) {
-        //log('fetch:', key)
-        key = key.key || key    // You can pass in an object instead of key
-
-        if (typeof key !== 'string')
-            throw ('Error: fetch(key) called with a non-string key: '+key)
-
-        var called_from_reactive_funk = !callback
-        var funk = callback || executing_funk
-
-        // Remove this limitation at some point.  One reason for it is
-        // that bind() doesn't check if a wildcard handler
-        // already exists... it just pushes a new one.  That'll grow
-        // unbounded.  I can later use regexps for wildcard handlers,
-        // and start escaping the patterns between fetch() and
-        // bind() and solve these issues robustly.
-        console.assert(key[key.length-1] !== '*')
-
-        // ** Call fetchers upstream **
-
-        // TODO: checking fetches_out[] doesn't count keys that we got
-        // which arrived nested within a bigger object, because we
-        // never explicity fetched those keys.  But we don't need to
-        // fetch them now cause we already have them.
-        if (!fetches_out[key])
-            bus.route(key, 'fetch', key)
-
-        // Now there might be a new value pubbed onto this bus.
-        // Or there might be a pending fetch.
-        // ... or there weren't any fetchers upstream.
-
-        // ** Subscribe the calling funk **
-
-        if (called_from_reactive_funk)
-            funk.depends_on(bus, key)
-        fetches_in.add(key, funk_key(funk))
-        // log('Fetch: Executing_funk is', executing_funk && executing_funk.statebus_id)
-        // log('fetches in adding', key, funk_key(funk),
-        //     callback && funk_key(callback),
-        //     executing_funk && funk_key(executing_funk))
-        bind(key, 'pub', funk)
-
-        // ** Return a value **
-
-        // If called reactively, we always return a value.
-        if (called_from_reactive_funk) {
-            backup_cache[key] = backup_cache[key] || {key: key}
-            return cache[key] = cache[key] || {key: key}
-        }
-
-        // Otherwise, we want to make sure that a pub gets called on
-        // the handler.  If there's a pending fetch, then it'll get
-        // called later.  Otherwise, let's call it now.
-        else if (!pending_fetches[key]) {
-            backup_cache[key] = backup_cache[key] || {key: key}
-            run_handler(funk, 'pub', cache[key] = cache[key] || {key: key})
-        }
-
-    }
-
-    function save (obj) {
-        if ((executing_funk !== global_funk) && executing_funk.loading()) {
-            abort_changes([obj.key])
-            return
-        }
-
-        bus.route(obj.key, 'save', obj)
-    }
-
-    function pub (object) {
-        // Ignore if nothing happened
-        if (object.key && !changed(object)) {
-            log('Boring pub:', object)
-            return
-        } else
-            log('pub:', object)
-
-        // Recursively add all of object, and its sub-objects, into the cache
-        var modified_keys = update_cache(object, cache)
-
-        delete pending_fetches[object.key]
-
-        if ((executing_funk !== global_funk) && executing_funk.loading()) {
-            abort_changes(modified_keys)
-        } else {
-            // Now put it into the backup
-            update_cache(object, backup_cache)
-
-            for (var i=0; i < modified_keys.length; i++)
-                publishable_keys.push(modified_keys[i])
-
-            key_publisher = key_publisher ||
-                setTimeout(function () {
-                    //console.log('pub:', object.key+ '. Listeners on these keys need update:', keys)
-
-                    // Note: this can be made more efficient.  There may
-                    // be duplicate handler calls in here, because a
-                    // single handler might react to multiple keys.  For
-                    // instance, it might fetch multiple keys, where each
-                    // key has been modified.  To make this more
-                    // efficient, we should first find all the handlers
-                    // affected by these keys, and then collapse them, and
-                    // call each one once.  Unfortunately, doing so would
-                    // require digging into the bus.route() API and
-                    // changing it.  We'd probably need to make it accept
-                    // an array of keys instead of a single key, and then
-                    // have bindings() take an array of keys as well.
-                    // So I'm not bothering with this optimization yet.
-                    // We will just have duplicate-running functions for a
-                    // while.
-                    var seen = {}
-                    for (var i=0; i<publishable_keys.length; i++) {
-                        // log('pub: In loop', i + ', updating listeners on \''
-                        //     + publishable_keys[i] + "'")
-                        var key = publishable_keys[i]
-                        if (!seen[key]) {
-                            bus.route(key, 'pub', cache[key])
-                            seen[key] = true
-                        }
-                    }
-                    publishable_keys = []
-                    key_publisher = null
-                    //console.log('pub: done looping through', keys, ' and done with', object.key)
-                }, 0)
-        }
-    }
-    var key_publisher = null
-    var publishable_keys = []
 
     // Folds object into the cache recursively and returns the keys
     // for all mutated staet
@@ -260,7 +263,7 @@
     }
         
 
-    function forget (key, pub_handler) {
+    function forget (key, save_handler) {
         if (arguments.length === 0) {
             // Then we're forgetting the executing funk
             console.assert(executing_funk !== global_funk,
@@ -269,13 +272,13 @@
             return
         }
 
-        //log('forget:', key, funk_name(pub_handler), funk_name(executing_funk))
-        pub_handler = pub_handler || executing_funk
-        var fkey = funk_key(pub_handler)
+        //log('forget:', key, funk_name(save_handler), funk_name(executing_funk))
+        save_handler = save_handler || executing_funk
+        var fkey = funk_key(save_handler)
         //console.log('Fetches in is', fetches_in.hash)
         if (!fetches_in.contains(key, fkey)) {
             console.error("***\n****\nTrying to forget lost key", key,
-                          'from', funk_name(pub_handler), fkey,
+                          'from', funk_name(save_handler), fkey,
                           "that hasn't fetched that key.",
                           funks[fetches_in.get(key)[0]],
                           funks[fetches_in.get(key)[0]] && funks[fetches_in.get(key)[0]].statebus_id
@@ -285,14 +288,14 @@
         }
 
         fetches_in.delete(key, fkey)
-        unbind(key, 'pub', pub_handler)
+        unbind(key, 'on_save', save_handler)
 
         // If this is the last handler listening to this key, then we
         // can delete the cache entry and send a forget upstream.
         if (!fetches_in.has_any(key)) {
             clearTimeout(to_be_forgotten[key])
             to_be_forgotten[key] = setTimeout(function () {
-                bus.route(key, 'forget', key)
+                bus.route(key, 'to_forget', key)
 
                 //delete cache[key]
                 delete fetches_out[key]
@@ -315,7 +318,7 @@
             publishable_keys.splice(idx, 1)
 
         log('del:', obj_or_key)
-        bus.route(key, 'delete', key)
+        bus.route(key, 'to_delete', key)
         //forget(key /*, bus??*/)
     }
 
@@ -343,7 +346,7 @@
                 // If anybody is fetching this key
                 if (fetches_in.has_any(keys[i])) {
                     log('dirty_sweeper: routing a fetch for', key)
-                    bus.route(key, 'fetch', key)
+                    bus.route(key, 'to_fetch', key)
                 }
         }, 0)
     }
@@ -353,10 +356,10 @@
     // Connections
     function subspace (key) {
         var result = {}
-        for (method in {fetch:null, save:null, pub:null,
-                        'delete':null, forget:null})
+        for (method in {to_fetch:null, to_save:null, on_save:null,
+                        to_delete:null, to_forget:null})
             (function (method) {
-                Object.defineProperty(result, 'on_' + method, {
+                Object.defineProperty(result, method, {
                     set: function (func) { bind(key, method, func) },
                     get: function () {
                         var result = bindings(key, method)
@@ -484,7 +487,7 @@
             log('> a', method+"('"+(arg.key||arg)
                 +"') is triggering", funk_name(funk), funk_keyr(funk))
 
-        if (method === 'fetch') {
+        if (method === 'to_fetch') {
             fetches_out[arg] = true
             pending_fetches[arg] = funk
         }
@@ -494,10 +497,10 @@
         // if it fetches or saves, it'll register a pub handler with
         // this funk.
 
-        // Pub events will be calling an already-wrapped funk, that
+        // On_save events will be calling an already-wrapped funk, that
         // has its own arg
         if (funk.react) {
-            console.assert(method === 'pub')
+            console.assert(method === 'on_save')
             return funk.react()
         }
 
@@ -508,31 +511,31 @@
             var result = funk(arg)
 
             // For fetch
-            if (method === 'fetch' && result instanceof Object && !f.loading()) {
+            if (method === 'to_fetch' && result instanceof Object && !f.loading()) {
                 result.key = arg
                 // console.log('run_handler: pubbing', arg,
                 //             'after fetched RETURN from fetch('+arg+')')
-                pub(result)
+                announce(result)
                 return result
             }
 
             // Save, forget and delete handlers stop re-running once
             // they've completed without anything loading.
             // ... with f.forget()
-            if ((method === 'save' || method === 'forget' || method === 'delete')
+            if ((method === 'to_save' || method === 'to_forget' || method === 'to_delete')
                 && !f.loading())
                 f.forget()
         })
         f.proxies_for = funk
 
         // on_fetch handlers stop re-running when the key is forgotten
-        if (method === 'fetch') {
+        if (method === 'to_fetch') {
             var key = arg
             function handler_done () {
                 f.forget()
-                unbind(key, 'forget', handler_done)
+                unbind(key, 'to_forget', handler_done)
             }
-            bind(key, 'forget', handler_done)
+            bind(key, 'to_forget', handler_done)
         }
 
         return f()
@@ -546,9 +549,9 @@
         for (var i=0; i<funcs.length; i++)
             bus.run_handler(funcs[i], method, arg)
 
-        if (method === 'fetch')
+        if (method === 'to_fetch')
             console.assert(funcs.length<2,
-                           'Two on_fetch functions are registered for the same key '+key,
+                           'Two to_fetch functions are registered for the same key '+key,
                            funcs)
         return funcs.length
     }
@@ -809,10 +812,11 @@
     }
     function key_id(string) { return string.match(/\/?[^\/]+\/(\d+)/)[1] }
     function key_name(string) { return string.match(/\/?([^\/]+).*/)[1] }
+    function log () { if (bus.honk) console.log.apply(console, arguments) }
     function deps (key) {
         // First print out everything waiting for it to pub
         var result = '('+key+') pubs into:'
-        var pubbers = bindings(key, 'pub')
+        var pubbers = bindings(key, 'on_save')
         if (pubbers.length === 0) result += ' nothing'
         for (var i=0; i<pubbers.length; i++)
             result += '\n  ' + funk_name(pubbers[i])
@@ -824,7 +828,7 @@
     // #######################################
 
     // Make these private methods accessible
-    var api = ['cache backup_cache fetch save forget del pub dirty refetch',
+    var api = ['cache backup_cache fetch save forget del announce dirty refetch',
                'subspace handlers wildcard_handlers bindings',
                'run_handler bind unbind reactive',
                'funk_key funk_name funks key_id key_name id',
@@ -840,7 +844,7 @@
 
     // Export globals
     if (Object.keys(busses).length === 0) {
-        var globals = 'fetch save pub del forget'.split(' ')
+        var globals = 'fetch save del forget'.split(' ')
         for (var i=0; i<globals.length; i++)
             this[globals[i]] = eval(globals[i])
     }
