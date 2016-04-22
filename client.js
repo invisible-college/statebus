@@ -48,6 +48,7 @@
     }
 
     function sockjs_client(prefix, url) {
+        var bus = this
         var recent_saves = []
         var sock
         var attempts = 0
