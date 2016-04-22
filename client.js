@@ -209,6 +209,7 @@
     }
 
     function universal_sockjs () {
+        var bus = this
         var old_route = bus.route
         var connections = {}
         bus.route = function (key, method, arg) {
@@ -245,6 +246,7 @@
 
     // Stores state in the query string, as ?key1={obj...}&key2={obj...}
     function url_store (prefix) {
+        var bus = this
         function get_query_string_value (key) {
             return unescape(window.location.search.replace(
                 new RegExp("^(?:.*[&\\?]"
