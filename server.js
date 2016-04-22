@@ -166,7 +166,7 @@ var extra_methods = {
             }
         })
 
-        s.installHandlers(httpserver, {prefix:'/statebus'})
+        s.installHandlers(httpserver, {prefix:'/statebus'});
     },
 
     ws_client: function ws_client (prefix, url) {
