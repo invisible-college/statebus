@@ -479,7 +479,7 @@
         window.ignore_flashbacks = true
         bus.localstorage_client('ls/*')
         bus.sockjs_client ('/*', statebus_server)
-        bus('*').to_save = function (obj) { bus.announce(obj) }
+        // bus('*').to_save = function (obj) { bus.save.fire(obj) }
         bus('/new/*').to_save = function (o) {
             if (o.key.split('/').length > 3) return
 

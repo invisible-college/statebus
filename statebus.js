@@ -3,14 +3,14 @@
     if (typeof module != 'undefined') module.exports = definition()
     else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
     else this[name] = definition()
-}('statebus', function() { var busses = {}, executing_funk, global_funk, funks = {}; return function make_bus () {
+}('statebus', function() { statelog_indent = 0; var busses = {}, executing_funk, global_funk, funks = {}; return function make_bus () {
 
 
     // ****************
     // Public API
 
     function fetch (key, callback) {
-        //log('fetch:', key)
+        log('fetch:', key)
         key = key.key || key    // You can pass in an object instead of key
 
         if (typeof key !== 'string')
@@ -18,6 +18,11 @@
 
         var called_from_reactive_funk = !callback
         var funk = callback || executing_funk
+
+        if (callback) {
+            (callback.defined = callback.defined || []
+            ).push({as:'fetch callback', key:key})
+        }
 
         // Remove this limitation at some point.  One reason for it is
         // that bind() doesn't check if a wildcard handler
@@ -63,6 +68,10 @@
         // the handler.  If there's a pending fetch, then it'll get
         // called later.  Otherwise, let's call it now.
         else if (!pending_fetches[key]) {
+            // TODO: my intuition suggests that we might prefer to
+            // delay this .on_save getting called in a
+            // setTimeout(f,0), to be consistent with other calls to
+            // .on_save.
             backup_cache[key] = backup_cache[key] || {key: key}
             run_handler(funk, 'on_save', cache[key] = cache[key] || {key: key})
         }
@@ -72,23 +81,76 @@
     var fetches_out = {}                // Maps `key' to `true' iff we've fetched `key'
     var fetches_in = new One_To_Many()  // Maps `key' to `pub_funcs' subscribed to our key
 
-
-    function save (obj) {
+    var red = '\x1b[31m', normal = '\x1b[0m', grey = '\x1b[0;38;5;245m',
+        green = '\x1b[0;38;5;46m', brown = '\x1b[0;38;5;130m'
+    var currently_saving
+    function save_msg (obj, opts, meth) {
+        var message = (opts && opts.m) || bus + "."+meth+"('"+obj.key+"')"
+        var end_col = message.length + 2 + statelog_indent * 3
+        for (var i=0; i<40-end_col; i++) message += ' '
+        var diff = sorta_diff(backup_cache[obj.key], obj)
+        if (diff) message += diff.substring(0,80)
+        return message
+    }
+    function save (obj, opts) {
         if ((executing_funk !== global_funk) && executing_funk.loading()) {
             abort_changes([obj.key])
             return
         }
 
-        bus.route(obj.key, 'to_save', obj)
-    }
+        var message = save_msg(obj, opts, 'save')
 
-    function announce (object) {
         // Ignore if nothing happened
-        if (object.key && !changed(object)) {
-            log('Boring finish:', object)
-            return
-        } else
-            log('finish:', object)
+        if (obj.key && !changed(obj))
+            statelog(grey, 'x', message)
+        else
+            statelog(red, 'o', message)
+
+        try {
+            statelog_indent++
+            var was_saving = currently_saving
+            currently_saving = obj.key
+            var num_handlers = bus.route(obj.key, 'to_save', obj)
+            if (num_handlers === 0)
+                save.fire(obj, opts)
+        }
+        finally {
+            statelog_indent--
+            currently_saving = was_saving
+        }
+        // TODO: Here's an alternative.  Instead of counting the
+        // handlers and seeing if there are zero, I could just make a
+        // to_save handler that is shadowed by other handlers if I can
+        // get later handlers to shadow earlier ones.
+    }
+    save.fire = fire
+    function fire (object, opts) {
+        opts = opts || {}
+        //var message = (opts.m) || bus + ".save.fire('"+object.key+"')"
+        var message = save_msg(object, opts, 'save.fire')
+        var color, icon
+
+        if (currently_saving === object.key &&
+            !(object.key && !changed(object))) {
+            statelog_indent--
+            statelog(red, '•', '')
+            statelog_indent++
+        } else {
+            // Ignore if nothing happened
+            if (object.key && !changed(object)) {
+                color = grey
+                icon = 'x'
+                //log('Boring fire:', object.key)
+                return
+            } else
+                color = red, icon = '•'
+
+            if (opts.to_fetch)
+                color = green, icon = '^',
+            message = (opts.m) || 'Fetched ' + bus + "('"+object.key+"')"
+
+            statelog(color, icon, message)
+        }
 
         // Recursively add all of object, and its sub-objects, into the cache
         var modified_keys = update_cache(object, cache)
@@ -106,7 +168,7 @@
 
             key_publisher = key_publisher ||
                 setTimeout(function () {
-                    //console.log('finish:', object.key+ '. Listeners on these keys need update:', keys)
+                    //console.log('fire:', object.key+ '. Listeners on these keys need update:', keys)
 
                     // Note: this can be made more efficient.  There may
                     // be duplicate handler calls in here, because a
@@ -157,7 +219,8 @@
         else return subspace(arg)
     }
     var id = 'bus ' + Math.random().toString(36).substring(7)
-    bus.toString = function () { return id + (bus.label || '') }
+    bus.toString = function () { return bus.label || id }
+    // bus.toString = function () { return (bus.label||'') + id }
     bus.delete_bus = function () {
         // // Forget all wildcard handlers
         // for (var i=0; i<wildcard_handlers.length; i++) {
@@ -221,10 +284,11 @@
 
             // Fold cacheable objects into cache
             if (obj && obj.key) {
-                if (cache !== backup_cache && changed(obj))
-                    modified_keys.add(obj.key)
-                else
-                    log('Boring modified key', obj.key)
+                if (cache !== backup_cache)
+                    if (changed(obj))
+                        modified_keys.add(obj.key)
+                    else
+                        log('Boring modified key', obj.key)
                 if (!cache[obj.key])
                     // This object is new.  Let's store it.
                     cache[obj.key] = obj
@@ -291,15 +355,21 @@
         unbind(key, 'on_save', save_handler)
 
         // If this is the last handler listening to this key, then we
-        // can delete the cache entry and send a forget upstream.
+        // can delete the cache entry, send a forget upstream, and
+        // de-activate the .on_fetch handler.
         if (!fetches_in.has_any(key)) {
             clearTimeout(to_be_forgotten[key])
             to_be_forgotten[key] = setTimeout(function () {
+                // Send a forget upstream
                 bus.route(key, 'to_forget', key)
 
-                //delete cache[key]
+                // Delete the cache entry...?
+                // delete cache[key]
                 delete fetches_out[key]
                 delete to_be_forgotten[key]
+
+                // Todo: deactivate any reactive .on_fetch handler, or
+                // .on_save handler.
             }, 200)
         }
     }
@@ -328,7 +398,7 @@
     var dirty_keys = new Set()
     var dirty_sweeper = null
     function dirty (key) {
-        log('dirty:', key)
+        statelog(brown, '*', "dirty('"+key+"')")
         dirty_keys.add(key)
 
         dirty_sweeper = dirty_sweeper || setTimeout(function () {
@@ -345,7 +415,7 @@
             for (var i=0; i<keys.length; i++)
                 // If anybody is fetching this key
                 if (fetches_in.has_any(keys[i])) {
-                    log('dirty_sweeper: routing a fetch for', key)
+                    // log('dirty_sweeper: routing a fetch for', key)
                     bus.route(key, 'to_fetch', key)
                 }
         }, 0)
@@ -360,7 +430,12 @@
                         to_delete:null, to_forget:null})
             (function (method) {
                 Object.defineProperty(result, method, {
-                    set: function (func) { bind(key, method, func) },
+                    set: function (func) {
+                        func.defined = func.defined || []
+                        func.defined.push(
+                            {as:'handler', bus:bus, method:method, key:key})
+                        bind(key, method, func)
+                    },
                     get: function () {
                         var result = bindings(key, method)
                         result.delete = function (func) { unbind (key, method, func) }
@@ -389,22 +464,40 @@
         while (funk.proxies_for) funk = funk.proxies_for
         return funk_key(funk)
     }
-    function funk_name (f, char_limit) {
+    function funk_name2 (f, char_limit) {
+        char_limit = char_limit || 30
+
+        var arg = f.react ? (f.args && f.args[0]) : ''
+        f = f.proxies_for || f
+        var f_string = 'function ' + (f.name||'') + '(' + (arg||'') + ') {...}'
+        // Or: f.toString().substr(0,char_limit) + '...'
+
+        var def = f.defined && f.defined.length > 0 && f.defined[0]
+        if (!def) return f_string
+        switch (def.as) {
+        case 'handler':
+            return def.bus+"('"+def.key+"')."+def.method+' = '+f_string
+        case 'fetch callback':
+            return "the callback for fetch('"+def.key+"', "+f_string+')'
+        case 'reactive':
+            return "reactive('"+f_string+"')"
+        default:
+            return 'UNKNOWN Funky Definition!!!... ???'
+        }
+    }
+    function funk_name1 (f, char_limit) {
         char_limit = char_limit || 30
         if (f.proxies_for) f = f.proxies_for
         if (f.statebus_binding)
-            return ("('"+f.statebus_binding.key+"').on_"
+            return ("('"+f.statebus_binding.key+"')."
                     + f.statebus_binding.method
                     //+ f.toString().substr(0,char_limit))
                     + (f.name? ' = function '+f.name+'() {...}' : ''))
         else
             return f.toString().substr(0,char_limit) + '...'
     }
+    var funk_name = funk_name2
     function bind (key, method, func) {
-        // func.statebus_name = func.statebus_name ||
-        //     ("('"+key+"').on_"+method
-        //      + (func.name? ' = function '+func.name+'() {...}' : ''))
-
         if (key[key.length-1] !== '*')
             handlers.add(method + ' ' + key, funk_key(func))
         else
@@ -420,7 +513,6 @@
         // Now check if the method is a fetch and there's a fetched
         // key in this space, and if so call the handler.
     }
-    var forget_timer
     function unbind (key, method, funk) {
         if (key[key.length-1] !== '*')
             // Delete direct connection
@@ -468,7 +560,7 @@
             if (prefix === key.substr(0,prefix.length)     // If the prefix matches
                 && method === handler.method               // And it has the right method
                 && !seen[funk_keyr(handler.funk)]) {
-                handler.funk.statebus_binding = {key:key, method:method}
+                handler.funk.statebus_binding = {key:handler.prefix, method:method}
                 result.push(handler.funk)
                 seen[funk_keyr(handler.funk)] = true
             }
@@ -477,56 +569,111 @@
         return result
     }
 
-    function run_handler(funk, method, arg) {
-        // console.log("run_handler: ('"+(arg.key||arg)+"').on_"
-        //             +method+' = f^'+funk_key(funk))
-        // if (funk.statebus_name === undefined || funk.statebus_name === 'undefined')
-        //     console.log('WEIRDO FUNK', funk, typeof funk.statebus_name)
+    /* Regular expressions might be more efficient.
+    function bind_re () {
+        var r=''
+        for (var i=arguments.length-1; i>=0; i--) {
+            var s = (typeof arguments[i] == 'string' ? arguments[i] : arguments[i].source);
+            r += i==arguments.length-1 ? ('('+s+')') : ('|('+s+')')
+        }
+        return new RegExp(r)
+    }
+    function bindings_re (key, method) {
+    }
+    */
 
-        if (!funk.global_funk)  // \u26A1 
-            log('> a', method+"('"+(arg.key||arg)
-                +"') is triggering", funk_name(funk), funk_keyr(funk))
+    function run_handler(funck, method, arg) {
+        // console.log("run_handler: ('"+(arg.key||arg)+"').on_"
+        //             +method+' = f^'+funk_key(funck))
+        // if (funck.statebus_name === undefined || funck.statebus_name === 'undefined')
+        //     console.log('WEIRDO FUNCK', funck, typeof funck.statebus_name)
 
         if (method === 'to_fetch') {
             fetches_out[arg] = true
-            pending_fetches[arg] = funk
+            pending_fetches[arg] = funck
         }
 
         // When we first run a handler (e.g. a fetch or save), we wrap
         // it in a reactive() funk that calls it with its arg.  Then
-        // if it fetches or saves, it'll register a pub handler with
-        // this funk.
+        // if it fetches or saves, it'll register a .on_save handler
+        // with this funk.
 
-        // On_save events will be calling an already-wrapped funk, that
-        // has its own arg
-        if (funk.react) {
+        // Is it reactive already?  Let's distinguish it.
+        var funk = funck.react && funck,  // Funky!  So reactive!
+            func = !funk && funck         // Just a function, waiting for a rapper to show it the funk.
+
+        console.assert(funk || func)
+
+        if (false && !funck.global_funk) {
+            // \u26A1
+            var event = {'to_save':'save','on_save':'save.fire','to_fetch':'fetch',
+                         'to_delete':'delete','to_forget':'forget'}[method],
+                triggering = funk ? 're-running' : 'initiating'
+            log('> a', event + "('" + (arg.key||arg) + "') is " + triggering,
+                funk_name(funck), funk_keyr(funck))
+        }
+
+        if (funk) {
+            // Then this is an on_save event re-triggering an
+            // already-wrapped funk.  It has its own arg internally
+            // that it's calling itself with.  Let's tell it to
+            // re-trigger itself with that arg.
+
             console.assert(method === 'on_save')
             return funk.react()
+
+            // This might not work that great.
+            // Ex:
+            //
+            //    bus('foo').on_save = function (o) {...}
+            //    save({key: 'foo'})
+            //    save({key: 'foo'})
+            //    save({key: 'foo'})
+            //
+            // Does this spin up 3 reactive functions?  I think so.
+            // No, I think it does, but they all get forgotten once
+            // they run once, and then are garbage collected.
+            //
+            //    bus('foo*').on_save = function (o) {...}
+            //    save({key: 'foo1'})
+            //    save({key: 'foo2'})
+            //    save({key: 'foo1'})
+            //    save({key: 'foo3'})
+            //
+            // Does this work ok?  Yeah, I think so.
         }
+
+        // Alright then.  Let's wrap this func with some funk.
 
         // Fresh fetch/save/forget/delete handlers will just be
         // regular functions.  We'll store their arg and let them
         // re-run until they are done re-running.
         var f = reactive(function () {
-            var result = funk(arg)
+            var result = func(arg)
 
             // For fetch
             if (method === 'to_fetch' && result instanceof Object && !f.loading()) {
                 result.key = arg
                 // console.log('run_handler: pubbing', arg,
                 //             'after fetched RETURN from fetch('+arg+')')
-                announce(result)
+                save.fire(result, {to_fetch: true})
                 return result
             }
 
             // Save, forget and delete handlers stop re-running once
             // they've completed without anything loading.
             // ... with f.forget()
-            if ((method === 'to_save' || method === 'to_forget' || method === 'to_delete')
+            if ((method === 'to_save' // || method === 'on_save'
+                 || method === 'to_forget' || method === 'to_delete')
                 && !f.loading())
                 f.forget()
+
+            // Todo: I think it should forget .on_save handlers
+            // (above) if they were manually specified, but not the
+            // .on_save handlers that are created as reactive funks
         })
-        f.proxies_for = funk
+        f.proxies_for = func
+        f.arg = arg
 
         // on_fetch handlers stop re-running when the key is forgotten
         if (method === 'to_fetch') {
@@ -572,8 +719,6 @@
     //global_funk.fetched_keys = new Set()
 
     function reactive(func) {
-        var dis, args
-
         // You can call a funk directly:
         //
         //    f = reactive(func)
@@ -591,9 +736,8 @@
             console.assert(executing_funk === global_funk
                            || executing_funk !== funk, 'Recursive funk', funk.func)
 
-            // If you call this function with 
             if (funk.called_directly)
-                dis = this, args = arguments
+                funk.this = this, funk.args = arguments
 
             // Forget the keys from last time
             funk.forget()
@@ -602,7 +746,7 @@
             var last_executing_funk = executing_funk
             executing_funk = funk
             try {
-                var result = func.apply(dis, args)
+                var result = func.apply(funk.this, funk.args)
             } catch (e) {
                 if (e.message === 'Maximum call stack size exceeded') {
                     console.error(e)
@@ -619,7 +763,7 @@
                         // This is the best way to print errors in
                         // browsers, so that they get clickable line
                         // numbers
-                        var result = func.apply(dis, args)
+                        var result = func.apply(funk.this, funk.args)
                         // If code reaches here, there was an error
                         // triggering the error.  We should warn the
                         // programmer, and then probably move on, because
@@ -644,7 +788,7 @@
         funk.fetched_keys = new One_To_Many() // maps bus to keys
         funk.abortable_keys = []
         funk.depends_on = function (bus, key) {
-            this.fetched_keys.add(bus, key)
+            this.fetched_keys.add(bus.id, key)
         }
         funk.react = function () {
             var result
@@ -657,6 +801,14 @@
             return result
         }
         funk.forget = function () {
+            // Todo: This will bug out if an .on_save handler for a
+            // key also fetches that key once, and then doesn't fetch
+            // it again, because when it fetches the key, that key
+            // will end up being a fetched_key, and will then be
+            // forgotten as soon as the funk is re-run, and doesn't
+            // fetch it again, and the fact that it is defined as an
+            // .on_save .on_save handler won't matter anymore.
+
             if (funk.statebus_id === 'global funk') return
 
             //console.log('Funk.forget() on', funk_name(funk))
@@ -810,12 +962,57 @@
         // Then Not Equal.
         return false
     }
+    function sorta_diff(a, b) {
+        // Equal Primitives?
+        if (a === b
+            // But because NaN === NaN returns false:
+            || (isNaN(a) && isNaN(b)
+                // And because isNaN(undefined) returns true:
+                && typeof a === 'number' && typeof b === 'number'))
+            return null
+
+        // Equal Arrays?
+        var a_array = Array.isArray(a), b_array = Array.isArray(b)
+        if (a_array !== b_array) return ' = ' + JSON.stringify(b)
+        if (a_array) {
+            //if (a.length !== b.length) return ' = ' + JSON.stringify(b)
+            if (a.length === b.length-1
+                && !deep_equals(a[a.length], b[b.length])) {
+                return '.push(' +JSON.stringify(b[b.length]) + ')'
+            }
+            for (var i=0; i < a.length; i++) {
+                var tmp = sorta_diff (a[i], b[i])
+                if (tmp)
+                    return '['+i+'] = '+tmp
+            }
+            return null
+        }
+
+        // Equal Objects?
+        var a_obj = a && typeof a === 'object',  // Note: typeof null === 'object'
+            b_obj = b && typeof b === 'object'
+        if (a_obj !== b_obj) return ' = ' + JSON.stringify(b)
+        if (a_obj) {
+            for (var k in a) {
+                var tmp = sorta_diff(a[k], b[k])
+                if (tmp)
+                    return '.' + k + tmp
+            }
+            for (var k in b) {
+                if (!(k in a))
+                    return '.' + k +' = '+JSON.stringify(b[k])
+            }
+            return null
+        }
+
+        // Then Not Equal.
+        return ' = ' + JSON.stringify(b)
+    }
     function key_id(string) { return string.match(/\/?[^\/]+\/(\d+)/)[1] }
     function key_name(string) { return string.match(/\/?([^\/]+).*/)[1] }
-    function log () { if (bus.honk) console.log.apply(console, arguments) }
     function deps (key) {
         // First print out everything waiting for it to pub
-        var result = '('+key+') pubs into:'
+        var result = 'Deps: ('+key+') fires into:'
         var pubbers = bindings(key, 'on_save')
         if (pubbers.length === 0) result += ' nothing'
         for (var i=0; i<pubbers.length; i++)
@@ -823,18 +1020,36 @@
         return result
     }
 
+    function log () {
+        if (!bus.honk) return
+        if (typeof window === 'undefined') {
+            var indent = ''
+            for (var i=0; i<statelog_indent; i++) indent += '   '
+            console.log(indent+util.format.apply(null,arguments).replace(/\n/g,'\n'+indent))
+        } else
+            console.log.apply(console, arguments)
+    }
+
+    function statelog (color, icon, message) {
+        var old_honk = bus.honk
+        bus.honk = true
+        log(color + icon + ' ' + message + normal)
+        //log.apply(null, arguments)
+        bus.honk = old_honk
+    }
+
     // #######################################
     // ########### Browser Code ##############
     // #######################################
 
     // Make these private methods accessible
-    var api = ['cache backup_cache fetch save forget del announce dirty refetch',
+    var api = ['cache backup_cache fetch save forget del fire dirty refetch',
                'subspace handlers wildcard_handlers bindings',
                'run_handler bind unbind reactive',
                'funk_key funk_name funks key_id key_name id',
                'pending_fetches fetches_in loading_keys loading',
-               'global_funk',
-               'Set One_To_Many clone extend deep_map deep_equals log deps'
+               'global_funk busses',
+               'Set One_To_Many clone extend deep_map deep_equals sorta_diff log deps'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)
         bus[api[i]] = eval(api[i])

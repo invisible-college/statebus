@@ -1,9 +1,10 @@
 bus = require('../statebus.js')()
-
+util = require('util')
+bus.label = 'bus'
+statelog_indent++
 function log () {
-    var a = Array.prototype.slice.call(arguments)
-    a.unshift('   ')
-    console.log.apply(console, a)
+    var pre = '   '
+    console.log(pre+util.format.apply(null,arguments).replace('\n','\n'+pre))
 }
 function assert () { console.assert.apply(console, arguments) }
 
@@ -69,14 +70,14 @@ var tests = [
         // Save a foo
         setTimeout(function () {
             log('pubbing a new foo')
-            bus.announce({key: 'foo', count:count})       // Call 2
+            bus.save.fire({key: 'foo', count:count})       // Call 2
         }, 30)
 
         // Pub a bar, which the callback depends on
         setTimeout(function () {
             log('pubbing a new bar')
             assert(count === 2, '2!=' + count)
-               bus.announce({key: 'bar', count:count})       // Call 3
+            bus.save.fire({key: 'bar', count:count})       // Call 3
             log('pubbed the new bar')
         }, 50)
 
@@ -96,7 +97,7 @@ var tests = [
 
         // The moon responds in 30ms
         bus('moon').to_fetch =
-            function (k) { setTimeout(function () {bus.announce({key:k})},30) }
+            function (k) { setTimeout(function () {bus.save.fire({key:k})},30) }
         function cb (o) {
             count++
             var moon = fetch('hey over there')
@@ -134,10 +135,10 @@ var tests = [
         // Pub a foo
         setTimeout(function () {
             log('pubbing a few new foos')
-            bus.announce({key: 'foo', n:0})     // Skipped
-            bus.announce({key: 'foo', n:1})     // Skipped
-            bus.announce({key: 'foo', n:2})     // Skipped
-            bus.announce({key: 'foo', n:3})     // Call 2
+            bus.save.fire({key: 'foo', n:0})     // Skipped
+            bus.save.fire({key: 'foo', n:1})     // Skipped
+            bus.save.fire({key: 'foo', n:2})     // Skipped
+            bus.save.fire({key: 'foo', n:3})     // Call 2
             log("ok, now let's see what happens.")
         }, 30)
 
@@ -156,12 +157,12 @@ var tests = [
     function identity (next) {
         var key = 'kooder'
         var count = 0
-        function fire () { bus.announce({key: 'kooder', count: count}) }
+        function fire () { bus.save.fire({key: 'kooder', count: count}) }
         bus(key).to_fetch = function () { setTimeout(fire, 10) }
         function cb() {
             count++
             log('cb called', count, 'times')
-            bus.announce(fetch('new'))
+            bus.save.fire(fetch('new'))
         }
         fetch(key, cb)
 
@@ -182,7 +183,7 @@ var tests = [
     function forgetting (next) {
         var key = 'kooder'
         var count = 0
-        function fire () { log('firing!'); bus.announce({key: key, count: count}) }
+        function fire () { log('firing!'); bus.save.fire({key: key, count: count}) }
         bus(key).to_fetch = function () { setTimeout(fire, 10) }
 
         function cb (o) {
@@ -217,7 +218,7 @@ var tests = [
         var obj = fetch('outer')
         log('we got', obj)
         assert(obj.inner.key === 'inner')
-        bus.announce({key: 'inner', c: 1})
+        bus.save.fire({key: 'inner', c: 1})
         assert(obj.inner.c === 1)
 
         // Next
@@ -242,20 +243,20 @@ var tests = [
         log('we got', obj)
 
         setTimeout(function () {
-            fetch('big', function (o) {
+            bus.fetch('big', function (o) {
                 nothing = 5
                 log('About to update small')
-                bus.announce({key: 'small', something: nothing})
+                bus.save.fire({key: 'small', something: nothing})
                 log('We did it.')
             })}, 10)
 
         setTimeout(function () {
-            fetch('big', function ruskie (o) {
+            bus.fetch('big', function ruskie (o) {
                 nothing = 50
                 var small = fetch('small')
                 log()
                 log('Second try.  Small starts as', small)
-                bus.announce({key: 'small', something: nothing})
+                bus.save.fire({key: 'small', something: nothing})
                 log('Now it is', fetch('small'))
             })}, 15)
 
@@ -269,17 +270,17 @@ var tests = [
         }, 50)
     },
 
-    function rollback_announce (next) {
+    function rollback_savefire (next) {
         var count = 0
         var error = false
         function wait () { setTimeout(function () {
-            log('Announcebing wait')
-            bus.announce({key: 'wait', count: count})
+            log('Firing wait')
+            bus.save.fire({key: 'wait', count: count})
         }, 60) }
         bus('wait').to_fetch = wait
 
         // Initialize
-        bus.announce({key: 'undo me', state: 'start'})
+        bus.save.fire({key: 'undo me', state: 'start'})
         
         // Now start the reactive function
         bus(function () {
@@ -289,7 +290,7 @@ var tests = [
             var wait = fetch('wait')
 
             // Save some middling state
-            bus.announce({key: 'undo me', state: 'progressing'})
+            bus.save.fire({key: 'undo me', state: 'progressing'})
 
             if (count === 1 && !bus.loading()) {
                 log('### Error! We should be loading!')
@@ -325,7 +326,7 @@ var tests = [
 
     function rollback_del (next) {
         bus('wait forever').to_fetch = function () {} // shooting blanks
-        bus.announce({key: 'kill me', alive: true})
+        bus.save.fire({key: 'kill me', alive: true})
 
         // First do a del that will roll back
         bus(function () {
@@ -348,8 +349,8 @@ var tests = [
     function rollback_save (next) {
         var saves = []
         var done = false
-        bus('candy').to_save = function (o) {saves.push(o); bus.announce(o)}
-        bus.announce({key: 'candy', flavor: 'lemon'})
+        bus('candy').to_save = function (o) {saves.push(o); bus.save.fire(o)}
+        bus.save.fire({key: 'candy', flavor: 'lemon'})
 
         log('Trying some rollbacks starting with', bus.cache['candy'])
 
@@ -395,9 +396,9 @@ var tests = [
         // Make sure a function that called loading() gets re-run even
         // if the return from a fetch didn't actually change state
 
-        // First define a delayed announce
+        // First define a delayed save.fire
         bus('wait a sec').to_fetch = function (k) {
-            setTimeout(function () { bus.announce({key: k}) }, 80)
+            setTimeout(function () { bus.save.fire({key: k}) }, 80)
         }
 
         // Now run the test
@@ -427,6 +428,7 @@ var tests = [
             console.warn('#### Yo!  You need to run "npm install sockjs websocket"')
             process.exit()
         }
+        log('Ok good, we have the goods.')
         next()
     },
 
@@ -434,25 +436,42 @@ var tests = [
         function User (client, conn) {
             client.serves_auth(conn, s)
             client.route_defaults_to (s)
+            s.userbus = client
         }
 
         s = require('../server.js')()
-        s.serve({port: 3948, client_definition: User})
-        s.announce({key: '/far', away:'is this'})
+        s.label = 's'
+        //s.honk = true
+        log('Saving /far on server')
+        s.save.fire({key: '/far', away:'is this'})
+        s.serve({port: 3948, client_definition: User, file_store: false})
+
         c = require('../server.js')()
+        c.label = 'c'
         c.ws_client('/*', 'state://localhost:3948')
-        c.fetch('/far', function (o) {
-            if (o.away === 'is this') {
-                log('We got '+o.key+' from the server!')
-                // log('Because handlers is\n', c.handlers.hash,
-                //     '\n....and wildcards is\n', c.wildcard_handlers)
-                setTimeout(function () {next()})
-            }
-        })
+        setTimeout(function () {
+            log('Fetching /far on client')
+            c.fetch('/far', function (o) {
+                c.fetch('/far')
+                if (o.away === 'is this') {
+                    log('We got '+o.key+' from the server!')
+                    // log('Because handlers is\n', c.handlers.hash,
+                    //     '\n....and wildcards is\n', c.wildcard_handlers)
+                    setTimeout(function () {next()})
+                }
+            })
+        }, 300)
+
+        var matches = new Set()
+        for (var k in s.busses) {
+            log("::::", k, s.busses[k].toString())
+            console.assert(!matches.has(k), 'duplicate bus id', k)
+            matches.add(k)
+        }
     },
 
     function login (next) {
-        s.announce({key: '/users',
+        s.save.fire({key: '/users',
                all: [ {  key: '/user/1',
                          name: 'mike',
                          email: 'toomim@gmail.com',
@@ -568,12 +587,14 @@ var tests = [
               && !user3.email),
 
              function () {
-                 log('Logging in as j')
+                 !tmp1 && log('Logging in as j')
                  setTimeout(function () {
                      if (tmp1) return
                      tmp1 = true
                      log('Firing the actual j login')
+                     s.userbus.honk = true
                      u.login_as = {name: 'j', pass: 'yeah'}; c.save(u)
+                     log('We just logged in as j. now user is:', u.user.name)
                  }, 1000)
              }],
 
@@ -594,16 +615,16 @@ var tests = [
              function () { setTimeout(function () {next()}) }]
         ]}
 
-        c('/current_user').to_save = function (o) {
+        c('/current_user').on_save = function (o) {
             //if (o.user && o.user.name === 'j') {
-                console.log(s.deps('/current_user'))
-                console.log(s.deps('/user/2'))
+                log(s.userbus.deps('/current_user'))
+                log(s.userbus.deps('/user/2'))
             //}
         }
-        c('/user/*').to_save = function (o) {
+        c('/user/*').on_save = function (o) {
             log('-> Got new', o.key, o.email ? 'with email' : '')
         }
-        c('/current_user').to_save = function (o) {
+        c('/current_user').on_save = function (o) {
             log('-> Got new /current_user')
         }
         c(function () {
@@ -614,7 +635,7 @@ var tests = [
             var s = states()
 
             if (phase===1)
-                log('\n',u.user, '\n', user1,'\n', user2,'\n', user3)
+                log('\n\tcurr u:\t',u.user, '\n\t1:\t', user1,'\n\t2:\t', user2,'\n\t3:\t', user3)
 
             if (s[phase + 1][0]) {
                 phase++
