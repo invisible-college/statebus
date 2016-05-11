@@ -283,6 +283,49 @@ var tests = [
         }, 50)
     },
 
+    function some_handlers_suicide (next) {
+        // These handlers stop reacting after they successfully complete:
+        // 
+        //   .on_save
+        //   .to_save
+        //   .to_forget
+        //   .to_delete
+        //
+        // Ok, that's everyting except for a .to_fetch handler, which
+        // runs until its key has been forget()ed.
+
+        // XXX todo
+    },
+
+    function only_one (next) {
+        bus('only_one/*').on_fetch = function (k) {
+            var id = k[k.length-1]
+            return {selected: bus.fetch('selector').choice === k}
+        }
+
+        console.assert(!fetch('only_one/1').selected)
+        console.assert(!fetch('only_one/2').selected)
+        console.assert(!fetch('only_one/3').selected)
+
+        save({key: 'selector', choice: 1})
+
+        console.assert( fetch('only_one/1').selected)
+        console.assert(!fetch('only_one/2').selected)
+        console.assert(!fetch('only_one/3').selected)
+
+        save({key: 'selector', choice: 2})
+
+        console.assert(!fetch('only_one/1').selected)
+        console.assert( fetch('only_one/2').selected)
+        console.assert(!fetch('only_one/3').selected)
+
+        save({key: 'selector', choice: 3})
+
+        console.assert(!fetch('only_one/1').selected)
+        console.assert(!fetch('only_one/2').selected)
+        console.assert( fetch('only_one/3').selected)
+    },
+
     function rollback_savefire (next) {
         var count = 0
         var error = false
