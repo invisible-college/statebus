@@ -295,35 +295,44 @@ var tests = [
         // runs until its key has been forget()ed.
 
         // XXX todo
+        next()
     },
 
     function only_one (next) {
-        bus('only_one/*').on_fetch = function (k) {
-            var id = k[k.length-1]
-            return {selected: bus.fetch('selector').choice === k}
+        bus('only_one/*').to_fetch = function (k) {
+            var id = Number(k[k.length-1])
+            //var tmp = {selected: bus.fetch('selector').choice == id}
+            return {selected: bus.fetch('selector').choice == id}
         }
 
-        console.assert(!fetch('only_one/1').selected)
-        console.assert(!fetch('only_one/2').selected)
-        console.assert(!fetch('only_one/3').selected)
+        console.assert(!bus.fetch('only_one/1').selected)
+        console.assert(!bus.fetch('only_one/2').selected)
+        console.assert(!bus.fetch('only_one/3').selected)
 
-        save({key: 'selector', choice: 1})
+        bus.save({key: 'selector', choice: 1})
 
-        console.assert( fetch('only_one/1').selected)
-        console.assert(!fetch('only_one/2').selected)
-        console.assert(!fetch('only_one/3').selected)
+        setTimeout(function () {
+            console.assert( bus.fetch('only_one/1').selected)
+            console.assert(!bus.fetch('only_one/2').selected)
+            console.assert(!bus.fetch('only_one/3').selected)
 
-        save({key: 'selector', choice: 2})
+            bus.save({key: 'selector', choice: 2})
+        }, 10)
 
-        console.assert(!fetch('only_one/1').selected)
-        console.assert( fetch('only_one/2').selected)
-        console.assert(!fetch('only_one/3').selected)
+        setTimeout(function () {
+            console.assert(!bus.fetch('only_one/1').selected)
+            console.assert( bus.fetch('only_one/2').selected)
+            console.assert(!bus.fetch('only_one/3').selected)
 
-        save({key: 'selector', choice: 3})
+            bus.save({key: 'selector', choice: 3})
+        }, 20)
 
-        console.assert(!fetch('only_one/1').selected)
-        console.assert(!fetch('only_one/2').selected)
-        console.assert( fetch('only_one/3').selected)
+        setTimeout(function () {
+            console.assert(!bus.fetch('only_one/1').selected)
+            console.assert(!bus.fetch('only_one/2').selected)
+            console.assert( bus.fetch('only_one/3').selected)
+            next()
+        }, 30)
     },
 
     function rollback_savefire (next) {
