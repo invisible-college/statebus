@@ -10,7 +10,7 @@
     // Public API
 
     function fetch (key, callback) {
-        log('fetch:', key)
+        // log('fetch:', key)
         key = key.key || key    // You can pass in an object instead of key
 
         if (typeof key !== 'string')
@@ -140,14 +140,16 @@
             if (object.key && !changed(object)) {
                 color = grey
                 icon = 'x'
-                //log('Boring fire:', object.key)
+                statelog(color, icon, message)
                 return
             } else
                 color = red, icon = '•'
 
-            if (opts.to_fetch)
-                color = green, icon = '^',
-            message = (opts.m) || 'Fetched ' + bus + "('"+object.key+"')"
+            if (opts.to_fetch) {
+                color = green
+                icon = '^'
+                message = (opts.m) || 'Fetched ' + bus + "('"+object.key+"')"
+            }
 
             statelog(color, icon, message)
         }
@@ -398,7 +400,7 @@
     var dirty_keys = new Set()
     var dirty_sweeper = null
     function dirty (key) {
-        statelog(brown, '*', "dirty('"+key+"')")
+        statelog(brown, '*', bus + ".dirty('"+key+"')")
         dirty_keys.add(key)
 
         dirty_sweeper = dirty_sweeper || setTimeout(function () {
@@ -468,6 +470,7 @@
         char_limit = char_limit || 30
 
         var arg = f.react ? (f.args && f.args[0]) : ''
+        arg = f.react ? (JSON.stringify(f.arg)||'').substring(0,30) : ''
         f = f.proxies_for || f
         var f_string = 'function ' + (f.name||'') + '(' + (arg||'') + ') {...}'
         // Or: f.toString().substr(0,char_limit) + '...'
@@ -545,10 +548,10 @@
         var exacts = handlers.get(method + ' ' + key)
         for (var i=0; i < exacts.length; i++) {
             var f = funks[exacts[i]]
-            if (!seen[funk_keyr(f)]) {
+            if (!seen[funk_key(f)]) {
                 f.statebus_binding = {key:key, method:method}
                 result.push(f)
-                seen[funk_keyr(f)] = true
+                seen[funk_key(f)] = true
             }
         }
 
@@ -559,10 +562,10 @@
             var prefix = handler.prefix.slice(0, -1)       // Cut off the *
             if (prefix === key.substr(0,prefix.length)     // If the prefix matches
                 && method === handler.method               // And it has the right method
-                && !seen[funk_keyr(handler.funk)]) {
+                && !seen[funk_key(handler.funk)]) {
                 handler.funk.statebus_binding = {key:handler.prefix, method:method}
                 result.push(handler.funk)
-                seen[funk_keyr(handler.funk)] = true
+                seen[funk_key(handler.funk)] = true
             }
         }
 
@@ -612,6 +615,8 @@
             log('> a', event + "('" + (arg.key||arg) + "') is " + triggering,
                 funk_name(funck), funk_keyr(funck))
         }
+
+        //console.log('     run_handler:  funk', funk_name(funk))
 
         if (funk) {
             // Then this is an on_save event re-triggering an
@@ -663,7 +668,7 @@
             // Save, forget and delete handlers stop re-running once
             // they've completed without anything loading.
             // ... with f.forget()
-            if ((method === 'to_save' // || method === 'on_save'
+            if ((method === 'to_save' || method === 'on_save'
                  || method === 'to_forget' || method === 'to_delete')
                 && !f.loading())
                 f.forget()

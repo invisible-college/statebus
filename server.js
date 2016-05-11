@@ -702,8 +702,6 @@ var extra_methods = {
         }
 
         user('/current_user').to_save = function (o) {
-            user.log('current_user: saving', o.key)
-
             if (o.client && !conn.client) {
                 // Set the client
                 conn.client = o.client
@@ -730,7 +728,7 @@ var extra_methods = {
                         if (u) {
                             // Success!
                             // Associate this user with this session
-                            user.log('Logging the user in!', u)
+                            // user.log('Logging the user in!', u)
 
                             var clients     = master.fetch('logged_in_clients')
                             var connections = master.fetch('connections')

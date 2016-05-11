@@ -57,33 +57,46 @@ var tests = [
     // Callbacks are reactive
     function fetch_with_callback (next) {
         var count = 0
+        function bbs() {
+            return bus.bindings('bar', 'on_save').map(
+                function (f){return bus.funk_name(f)})
+        }
         function cb (o) {
             count++
+            log(bbs().length + ' bindings in cb before fetch')
             var bar = fetch('bar')
             log('cb called', count, 'times', 'bar is', bar, 'foo is', o)
+            log(bbs().length + ' bindings in cb after fetch')
         }
+
+        log(bbs().length+ ' bindings to start')
 
         // Fetch a foo
         fetch('foo', cb)                             // Call 1
         assert(count === 1, '1!=' + count)
 
+        log(bbs().length + ' bindings after first fetch')
+
         // Save a foo
         setTimeout(function () {
-            log('pubbing a new foo')
+            log('firing a new foo')
+            log(bbs().length + ' bindings')
             bus.save.fire({key: 'foo', count:count})       // Call 2
         }, 30)
 
         // Pub a bar, which the callback depends on
         setTimeout(function () {
-            log('pubbing a new bar')
+            log('firing a new bar')
+            log(bbs().length+ ' bindings')
             assert(count === 2, '2!=' + count)
             bus.save.fire({key: 'bar', count:count})       // Call 3
-            log('pubbed the new bar')
+            log('fired the new bar')
+            //log(bus.bindings('bar', 'on_save'))
         }, 50)
 
         // Next
         setTimeout(function () {
-            assert(count === 3, '3!=' + count)
+            assert(count === 2, '2!=' + count)
             bus.forget('foo', cb)
             //bus.forget('bar', cb)
             next()
@@ -434,6 +447,7 @@ var tests = [
 
     function setup_server (next) {
         function User (client, conn) {
+            user0 = client
             client.serves_auth(conn, s)
             client.route_defaults_to (s)
             s.userbus = client
@@ -566,6 +580,7 @@ var tests = [
         var tmp1
 
         var states = function () { return [
+            // Phase 0
             [true,
              function () {
                  log('Logging in as mike')
@@ -573,6 +588,7 @@ var tests = [
                  u.login_as = {name: 'mike', pass: 'yeah'}; c.save(u)
              }],
 
+            // Phase 1
             // Logged in as mike
             [(u.logged_in
               && u.user.name === 'mike'
@@ -595,9 +611,10 @@ var tests = [
                      s.userbus.honk = true
                      u.login_as = {name: 'j', pass: 'yeah'}; c.save(u)
                      log('We just logged in as j. now user is:', u.user.name)
-                 }, 1000)
+                 }, 100)
              }],
 
+            // Phase 2
             // Logged in as j
             [(u.logged_in
               && u.user.name === 'j'
@@ -612,39 +629,44 @@ var tests = [
               && !user3.email),
 
              // That's all, Doc
-             function () { setTimeout(function () {next()}) }]
+             function () { log("That's all, Doc."); setTimeout(function () {next()}) }]
         ]}
 
         c('/current_user').on_save = function (o) {
             //if (o.user && o.user.name === 'j') {
-                log(s.userbus.deps('/current_user'))
-                log(s.userbus.deps('/user/2'))
+                // log(s.userbus.deps('/current_user'))
+                // log(s.userbus.deps('/user/2'))
             //}
         }
         c('/user/*').on_save = function (o) {
-            log('-> Got new', o.key, o.email ? 'with email' : '')
+            //log('-> Got new', o.key, o.email ? 'with email' : '')
         }
         c('/current_user').on_save = function (o) {
-            log('-> Got new /current_user')
+            //log('-> Got new /current_user')
         }
-        c(function () {
+        c(function loop () {
             u = c.fetch('/current_user')
             user1 = c.fetch('/user/1')
             user2 = c.fetch('/user/2')
             user3 = c.fetch('/user/3')
-            var s = states()
+            var st = states()
 
             if (phase===1)
                 log('\n\tcurr u:\t',u.user, '\n\t1:\t', user1,'\n\t2:\t', user2,'\n\t3:\t', user3)
 
-            if (s[phase + 1][0]) {
+            if (phase >= st.length) {
+                loop.forget()
+                return
+            }
+
+            if (phase + 1 < st.length && st[phase + 1][0]) {
                 phase++
                 log()
                 log('## Shifting to phase', phase)
             }
             
             //log('Phase', phase, 'logged_in:', u.logged_in && u.user.name)
-            s[phase][1]()
+            st[phase][1]()
         })
     },
 
@@ -672,7 +694,7 @@ var tests = [
                 bus.dirty('user')
             }
 
-
+        log("Eh, nevermind.")
         next()
     }
 ]
