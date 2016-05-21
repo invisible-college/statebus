@@ -39,7 +39,7 @@
         // never explicity fetched those keys.  But we don't need to
         // fetch them now cause we already have them.
         if (!fetches_out[key])
-            bus.route(key, 'to_fetch', key)
+            var num_fetchers = bus.route(key, 'to_fetch', key)
 
         // Now there might be a new value pubbed onto this bus.
         // Or there might be a pending fetch.
@@ -66,8 +66,9 @@
 
         // Otherwise, we want to make sure that a pub gets called on
         // the handler.  If there's a pending fetch, then it'll get
-        // called later.  Otherwise, let's call it now.
-        else if (!pending_fetches[key]) {
+        // called later.  If there was a to_fetch, then it already got
+        // called.  Otherwise, let's call it now.
+        else if (!pending_fetches[key] && num_fetchers === 0) {
             // TODO: my intuition suggests that we might prefer to
             // delay this .on_save getting called in a
             // setTimeout(f,0), to be consistent with other calls to
@@ -78,19 +79,24 @@
 
     }
     var pending_fetches = {}
-    var fetches_out = {}                // Maps `key' to `true' iff we've fetched `key'
+    var fetches_out = {}                // Maps `key' to `func' iff we've fetched `key'
     var fetches_in = new One_To_Many()  // Maps `key' to `pub_funcs' subscribed to our key
 
     var red = '\x1b[31m', normal = '\x1b[0m', grey = '\x1b[0;38;5;245m',
         green = '\x1b[0;38;5;46m', brown = '\x1b[0;38;5;130m'
     var currently_saving
+    function add_diff_msg (message, obj) {
+        var diff = sorta_diff(backup_cache[obj.key], obj)
+        if (diff) {
+            var end_col = message.length + 2 + statelog_indent * 3
+            for (var i=0; i<40-end_col; i++) message += ' '
+            message += diff.substring(0,80)
+        }
+        return message
+    }
     function save_msg (obj, opts, meth) {
         var message = (opts && opts.m) || bus + "."+meth+"('"+obj.key+"')"
-        var end_col = message.length + 2 + statelog_indent * 3
-        for (var i=0; i<40-end_col; i++) message += ' '
-        var diff = sorta_diff(backup_cache[obj.key], obj)
-        if (diff) message += diff.substring(0,80)
-        return message
+        return add_diff_msg(message, obj)
     }
     function save (obj, opts) {
         if ((executing_funk !== global_funk) && executing_funk.loading()) {
@@ -133,22 +139,25 @@
         if (currently_saving === object.key &&
             !(object.key && !changed(object))) {
             statelog_indent--
-            statelog(red, '•', '')
+            statelog(red, '•', '↵')
             statelog_indent++
         } else {
             // Ignore if nothing happened
             if (object.key && !changed(object)) {
                 color = grey
                 icon = 'x'
+                if (opts.to_fetch)
+                    message = (opts.m) || 'Fetched ' + bus + "('"+object.key+"')"
                 statelog(color, icon, message)
                 return
-            } else
-                color = red, icon = '•'
+            }
 
+            color = red, icon = '•'
             if (opts.to_fetch) {
                 color = green
                 icon = '^'
-                message = (opts.m) || 'Fetched ' + bus + "('"+object.key+"')"
+                message = add_diff_msg((opts.m)||'Fetched '+bus+"('"+object.key+"')",
+                                       object)
             }
 
             statelog(color, icon, message)
@@ -170,7 +179,7 @@
 
             key_publisher = key_publisher ||
                 setTimeout(function () {
-                    //console.log('fire:', object.key+ '. Listeners on these keys need update:', keys)
+                    log('firer:', object.key+ '. Listeners on these keys need update:', publishable_keys)
 
                     // Note: this can be made more efficient.  There may
                     // be duplicate handler calls in here, because a
@@ -189,8 +198,8 @@
                     // while.
                     var seen = {}
                     for (var i=0; i<publishable_keys.length; i++) {
-                        // log('pub: In loop', i + ', updating listeners on \''
-                        //     + publishable_keys[i] + "'")
+                        log('firer: In loop', i + ', updating listeners on \''
+                            + publishable_keys[i] + "'")
                         var key = publishable_keys[i]
                         if (!seen[key]) {
                             bus.route(key, 'on_save', cache[key])
@@ -417,8 +426,9 @@
             for (var i=0; i<keys.length; i++)
                 // If anybody is fetching this key
                 if (fetches_in.has_any(keys[i])) {
-                    // log('dirty_sweeper: routing a fetch for', key)
-                    bus.route(key, 'to_fetch', key)
+                    log('dirty_sweeper: re-running a to_fetch for', key)
+                    fetches_out[key].react()
+                    //bus.route(key, 'to_fetch', key)
                 }
         }, 0)
     }
@@ -466,7 +476,7 @@
         while (funk.proxies_for) funk = funk.proxies_for
         return funk_key(funk)
     }
-    function funk_name2 (f, char_limit) {
+    function funk_name (f, char_limit) {
         char_limit = char_limit || 30
 
         var arg = f.react ? (f.args && f.args[0]) : ''
@@ -488,18 +498,6 @@
             return 'UNKNOWN Funky Definition!!!... ???'
         }
     }
-    function funk_name1 (f, char_limit) {
-        char_limit = char_limit || 30
-        if (f.proxies_for) f = f.proxies_for
-        if (f.statebus_binding)
-            return ("('"+f.statebus_binding.key+"')."
-                    + f.statebus_binding.method
-                    //+ f.toString().substr(0,char_limit))
-                    + (f.name? ' = function '+f.name+'() {...}' : ''))
-        else
-            return f.toString().substr(0,char_limit) + '...'
-    }
-    var funk_name = funk_name2
     function bind (key, method, func) {
         if (key[key.length-1] !== '*')
             handlers.add(method + ' ' + key, funk_key(func))
@@ -591,11 +589,6 @@
         // if (funck.statebus_name === undefined || funck.statebus_name === 'undefined')
         //     console.log('WEIRDO FUNCK', funck, typeof funck.statebus_name)
 
-        if (method === 'to_fetch') {
-            fetches_out[arg] = true
-            pending_fetches[arg] = funck
-        }
-
         // When we first run a handler (e.g. a fetch or save), we wrap
         // it in a reactive() funk that calls it with its arg.  Then
         // if it fetches or saves, it'll register a .on_save handler
@@ -612,8 +605,8 @@
             var event = {'to_save':'save','on_save':'save.fire','to_fetch':'fetch',
                          'to_delete':'delete','to_forget':'forget'}[method],
                 triggering = funk ? 're-running' : 'initiating'
-            log('> a', event + "('" + (arg.key||arg) + "') is " + triggering,
-                funk_name(funck), funk_keyr(funck))
+            console.log('   > a', bus+'.'+event + "('" + (arg.key||arg) + "') is " + triggering
+                +'\n     ' + funk_name(funck))
         }
 
         //console.log('     run_handler:  funk', funk_name(funk))
@@ -668,9 +661,7 @@
             // Save, forget and delete handlers stop re-running once
             // they've completed without anything loading.
             // ... with f.forget()
-            if ((method === 'to_save' || method === 'on_save'
-                 || method === 'to_forget' || method === 'to_delete')
-                && !f.loading())
+            if (method !== 'to_fetch' && !f.loading())
                 f.forget()
 
             // Todo: I think it should forget .on_save handlers
@@ -688,6 +679,14 @@
                 unbind(key, 'to_forget', handler_done)
             }
             bind(key, 'to_forget', handler_done)
+
+            // Check if it's doubled-up
+            if (fetches_out[key])
+                console.error('Two .to_fetch functions are running on the same key',
+                              key+'!', funk_name(funck), funk_name(fetches_out[key]))
+            
+            fetches_out[arg] = f       // Record active to_fetch handler
+            pending_fetches[arg] = f   // Record that the fetch is pending
         }
 
         return f()
@@ -695,6 +694,7 @@
 
     // route() can be overridden
     bus.route = function (key, method, arg) {
+        log('route:', bus, key, method, arg)
         var funcs = bus.bindings(key, method)
         // log('route: got bindings',
         //     funcs.map(function (f) {return funk_key(f)+':'+funk_keyr(f)}))
@@ -1043,6 +1043,10 @@
         bus.honk = old_honk
     }
 
+    function kp () {
+        log('key_publisher:', key_publisher, 'publishable_keys:', publishable_keys)
+    }
+
     // #######################################
     // ########### Browser Code ##############
     // #######################################
@@ -1051,7 +1055,7 @@
     var api = ['cache backup_cache fetch save forget del fire dirty refetch',
                'subspace handlers wildcard_handlers bindings',
                'run_handler bind unbind reactive',
-               'funk_key funk_name funks key_id key_name id',
+               'funk_key funk_name funks key_id key_name id kp',
                'pending_fetches fetches_in loading_keys loading',
                'global_funk busses',
                'Set One_To_Many clone extend deep_map deep_equals sorta_diff log deps'

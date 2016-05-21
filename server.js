@@ -125,12 +125,16 @@ var extra_methods = {
                 }
 
                 switch (message.method) {
-                case 'fetch':  our_fetches_in[arg] = true; break
-                case 'forget': delete our_fetches_in[arg]; break
-                case 'delete': message.method = 'del';     break
+                case 'fetch' : our_fetches_in[arg] = true
+                               user.fetch(arg, sockjs_pubber)  ; break
+                case 'forget': delete our_fetches_in[arg]
+                               user.forget(arg, sockjs_pubber) ; break
+                case 'delete': message.method = 'del'
+                               user.delete(arg)                ; break
+                case 'save'  : user.save(arg)                  ; break
                 }
 
-                user[message.method](arg, sockjs_pubber)
+                //user[message.method](arg, sockjs_pubber)
 
                 // validate that our fetches_in are all in the bus
                 for (var key in our_fetches_in)
@@ -198,19 +202,23 @@ var extra_methods = {
             else
                 setTimeout(flush_outbox, 400)
         }
-        bus(prefix).to_save   = function (obj) { send({method: 'save', obj: obj})
-                                                 if (global.ignore_flashbacks)
-                                                     recent_saves.push(JSON.stringify(obj))
-                                                 if (recent_saves.length > 100) {
-                                                     var extra = recent_saves.length - 100
-                                                     recent_saves.splice(0, extra)
-                                                 }
-                                               }
-        bus(prefix).to_fetch  = function (key) { send({method: 'fetch', key: key}),
-                                                 fetched_keys.add(key) }
-        bus(prefix).to_forget = function (key) { send({method: 'forget', key: key}),
-                                                 fetched_keys.delete(key) }
-        bus(prefix).to_delete = function (key) { send({method: 'delete', key: key}) }
+        bus(prefix).to_save
+            = function ws_save   (obj) { send({method: 'save', obj: obj})
+                                         if (global.ignore_flashbacks)
+                                             recent_saves.push(JSON.stringify(obj))
+                                         if (recent_saves.length > 100) {
+                                             var extra = recent_saves.length - 100
+                                             recent_saves.splice(0, extra)
+                                         }
+                                       }
+        bus(prefix).to_fetch
+            = function ws_fetch  (key) { send({method: 'fetch', key: key}),
+                                         fetched_keys.add(key) }
+        bus(prefix).to_forget
+            = function ws_forget (key) { send({method: 'forget', key: key}),
+                                         fetched_keys.delete(key) }
+        bus(prefix).to_delete
+            = function ws_delete (key) { send({method: 'delete', key: key}) }
 
         function connect () {
             console.log('[ ] trying to open')
@@ -784,10 +792,6 @@ var extra_methods = {
         }
         user('/user/*').to_fetch = function filtered_user (k) {
             var c = user.fetch('/current_user')
-            if (k === '/user/1') {
-                user.log('#### Ok we made /user/1 fetch /current_user')
-            }
-            user.log('Computing new user for', k, 'when we are', c.user && c.user.key)
             return user_obj(k, c.logged_in && c.user.key === k)
         }
         user('/users').to_fetch = function () {}

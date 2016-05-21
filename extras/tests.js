@@ -73,18 +73,18 @@ var tests = [
 
         // Fetch a foo
         fetch('foo', cb)                             // Call 1
-        assert(count === 1, '1!=' + count)
 
-        log(bbs().length + ' bindings after first fetch')
-
-        // Save a foo
+        // Fire a foo
         setTimeout(function () {
+            assert(count === 1, '1!=' + count)
+            log(bbs().length + ' bindings after first fetch')
+
             log('firing a new foo')
             log(bbs().length + ' bindings')
             bus.save.fire({key: 'foo', count:count})       // Call 2
         }, 30)
 
-        // Pub a bar, which the callback depends on
+        // Fire a bar, which the callback depends on
         setTimeout(function () {
             log('firing a new bar')
             log(bbs().length+ ' bindings')
@@ -231,7 +231,7 @@ var tests = [
         var obj = fetch('outer')
         log('we got', obj)
         assert(obj.inner.key === 'inner')
-        bus.save.fire({key: 'inner', c: 1})
+        bus.save({key: 'inner', c: 1})
         assert(obj.inner.c === 1)
 
         // Next
@@ -300,37 +300,36 @@ var tests = [
 
     function only_one (next) {
         bus('only_one/*').to_fetch = function (k) {
-            var id = Number(k[k.length-1])
-            //var tmp = {selected: bus.fetch('selector').choice == id}
+            var id = k[k.length-1]
             return {selected: bus.fetch('selector').choice == id}
         }
 
-        console.assert(!bus.fetch('only_one/1').selected)
-        console.assert(!bus.fetch('only_one/2').selected)
-        console.assert(!bus.fetch('only_one/3').selected)
+        assert(!bus.fetch('only_one/1').selected)
+        assert(!bus.fetch('only_one/2').selected)
+        assert(!bus.fetch('only_one/3').selected)
 
         bus.save({key: 'selector', choice: 1})
 
         setTimeout(function () {
-            console.assert( bus.fetch('only_one/1').selected)
-            console.assert(!bus.fetch('only_one/2').selected)
-            console.assert(!bus.fetch('only_one/3').selected)
+            assert( bus.fetch('only_one/1').selected)
+            assert(!bus.fetch('only_one/2').selected)
+            assert(!bus.fetch('only_one/3').selected)
 
             bus.save({key: 'selector', choice: 2})
         }, 10)
 
         setTimeout(function () {
-            console.assert(!bus.fetch('only_one/1').selected)
-            console.assert( bus.fetch('only_one/2').selected)
-            console.assert(!bus.fetch('only_one/3').selected)
+            assert(!bus.fetch('only_one/1').selected)
+            assert( bus.fetch('only_one/2').selected)
+            assert(!bus.fetch('only_one/3').selected)
 
             bus.save({key: 'selector', choice: 3})
         }, 20)
 
         setTimeout(function () {
-            console.assert(!bus.fetch('only_one/1').selected)
-            console.assert(!bus.fetch('only_one/2').selected)
-            console.assert( bus.fetch('only_one/3').selected)
+            assert(!bus.fetch('only_one/1').selected)
+            assert(!bus.fetch('only_one/2').selected)
+            assert( bus.fetch('only_one/3').selected)
             next()
         }, 30)
     },
@@ -338,10 +337,13 @@ var tests = [
     function rollback_savefire (next) {
         var count = 0
         var error = false
+        var phase = 0
+        
         function wait () { setTimeout(function () {
+            assert(phase++ === 1)
             log('Firing wait')
             bus.save.fire({key: 'wait', count: count})
-        }, 60) }
+        }, 50) }
         bus('wait').to_fetch = wait
 
         // Initialize
@@ -351,6 +353,7 @@ var tests = [
         bus(function () {
             log('Reaction', ++count, 'starting with state',
                 fetch('undo me').state, 'and loading =', bus.loading())
+
             // Fetch something that we have to wait for
             var wait = fetch('wait')
 
@@ -370,23 +373,26 @@ var tests = [
         log('After first reaction, the state is', state)
         assert(state === 'start', 'The state did not roll back.')
 
-        // The state should still be start until 100ms
+        // The state should still be "start" until 50ms
         setTimeout(function () {
                       assert(bus.cache['undo me'].state === 'start')
+                      assert(phase++ === 0, phase)
                    },
-                   30)
+                   40)
 
-        // The state should finally progress after 100ms
+        // The state should finally progress after 50ms
         setTimeout(function () {
                       log('state is', bus.cache['undo me'].state)
                       assert(bus.cache['undo me'].state === 'progressing')
+                      assert(phase++ === 2)
                    },
-                   90)
+                   60)
 
         setTimeout(function () {
             bus('wait').to_fetch.delete(wait)
+            assert(phase === 3)
             next()
-        }, 120)
+        }, 80)
     },
 
     function rollback_del (next) {
@@ -463,7 +469,7 @@ var tests = [
 
         // First define a delayed save.fire
         bus('wait a sec').to_fetch = function (k) {
-            setTimeout(function () { bus.save.fire({key: k}) }, 80)
+            setTimeout(function () { bus.save.fire({key: k}) }, 50)
         }
 
         // Now run the test
@@ -482,7 +488,7 @@ var tests = [
             assert(num_calls == 2,
                    'We got called '+num_calls+'!=2 times')
             next()
-        }, 140)
+        }, 100)
     },
 
     function requires (next) {
@@ -526,7 +532,7 @@ var tests = [
                     setTimeout(function () {next()})
                 }
             })
-        }, 300)
+        }, 100)
 
         var matches = new Set()
         for (var k in s.busses) {
@@ -565,6 +571,7 @@ var tests = [
             } else
                 log("Ok... we aren't logged in yet.  We be patient.")
         })
+        //s.honk = c.honk = user0.honk = true
         var u = c.fetch('/current_user')
         u.login_as = {name: 'mike', pass: 'yeah'}
         log('Logging in')
@@ -660,10 +667,10 @@ var tests = [
                      if (tmp1) return
                      tmp1 = true
                      log('Firing the actual j login')
-                     s.userbus.honk = true
+                     //s.userbus.honk = true
                      u.login_as = {name: 'j', pass: 'yeah'}; c.save(u)
                      log('We just logged in as j. now user is:', u.user.name)
-                 }, 100)
+                 }, 10)
              }],
 
             // Phase 2
