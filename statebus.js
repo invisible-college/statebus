@@ -39,7 +39,7 @@
         // never explicity fetched those keys.  But we don't need to
         // fetch them now cause we already have them.
         if (!fetches_out[key])
-            var num_fetchers = bus.route(key, 'to_fetch', key)
+            var to_fetchers = bus.route(key, 'to_fetch', key)
 
         // Now there might be a new value pubbed onto this bus.
         // Or there might be a pending fetch.
@@ -68,7 +68,7 @@
         // the handler.  If there's a pending fetch, then it'll get
         // called later.  If there was a to_fetch, then it already got
         // called.  Otherwise, let's call it now.
-        else if (!pending_fetches[key] && num_fetchers === 0) {
+        else if (!pending_fetches[key] && to_fetchers === 0) {
             // TODO: my intuition suggests that we might prefer to
             // delay this .on_save getting called in a
             // setTimeout(f,0), to be consistent with other calls to
