@@ -116,7 +116,7 @@ var extra_methods = {
                     message = JSON.parse(message)
                     var method = message.method.toLowerCase()
                     var arg = message.key || message.obj
-                    log('sockjs_s:', method, arg)
+                    //log('sockjs_s:', method, arg)
                     if (!arg) throw 'Missing argument in message'
                 } catch (e) {
                     console.error('Received bad sockjs message from '
@@ -366,18 +366,23 @@ var extra_methods = {
         function save_db() {
             save_timer = null
             if (!db_is_ok) return
-            fs.writeFile('db', JSON.stringify(db, null, 1), function(err) {
+            fs.writeFile(filename+'.tmp', JSON.stringify(db, null, 1), function(err) {
                 if (err) {
-                    console.log('Crap! DB IS DYING!!!!')
+                    console.log('Crap! DB IS DYING!!!!', err)
                     db_is_ok = false
-                }
-                bus.log(err || 'saved db')
+                } else
+                    fs.rename(filename+'.tmp', filename, function (err) {
+                        if (err) {
+                            console.log('Crap !! DB IS DYING !!!!', err)
+                            db_is_ok = false
+                        } else bus.log('saved db')
+                    })
             })
         }
         try {
-            if (fs.existsSync && !fs.existsSync('db'))
-                (fs.writeFileSync('db', '{}'), bus.log('Made a new db file'))
-            db = JSON.parse(fs.readFileSync('db'))
+            if (fs.existsSync && !fs.existsSync(filename))
+                (fs.writeFileSync(filename, '{}'), bus.log('Made a new db file'))
+            db = JSON.parse(fs.readFileSync(filename))
             db_is_ok = true
             // If we save before anything else is connected, we'll get this
             // into the cache but not affect anything else
@@ -710,6 +715,7 @@ var extra_methods = {
         }
 
         user('/current_user').to_save = function (o) {
+            user.log('* Current User Saver going!')
             if (o.client && !conn.client) {
                 // Set the client
                 conn.client = o.client
@@ -754,7 +760,7 @@ var extra_methods = {
                     user.log('current_user: logging out')
                     var clients = master.fetch('logged_in_clients')
                     delete clients[conn.client]
-                    save(clients)
+                    master.save(clients)
                 }
             }
 
