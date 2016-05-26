@@ -178,42 +178,7 @@
             update_cache(object, backup_cache)
 
             for (var i=0; i < modified_keys.length; i++)
-                // changed_keys.push(modified_keys[i])
                 mark_changed(modified_keys[i])
-
-            // key_publisher = key_publisher ||
-            //     setTimeout(function () {
-            //         log('firer:', object.key+ '. Listeners on these keys need update:', changed_keys)
-
-            //         // Note: this can be made more efficient.  There may
-            //         // be duplicate handler calls in here, because a
-            //         // single handler might react to multiple keys.  For
-            //         // instance, it might fetch multiple keys, where each
-            //         // key has been modified.  To make this more
-            //         // efficient, we should first find all the handlers
-            //         // affected by these keys, and then collapse them, and
-            //         // call each one once.  Unfortunately, doing so would
-            //         // require digging into the bus.route() API and
-            //         // changing it.  We'd probably need to make it accept
-            //         // an array of keys instead of a single key, and then
-            //         // have bindings() take an array of keys as well.
-            //         // So I'm not bothering with this optimization yet.
-            //         // We will just have duplicate-running functions for a
-            //         // while.
-            //         var seen = {}
-            //         for (var i=0; i<changed_keys.length; i++) {
-            //             log('firer: In loop', i + ', updating listeners on \''
-            //                 + changed_keys[i] + "'")
-            //             var key = changed_keys[i]
-            //             if (!seen[key]) {
-            //                 bus.route(key, 'on_save', cache[key])
-            //                 seen[key] = true
-            //             }
-            //         }
-            //         changed_keys = []
-            //         key_publisher = null
-            //         //console.log('pub: done looping through', keys, ' and done with', object.key)
-            //     }, 0)
         }
     }
 
@@ -395,16 +360,6 @@
 
         delete cache[key]
 
-        // Note: we used to do this:
-        //
-        //    var idx = changed_keys.indexOf(key)
-        //    if (idx > -1)
-        //        changed_keys.splice(idx, 1)
-        //
-        // But now we keep track of dirty functions instead of keys.
-        // I think we just want to dirty the dependent functions when
-        // a key is deleted, but I'm not 100% sure yet...
-
         mark_changed(key)
         if (changed_keys.has(key))
             console.warn('We need to figure out what to do with deleted keys!')
@@ -414,38 +369,6 @@
         bus.route(key, 'to_delete', key)
         //forget(key /*, bus??*/)
     }
-
-
-    // ****************
-    // Dirty
-    // var dirty_keys = new Set()
-    // var dirty_sweeper = null
-    // function dirty_old (key) {
-    //     statelog(brown, '*', bus + ".dirty('"+key+"')")
-    //     dirty_keys.add(key)
-
-    //     dirty_sweeper = dirty_sweeper || setTimeout(function () {
-    //         //console.log('dirty_sweeper:', dirty_keys.all())
-
-    //         // Let's grab the dirty keys and clear it, so that
-    //         // anything that gets dirty during this sweep will be able
-    //         // to sweep again afterward
-    //         var keys = dirty_keys.values()
-    //         dirty_keys.clear()
-    //         dirty_sweeper = null
-            
-    //         // Now sweep through our cache of dirty filth and sweep it all up!
-    //         for (var i=0; i<keys.length; i++)
-    //             // If anybody is fetching this key
-    //             if (fetches_in.has_any(keys[i])) {
-    //                 log('dirty_sweeper: re-running a to_fetch for', key)
-    //                 fetches_out[key].react()
-    //                 //bus.route(key, 'to_fetch', key)
-    //             }
-    //     }, 0)
-    // }
-    // var refetch = dirty
-
 
     var changed_keys = new Set()
     var dirty_fetchers = new Set()
