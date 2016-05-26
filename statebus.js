@@ -3,7 +3,7 @@
     if (typeof module != 'undefined') module.exports = definition()
     else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
     else this[name] = definition()
-}('statebus', function() { statelog_indent = 0; var busses = {}, executing_funk, global_funk, funks = {}; return function make_bus () {
+}('statebus', function() { statelog_indent = 0; var busses = {}, executing_funk, global_funk, funks = {}, clean_timer; return function make_bus () {
 
 
     // ****************
@@ -460,10 +460,25 @@
         clean_timer = clean_timer || setTimeout(clean)
     }
 
-    var clean_timer
     function clean () {
         // 1. Collect all functions for all keys and dirtied fetchers
         var dirty_funks = new Set()
+        for (var b in busses) {
+            var fs = busses[b].rerunnable_funks()
+            for (var i=0; i<fs.length; i++)
+                dirty_funks.add(fs[i])
+        }
+        clean_timer = null
+
+        // 3. Re-run the functions
+        dirty_funks = dirty_funks.values()
+        for (var i=0; i<dirty_funks.length; i++)
+            funks[dirty_funks[i]].react()
+        log('We just cleaned up', dirty_funks.length, 'funks!')
+    }
+
+    function rerunnable_funks () {
+        var result = []
         var keys = changed_keys.values()
         var fetchers = dirty_fetchers.values()
 
@@ -474,22 +489,16 @@
                 var f = fs[j]
                 if (!f.react)
                     f = run_handler(f, 'on_save', cache[keys[i]], true)
-                dirty_funks.add(funk_key(f))
+                result.push(funk_key(f))
             }
         }
         for (var i=0; i<fetchers.length; i++)        // Collect all fetchers
-            dirty_funks.add(fetchers[i])
+            result.push(fetchers[i])
 
-        // 2. Clear our memory (so that re-run functions can start new memory)
         changed_keys.clear()
         dirty_fetchers.clear()
-        clean_timer = null
 
-        // 3. Re-run the functions
-        dirty_funks = dirty_funks.values()
-        for (var i=0; i<dirty_funks.length; i++)
-            funks[dirty_funks[i]].react()
-        log('We just cleaned up', dirty_funks.length, 'funks!')
+        return result
     }
 
     function mark_changed_old (key) {
@@ -1132,7 +1141,7 @@
                'run_handler bind unbind reactive',
                'funk_key funk_name funks key_id key_name id kp',
                'pending_fetches fetches_in loading_keys loading',
-               'global_funk busses',
+               'global_funk busses rerunnable_funks',
                'Set One_To_Many clone extend deep_map deep_equals sorta_diff log deps'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)
