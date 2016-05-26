@@ -32,6 +32,18 @@
         // bind() and solve these issues robustly.
         console.assert(key[key.length-1] !== '*')
 
+        // ** Subscribe the calling funk **
+
+        if (called_from_reactive_funk)
+            funk.depends_on(bus, key)
+        fetches_in.add(key, funk_key(funk))
+        if (to_be_forgotten[key]) {
+            clearTimeout(to_be_forgotten[key])
+            delete to_be_forgotten[key]
+        }
+
+        bind(key, 'on_save', funk)
+
         // ** Call fetchers upstream **
 
         // TODO: checking fetches_out[] doesn't count keys that we got
@@ -45,16 +57,6 @@
         // Or there might be a pending fetch.
         // ... or there weren't any fetchers upstream.
 
-        // ** Subscribe the calling funk **
-
-        if (called_from_reactive_funk)
-            funk.depends_on(bus, key)
-        fetches_in.add(key, funk_key(funk))
-        // log('Fetch: Executing_funk is', executing_funk && executing_funk.statebus_id)
-        // log('fetches in adding', key, funk_key(funk),
-        //     callback && funk_key(callback),
-        //     executing_funk && funk_key(executing_funk))
-        bind(key, 'on_save', funk)
 
         // ** Return a value **
 
@@ -107,9 +109,10 @@
         var message = save_msg(obj, opts, 'save')
 
         // Ignore if nothing happened
-        if (obj.key && !changed(obj))
+        if (obj.key && !changed(obj)) {
             statelog(grey, 'x', message)
-        else
+            return
+        } else
             statelog(red, 'o', message)
 
         try {
@@ -175,46 +178,44 @@
             update_cache(object, backup_cache)
 
             for (var i=0; i < modified_keys.length; i++)
-                publishable_keys.push(modified_keys[i])
+                // changed_keys.push(modified_keys[i])
+                mark_changed(modified_keys[i])
 
-            key_publisher = key_publisher ||
-                setTimeout(function () {
-                    log('firer:', object.key+ '. Listeners on these keys need update:', publishable_keys)
+            // key_publisher = key_publisher ||
+            //     setTimeout(function () {
+            //         log('firer:', object.key+ '. Listeners on these keys need update:', changed_keys)
 
-                    // Note: this can be made more efficient.  There may
-                    // be duplicate handler calls in here, because a
-                    // single handler might react to multiple keys.  For
-                    // instance, it might fetch multiple keys, where each
-                    // key has been modified.  To make this more
-                    // efficient, we should first find all the handlers
-                    // affected by these keys, and then collapse them, and
-                    // call each one once.  Unfortunately, doing so would
-                    // require digging into the bus.route() API and
-                    // changing it.  We'd probably need to make it accept
-                    // an array of keys instead of a single key, and then
-                    // have bindings() take an array of keys as well.
-                    // So I'm not bothering with this optimization yet.
-                    // We will just have duplicate-running functions for a
-                    // while.
-                    var seen = {}
-                    for (var i=0; i<publishable_keys.length; i++) {
-                        log('firer: In loop', i + ', updating listeners on \''
-                            + publishable_keys[i] + "'")
-                        var key = publishable_keys[i]
-                        if (!seen[key]) {
-                            bus.route(key, 'on_save', cache[key])
-                            seen[key] = true
-                        }
-                    }
-                    publishable_keys = []
-                    key_publisher = null
-                    //console.log('pub: done looping through', keys, ' and done with', object.key)
-                }, 0)
+            //         // Note: this can be made more efficient.  There may
+            //         // be duplicate handler calls in here, because a
+            //         // single handler might react to multiple keys.  For
+            //         // instance, it might fetch multiple keys, where each
+            //         // key has been modified.  To make this more
+            //         // efficient, we should first find all the handlers
+            //         // affected by these keys, and then collapse them, and
+            //         // call each one once.  Unfortunately, doing so would
+            //         // require digging into the bus.route() API and
+            //         // changing it.  We'd probably need to make it accept
+            //         // an array of keys instead of a single key, and then
+            //         // have bindings() take an array of keys as well.
+            //         // So I'm not bothering with this optimization yet.
+            //         // We will just have duplicate-running functions for a
+            //         // while.
+            //         var seen = {}
+            //         for (var i=0; i<changed_keys.length; i++) {
+            //             log('firer: In loop', i + ', updating listeners on \''
+            //                 + changed_keys[i] + "'")
+            //             var key = changed_keys[i]
+            //             if (!seen[key]) {
+            //                 bus.route(key, 'on_save', cache[key])
+            //                 seen[key] = true
+            //             }
+            //         }
+            //         changed_keys = []
+            //         key_publisher = null
+            //         //console.log('pub: done looping through', keys, ' and done with', object.key)
+            //     }, 0)
         }
     }
-
-    var key_publisher = null
-    var publishable_keys = []
 
 
     // Now create the statebus object
@@ -394,9 +395,20 @@
 
         delete cache[key]
 
-        var idx = publishable_keys.indexOf(key)
-        if (idx > -1)
-            publishable_keys.splice(idx, 1)
+        // Note: we used to do this:
+        //
+        //    var idx = changed_keys.indexOf(key)
+        //    if (idx > -1)
+        //        changed_keys.splice(idx, 1)
+        //
+        // But now we keep track of dirty functions instead of keys.
+        // I think we just want to dirty the dependent functions when
+        // a key is deleted, but I'm not 100% sure yet...
+
+        mark_changed(key)
+        if (changed_keys.has(key))
+            console.warn('We need to figure out what to do with deleted keys!')
+        changed_keys.delete(key)
 
         log('del:', obj_or_key)
         bus.route(key, 'to_delete', key)
@@ -406,33 +418,93 @@
 
     // ****************
     // Dirty
-    var dirty_keys = new Set()
-    var dirty_sweeper = null
+    // var dirty_keys = new Set()
+    // var dirty_sweeper = null
+    // function dirty_old (key) {
+    //     statelog(brown, '*', bus + ".dirty('"+key+"')")
+    //     dirty_keys.add(key)
+
+    //     dirty_sweeper = dirty_sweeper || setTimeout(function () {
+    //         //console.log('dirty_sweeper:', dirty_keys.all())
+
+    //         // Let's grab the dirty keys and clear it, so that
+    //         // anything that gets dirty during this sweep will be able
+    //         // to sweep again afterward
+    //         var keys = dirty_keys.values()
+    //         dirty_keys.clear()
+    //         dirty_sweeper = null
+            
+    //         // Now sweep through our cache of dirty filth and sweep it all up!
+    //         for (var i=0; i<keys.length; i++)
+    //             // If anybody is fetching this key
+    //             if (fetches_in.has_any(keys[i])) {
+    //                 log('dirty_sweeper: re-running a to_fetch for', key)
+    //                 fetches_out[key].react()
+    //                 //bus.route(key, 'to_fetch', key)
+    //             }
+    //     }, 0)
+    // }
+    // var refetch = dirty
+
+
+    var changed_keys = new Set()
+    var dirty_fetchers = new Set()
     function dirty (key) {
         statelog(brown, '*', bus + ".dirty('"+key+"')")
-        dirty_keys.add(key)
-
-        dirty_sweeper = dirty_sweeper || setTimeout(function () {
-            //console.log('dirty_sweeper:', dirty_keys.all())
-
-            // Let's grab the dirty keys and clear it, so that
-            // anything that gets dirty during this sweep will be able
-            // to sweep again afterward
-            var keys = dirty_keys.values()
-            dirty_keys.clear()
-            dirty_sweeper = null
-            
-            // Now sweep through our cache of dirty filth and sweep it all up!
-            for (var i=0; i<keys.length; i++)
-                // If anybody is fetching this key
-                if (fetches_in.has_any(keys[i])) {
-                    log('dirty_sweeper: re-running a to_fetch for', key)
-                    fetches_out[key].react()
-                    //bus.route(key, 'to_fetch', key)
-                }
-        }, 0)
+        if (key in fetches_out)
+            dirty_fetchers.add(fetches_out[key].statebus_id)
     }
-    var refetch = dirty
+
+    function mark_changed (key) {
+        changed_keys.add(key)
+        clean_timer = clean_timer || setTimeout(clean)
+    }
+
+    var clean_timer
+    function clean () {
+        // 1. Collect all functions for all keys and dirtied fetchers
+        var dirty_funks = new Set()
+        var keys = changed_keys.values()
+        var fetchers = dirty_fetchers.values()
+
+        log(bus+' Cleaning up!', keys, 'keys, and', fetchers, 'fetchers')
+        for (var i=0; i<keys.length; i++) {          // Collect all keys
+            var fs = bindings(keys[i], 'on_save')
+            for (var j=0; j<fs.length; j++) {
+                var f = fs[j]
+                if (!f.react)
+                    f = run_handler(f, 'on_save', cache[keys[i]], true)
+                dirty_funks.add(funk_key(f))
+            }
+        }
+        for (var i=0; i<fetchers.length; i++)        // Collect all fetchers
+            dirty_funks.add(fetchers[i])
+
+        // 2. Clear our memory (so that re-run functions can start new memory)
+        changed_keys.clear()
+        dirty_fetchers.clear()
+        clean_timer = null
+
+        // 3. Re-run the functions
+        dirty_funks = dirty_funks.values()
+        for (var i=0; i<dirty_funks.length; i++)
+            funks[dirty_funks[i]].react()
+        log('We just cleaned up', dirty_funks.length, 'funks!')
+    }
+
+    function mark_changed_old (key) {
+        var dependent_funks = bindings(key, 'on_save')
+        log(bus+'.mark:', key, 'is changed, with', dependent_funks.length, 'deps')
+        if (key == '/far' && global.user0) log(user0.bindings('/far', 'on_save').length)
+        for (var i=0; i<dependent_funks.length; i++) {
+            var f = dependent_funks[i]
+            if (!f.react) {
+                f = run_handler(f, 'on_save', cache[key], true)
+                log(bus+'.mark: made a new handler', funk_name(f))
+            }
+            dirty.function(funk_key(f))
+        }
+    }
 
     // ****************
     // Connections
@@ -506,11 +578,6 @@
                                     method: method,
                                     funk: func})
 
-        if (to_be_forgotten[key]) {
-            clearTimeout(to_be_forgotten[key])
-            delete to_be_forgotten[key]
-        }
-
         // Now check if the method is a fetch and there's a fetched
         // key in this space, and if so call the handler.
     }
@@ -583,7 +650,7 @@
     }
     */
 
-    function run_handler(funck, method, arg) {
+    function run_handler(funck, method, arg, just_make_it) {
         // console.log("run_handler: ('"+(arg.key||arg)+"').on_"
         //             +method+' = f^'+funk_key(funck))
         // if (funck.statebus_name === undefined || funck.statebus_name === 'undefined')
@@ -658,6 +725,10 @@
                 return result
             }
 
+            // if (arg.key == '/current_user')
+            //     console.log('Finished current_user.to_save, with:',
+            //                 method !== 'to_fetch', !f.loading())
+
             // Save, forget and delete handlers stop re-running once
             // they've completed without anything loading.
             // ... with f.forget()
@@ -689,13 +760,17 @@
             pending_fetches[arg] = f   // Record that the fetch is pending
         }
 
+        if (just_make_it)
+            return f
+        
         return f()
     }
 
     // route() can be overridden
     bus.route = function (key, method, arg) {
-        log('route:', bus, key, method, arg)
         var funcs = bus.bindings(key, method)
+        if (funcs.length)
+            log('route:', bus+'("'+key+'").'+method+'['+funcs.length+'](key:"'+(arg.key||arg)+'")')
         // log('route: got bindings',
         //     funcs.map(function (f) {return funk_key(f)+':'+funk_keyr(f)}))
         for (var i=0; i<funcs.length; i++)
@@ -890,7 +965,7 @@
     function Set () {
         var hash = {}
         this.add = function (a) { hash[a] = true }
-        //this.has = function (a) { return a in hash }
+        this.has = function (a) { return a in hash }
         this.values = function () { return Object.keys(hash) }
         this.delete = function (a) { delete hash[a] }
         this.clear = function () { hash = {} }
@@ -1044,7 +1119,7 @@
     }
 
     function kp () {
-        log('key_publisher:', key_publisher, 'publishable_keys:', publishable_keys)
+        log('changed_keys:', changed_keys.values())
     }
 
     // #######################################
@@ -1052,7 +1127,7 @@
     // #######################################
 
     // Make these private methods accessible
-    var api = ['cache backup_cache fetch save forget del fire dirty refetch',
+    var api = ['cache backup_cache fetch save forget del fire dirty',
                'subspace handlers wildcard_handlers bindings',
                'run_handler bind unbind reactive',
                'funk_key funk_name funks key_id key_name id kp',

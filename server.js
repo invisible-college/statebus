@@ -707,7 +707,7 @@ var extra_methods = {
         }
 
         user('/current_user').to_fetch = function () {
-            //console.log('Computing new /current_user')
+            user.log('* /current_user fetching')
             if (!conn.client) return
             var u = master.fetch('logged_in_clients')[conn.client]
             u = u && user_obj(u.key, true)

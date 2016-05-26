@@ -152,9 +152,6 @@ var tests = [
 
     // Multiple batched pubs might trigger duplicate reactions
     function duplicate_pub (next) {
-        // Note: I changed the behavior of this... hiding for now
-        return next()
-
         var calls = new Set()
         var count = 0
         var dupes = []
