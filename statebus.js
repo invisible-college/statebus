@@ -385,12 +385,15 @@
     var changed_keys = new Set()
     var dirty_fetchers = new Set()
     function dirty (key) {
+        // Marks a fetcher as dirty, meaning the .to_fetch will re-run
         statelog(brown, '*', bus + ".dirty('"+key+"')")
         if (key in fetches_out)
             dirty_fetchers.add(fetches_out[key].statebus_id)
+        clean_timer = clean_timer || setTimeout(clean)
     }
 
     function mark_changed (key) {
+        // Marks a key as dirty, meaning that functions on it need to update
         changed_keys.add(key)
         clean_timer = clean_timer || setTimeout(clean)
     }
@@ -434,20 +437,6 @@
         dirty_fetchers.clear()
 
         return result
-    }
-
-    function mark_changed_old (key) {
-        var dependent_funks = bindings(key, 'on_save')
-        log(bus+'.mark:', key, 'is changed, with', dependent_funks.length, 'deps')
-        if (key == '/far' && global.user0) log(user0.bindings('/far', 'on_save').length)
-        for (var i=0; i<dependent_funks.length; i++) {
-            var f = dependent_funks[i]
-            if (!f.react) {
-                f = run_handler(f, 'on_save', cache[key], true)
-                log(bus+'.mark: made a new handler', funk_name(f))
-            }
-            dirty.function(funk_key(f))
-        }
     }
 
     // ****************
