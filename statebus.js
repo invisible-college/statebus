@@ -166,6 +166,8 @@
             statelog(color, icon, message)
         }
 
+        opts.version = opts.version || new_version()
+
         // Recursively add all of object, and its sub-objects, into the cache
         var modified_keys = update_cache(object, cache)
 
@@ -177,11 +179,20 @@
             // Now put it into the backup
             update_cache(object, backup_cache)
 
-            for (var i=0; i < modified_keys.length; i++)
-                mark_changed(modified_keys[i])
+            for (var i=0; i < modified_keys.length; i++) {
+                var key = modified_keys[i]
+                var parents = [versions[key]]   // Not stored yet
+                versions[key] = opts.version
+                mark_changed(key)
+            }
         }
     }
 
+
+    var version_count = 0
+    function new_version () {
+        return bus.label + (version_count++).toString(36)
+    }
 
     // Now create the statebus object
     function bus (arg) {
@@ -216,7 +227,7 @@
     // The Data Almighty!!
     var cache = {}
     var backup_cache = {}
-
+    var versions = {}
 
     // Folds object into the cache recursively and returns the keys
     // for all mutated staet
@@ -360,6 +371,7 @@
 
         delete cache[key]
 
+        // Todo: update versions[key]
         mark_changed(key)
         if (changed_keys.has(key))
             console.warn('We need to figure out what to do with deleted keys!')
@@ -651,25 +663,15 @@
             // For fetch
             if (method === 'to_fetch' && result instanceof Object && !f.loading()) {
                 result.key = arg
-                // console.log('run_handler: pubbing', arg,
-                //             'after fetched RETURN from fetch('+arg+')')
                 save.fire(result, {to_fetch: true})
                 return result
             }
 
-            // if (arg.key == '/current_user')
-            //     console.log('Finished current_user.to_save, with:',
-            //                 method !== 'to_fetch', !f.loading())
-
-            // Save, forget and delete handlers stop re-running once
-            // they've completed without anything loading.
+            // Save, forget and delete handlers stop re-running once they've
+            // completed without anything loading.
             // ... with f.forget()
             if (method !== 'to_fetch' && !f.loading())
                 f.forget()
-
-            // Todo: I think it should forget .on_save handlers
-            // (above) if they were manually specified, but not the
-            // .on_save handlers that are created as reactive funks
         })
         f.proxies_for = func
         f.arg = arg
@@ -876,6 +878,10 @@
     // Tells you whether the currently executing funk is loading
     function loading () { return executing_funk.loading() }
 
+    function channel () {
+        return {}
+    }
+
     // ******************
     // Utility funcs
     function One_To_Many() {
@@ -1059,7 +1065,7 @@
     // #######################################
 
     // Make these private methods accessible
-    var api = ['cache backup_cache fetch save forget del fire dirty',
+    var api = ['cache backup_cache versions fetch save forget del fire dirty',
                'subspace handlers wildcard_handlers bindings',
                'run_handler bind unbind reactive',
                'funk_key funk_name funks key_id key_name id kp',

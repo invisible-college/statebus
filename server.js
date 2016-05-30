@@ -114,7 +114,6 @@ var extra_methods = {
             conn.on('data', function(message) {
                 try {
                     message = JSON.parse(message)
-                    var method = message.method.toLowerCase()
                     var arg = message.key || message.obj
                     //log('sockjs_s:', method, arg)
                     if (!arg) throw 'Missing argument in message'
@@ -129,9 +128,10 @@ var extra_methods = {
                                user.fetch(arg, sockjs_pubber)  ; break
                 case 'forget': delete our_fetches_in[arg]
                                user.forget(arg, sockjs_pubber) ; break
-                case 'delete': message.method = 'del'
-                               user.delete(arg)                ; break
-                case 'save'  : user.save(arg)                  ; break
+                case 'delete': user.delete(arg)                ; break
+                case 'save'  : user.save(arg,
+                                 {version: message.version,
+                                  parents: message.parents})   ; break
                 }
 
                 //user[message.method](arg, sockjs_pubber)
@@ -676,7 +676,7 @@ var extra_methods = {
                 return master.fetch(userpass.user)
         }
         function create_account (params) {
-            if (!(typeof params.name === 'string'
+            if (!(   typeof params.name === 'string'
                   && typeof params.pass === 'string'
                   && typeof params.email === 'string'))
                 return false

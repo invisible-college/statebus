@@ -546,12 +546,16 @@ var tests = [
         c.ws_client('/*', 'state://localhost:3948')
         setTimeout(function () {
             log('Fetching /far on client')
+            var done = false   // This shouldn't be necessary
             c.fetch('/far', function (o) {
                 c.fetch('/far')
                 if (o.away === 'is this') {
                     log('We got '+o.key+' from the server!')
                     // log('Because handlers is\n', c.handlers.hash,
                     //     '\n....and wildcards is\n', c.wildcard_handlers)
+                    c.forget()        // This forget isn't working
+                    if (done) return  // So I'm explicitly quitting instead
+                    done = true       // But we should fix forget() soon
                     setTimeout(function () {next()})
                 }
             })
@@ -594,7 +598,7 @@ var tests = [
             } else
                 log("Ok... we aren't logged in yet.  We be patient.")
         })
-        //s.honk = c.honk = user0.honk = true
+        // c.honk = user0.honk = true
         var u = c.fetch('/current_user')
         u.login_as = {name: 'mike', pass: 'yeah'}
         log('Logging in')
