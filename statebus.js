@@ -84,8 +84,12 @@
     var fetches_out = {}                // Maps `key' to `func' iff we've fetched `key'
     var fetches_in = new One_To_Many()  // Maps `key' to `pub_funcs' subscribed to our key
 
-    var red = '\x1b[31m', normal = '\x1b[0m', grey = '\x1b[0;38;5;245m',
-        green = '\x1b[0;38;5;46m', brown = '\x1b[0;38;5;130m'
+    if (typeof window === 'undefined')
+        var red = '\x1b[31m', normal = '\x1b[0m', grey = '\x1b[0;38;5;245m',
+            green = '\x1b[0;38;5;46m', brown = '\x1b[0;38;5;130m'
+    else
+        var red = '', normal = '', grey = '',
+            green = '', brown = ''
     var currently_saving
     function add_diff_msg (message, obj) {
         var diff = sorta_diff(backup_cache[obj.key], obj)
@@ -426,7 +430,7 @@
             for (var j=0; j<fs.length; j++) {
                 var f = fs[j]
                 if (!f.react)
-                    f = run_handler(f, 'on_save', cache[keys[i]], true)
+                    f = run_handler(f, 'on_save', cache[keys[i]], 'dont run it')
                 result.push(funk_key(f))
             }
         }
@@ -1032,7 +1036,7 @@
         if (typeof window === 'undefined') {
             var indent = ''
             for (var i=0; i<statelog_indent; i++) indent += '   '
-            console.log(indent+util.format.apply(null,arguments).replace(/\n/g,'\n'+indent))
+            console.log(indent+require('util').format.apply(null,arguments).replace(/\n/g,'\n'+indent))
         } else
             console.log.apply(console, arguments)
     }

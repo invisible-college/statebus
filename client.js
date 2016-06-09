@@ -469,7 +469,7 @@
         document.addEventListener('DOMContentLoaded', scripts_ready, false)
     }
 
-    window.statebus_server = window.statebus_server || 'https://stateb.us:3003'
+    window.statebus_server = window.statebus_server || 'https://stateb.us:3004'
     function scripts_ready () {
         make_client_statebus_maker()
         window.bus = window.statebus()

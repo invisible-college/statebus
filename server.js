@@ -1,3 +1,4 @@
+var util = require('util')
 var bus
 var extra_methods = {
     setup: function setup (options) {
@@ -182,7 +183,7 @@ var extra_methods = {
     ws_client: function ws_client (prefix, url) {
         var bus = this
         var WebSocket = require('websocket').w3cwebsocket
-        url = url || 'wss://stateb.us:3003'
+        url = url || 'wss://stateb.us:3004'
         var recent_saves = []
         var sock
         var attempts = 0
@@ -804,6 +805,17 @@ var extra_methods = {
         user('/users').to_save = function () {}
     },
 
+     code_restarts: function () {
+         var got = {}, bus = this
+         bus('/code/*').on_save = function (o) {
+             bus.log('Ok restart, we\'ll quit if ' + (got[o.key]||false))
+             if (got[o.key])
+                 process.exit(1)
+             if (o.code)
+                 got[o.key] = true
+         }
+     },
+
     route_defaults_to: function route_defaults_to (master_bus) {
         var bus = this
 
@@ -823,7 +835,7 @@ var extra_methods = {
             }
             return count
         }
-    }
+    },
 }
 
 function make_server_bus () {
