@@ -469,7 +469,9 @@
             coffee: statebus_dir + 'extras/coffee.js',
             statebus: statebus_dir + 'statebus.js'
         }
-        
+        if (statebus_dir == 'https://stateb.us/')
+            js_urls.statebus = statebus_dir + 'statebus4.js'
+
         for (name in js_urls)
             document.write('<script src="' + js_urls[name] + '" charset="utf-8"></script>')
 
