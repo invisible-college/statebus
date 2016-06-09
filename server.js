@@ -3,6 +3,7 @@ var bus
 var extra_methods = {
     setup: function setup (options) {
         var bus = this
+        bus.label = 'server'
         //bus.honk = true
         options = options || {}
         var c = options.client_definition
@@ -27,6 +28,7 @@ var extra_methods = {
     },
     serve: function serve (options) {
         var bus = this
+        bus.label = 'server'
         //bus.honk = true
         options = options || {}
         var c = options.client_definition
