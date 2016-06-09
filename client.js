@@ -133,6 +133,8 @@
                     var message = JSON.parse(event.data)
                     var method = message.method.toLowerCase()
 
+                    // Convert v3 pubs to v4 saves for compatibility
+                    if (method == 'pub') method = 'save'
                     // We only take saves from the server for now
                     if (method !== 'save' && method !== 'pong') throw 'barf'
                     bus.log('sockjs_client received', message.obj)
