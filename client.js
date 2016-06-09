@@ -22,6 +22,7 @@
         var saver = bus(prefix).to_save = function (object) {
             bus.log('sending save', object)
             socket.emit('save', object)
+            bus.save.fire(object)
         }
         bus(prefix).to_delete = function (key)    { socket.emit('delete', key) }
         bus(prefix).to_forget = function (key) {
@@ -71,6 +72,7 @@
                 setTimeout(flush_outbox, 400)
         }
         bus(prefix).to_save   = function (obj) { send({method: 'save', obj: obj})
+                                                 bus.save.fire(obj)
                                                  if (window.ignore_flashbacks)
                                                      recent_saves.push(JSON.stringify(obj))
                                                  if (recent_saves.length > 100) {
@@ -152,7 +154,7 @@
                     }
 
                     if (!is_recent_save)
-                        bus.annouce(message.obj)
+                        bus.save.fire(message.obj)
                         //setTimeout(function () {bus.announce(message.obj)}, 1000)
                 } catch (err) {
                     console.error('Received bad sockjs message from '
@@ -196,6 +198,7 @@
                 setTimeout(save_the_pending_saves, 50)
                 saves_are_pending = true
             }
+            bus.save.fire(obj)
             return obj
         }
         bus(prefix).to_delete = function (key) { localStorage.removeItem(key) }
@@ -237,7 +240,8 @@
                 return fetch('state://stateb.us' + key)
             }
             bus('/*').to_save = function (obj) {
-                save(copy(obj, 'state://stateb.us' + obj.key))
+                bus.save(copy(obj, 'state://stateb.us' + obj.key))
+                bus.save.fire(obj)
             }
 
             bus('/*').proxy = function (key) { return 'state://stateb.us' + key }
@@ -273,6 +277,7 @@
                 document.location.origin
                     + document.location.pathname
                     + escape('?'+key+'='+JSON.stringify(obj)))
+            bus.save.fire(obj)
         }
     }
 
@@ -475,6 +480,7 @@
     function scripts_ready () {
         make_client_statebus_maker()
         window.bus = window.statebus()
+        window.bus.label = 'bus'
 
         improve_react()
         window.dom = {}
@@ -489,7 +495,7 @@
             o.key = old_key + '/' + Math.random().toString(36).substring(2,12)
             statebus.cache[o.key] = o
             delete statebus.cache[old_key]
-            save(o)
+            bus.save(o)
         }
         load_coffee()
         if (dom.Body || dom.body || dom.BODY)
