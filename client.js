@@ -454,7 +454,7 @@
 
     load_scripts() // This function could actually be inlined
     function load_scripts() {
-        var statebus_dir = document.querySelector('script[src*="client.js"]')
+        var statebus_dir = document.querySelector('script[src*="client"][src$=".js"]')
             .getAttribute('src').match(/(.*)[\/\\]/)
         statebus_dir = (statebus_dir && statebus_dir[1] + '/')||''
 
