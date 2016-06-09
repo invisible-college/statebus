@@ -416,7 +416,7 @@
         dirty_funks = dirty_funks.values()
         for (var i=0; i<dirty_funks.length; i++)
             funks[dirty_funks[i]].react()
-        log('We just cleaned up', dirty_funks.length, 'funks!')
+        // log('We just cleaned up', dirty_funks.length, 'funks!')
     }
 
     function rerunnable_funks () {
@@ -424,7 +424,7 @@
         var keys = changed_keys.values()
         var fetchers = dirty_fetchers.values()
 
-        log(bus+' Cleaning up!', keys, 'keys, and', fetchers, 'fetchers')
+        // log(bus+' Cleaning up!', keys, 'keys, and', fetchers, 'fetchers')
         for (var i=0; i<keys.length; i++) {          // Collect all keys
             var fs = bindings(keys[i], 'on_save')
             for (var j=0; j<fs.length; j++) {
