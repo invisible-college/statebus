@@ -160,7 +160,7 @@
             }
 
             color = red, icon = '•'
-            if (opts.to_fetch) {
+            if (opts.to_fetch || pending_fetches[object.key]) {
                 color = green
                 icon = '^'
                 message = add_diff_msg((opts.m)||'Fetched '+bus+"('"+object.key+"')",
@@ -392,7 +392,7 @@
         // Marks a fetcher as dirty, meaning the .to_fetch will re-run
         statelog(brown, '*', bus + ".dirty('"+key+"')")
         if (key in fetches_out)
-            dirty_fetchers.add(fetches_out[key].statebus_id)
+            dirty_fetchers.add(funk_key(fetches_out[key]))
         clean_timer = clean_timer || setTimeout(clean)
     }
 
