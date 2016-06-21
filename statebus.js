@@ -24,12 +24,11 @@
             ).push({as:'fetch callback', key:key})
         }
 
-        // Remove this limitation at some point.  One reason for it is
-        // that bind() doesn't check if a wildcard handler
-        // already exists... it just pushes a new one.  That'll grow
-        // unbounded.  I can later use regexps for wildcard handlers,
-        // and start escaping the patterns between fetch() and
-        // bind() and solve these issues robustly.
+        // Remove this limitation at some point.  One reason for it is that
+        // bind() doesn't check if a wildcard handler already exists... it
+        // just pushes a new one.  That'll grow unbounded.  I can later use
+        // regexps for wildcard handlers, and start escaping the patterns
+        // between fetch() and bind() and solve these issues robustly.
         console.assert(key[key.length-1] !== '*')
 
         // ** Subscribe the calling funk **
@@ -46,10 +45,10 @@
 
         // ** Call fetchers upstream **
 
-        // TODO: checking fetches_out[] doesn't count keys that we got
-        // which arrived nested within a bigger object, because we
-        // never explicity fetched those keys.  But we don't need to
-        // fetch them now cause we already have them.
+        // TODO: checking fetches_out[] doesn't count keys that we got which
+        // arrived nested within a bigger object, because we never explicity
+        // fetched those keys.  But we don't need to fetch them now cause we
+        // already have them.
         if (!fetches_out[key])
             var to_fetchers = bus.route(key, 'to_fetch', key)
 
@@ -66,10 +65,10 @@
             return cache[key] = cache[key] || {key: key}
         }
 
-        // Otherwise, we want to make sure that a pub gets called on
-        // the handler.  If there's a pending fetch, then it'll get
-        // called later.  If there was a to_fetch, then it already got
-        // called.  Otherwise, let's call it now.
+        // Otherwise, we want to make sure that a pub gets called on the
+        // handler.  If there's a pending fetch, then it'll get called later.
+        // If there was a to_fetch, then it already got called.  Otherwise,
+        // let's call it now.
         else if (!pending_fetches[key] && to_fetchers === 0) {
             // TODO: my intuition suggests that we might prefer to
             // delay this .on_save getting called in a
@@ -105,6 +104,10 @@
         return add_diff_msg(message, obj)
     }
     function save (obj, opts) {
+        opts = opts || {}
+        // Make sure it has a version.
+        opts.version = opts.version || new_version()
+
         if ((executing_funk !== global_funk) && executing_funk.loading()) {
             abort_changes([obj.key])
             return
@@ -123,26 +126,32 @@
             statelog_indent++
             var was_saving = currently_saving
             currently_saving = obj.key
+
+            // Call the to_save() handler!
             var num_handlers = bus.route(obj.key, 'to_save', obj)
             if (num_handlers === 0)
+                // And fire if there weren't any!
                 save.fire(obj, opts)
         }
         finally {
             statelog_indent--
             currently_saving = was_saving
         }
-        // TODO: Here's an alternative.  Instead of counting the
-        // handlers and seeing if there are zero, I could just make a
-        // to_save handler that is shadowed by other handlers if I can
-        // get later handlers to shadow earlier ones.
+        // TODO: Here's an alternative.  Instead of counting the handlers and
+        // seeing if there are zero, I could just make a to_save handler that
+        // is shadowed by other handlers if I can get later handlers to shadow
+        // earlier ones.
     }
     save.fire = fire
     function fire (object, opts) {
         opts = opts || {}
-        //var message = (opts.m) || bus + ".save.fire('"+object.key+"')"
+        // Make sure it has a version.
+        opts.version = opts.version || new_version()
+
+        // First, let's print out the statelog entry.
+        // (And abort if there's no change.)
         var message = save_msg(object, opts, 'save.fire')
         var color, icon
-
         if (currently_saving === object.key &&
             !(object.key && !changed(object))) {
             statelog_indent--
@@ -170,7 +179,7 @@
             statelog(color, icon, message)
         }
 
-        opts.version = opts.version || new_version()
+        // Then we're gonna fire!
 
         // Recursively add all of object, and its sub-objects, into the cache
         var modified_keys = update_cache(object, cache)
@@ -180,18 +189,24 @@
         if ((executing_funk !== global_funk) && executing_funk.loading()) {
             abort_changes(modified_keys)
         } else {
-            // Now put it into the backup
+            // Let's publish these changes!
+
+            // These objects must replace their backups
             update_cache(object, backup_cache)
 
+            // And we mark each changed key as changed so that
+            // reactions happen to them
             for (var i=0; i < modified_keys.length; i++) {
                 var key = modified_keys[i]
                 var parents = [versions[key]]   // Not stored yet
                 versions[key] = opts.version
-                mark_changed(key)
+                mark_changed(key, opts)
             }
         }
     }
 
+    save.abort = function (obj, opts) {
+    }
 
     var version_count = 0
     function new_version () {
@@ -243,24 +258,23 @@
             //
             // 1. Only clone objects/arrays if they are new.
             // 
-            //    Right now we re-clone all internal arrays and
-            //    objects on each pub.  But we really only need to
-            //    clone them the first time they are pubbed into the
-            //    cache.  After that, we can trust that they aren't
-            //    referenced elsewhere.  (We make it the programmer's
-            //    responsibility to clone data if necessary on fetch,
-            //    but not when on pub.)
+            //    Right now we re-clone all internal arrays and objects on
+            //    each pub.  But we really only need to clone them the first
+            //    time they are pubbed into the cache.  After that, we can
+            //    trust that they aren't referenced elsewhere.  (We make it
+            //    the programmer's responsibility to clone data if necessary
+            //    on fetch, but not when on pub.)
             // 
-            //    We'll optimize this once we have history.  We can
-            //    look at the old version to see if an object/array
-            //    existed already before cloning it.
+            //    We'll optimize this once we have history.  We can look at
+            //    the old version to see if an object/array existed already
+            //    before cloning it.
             //
             // 2. Don't go infinitely deep.
             //
-            //    Eventually, each save/pub will be limited to the
-            //    scope underneath nested keyed objects.  Right now
-            //    I'm just recursing infinitely on the whole data
-            //    structure with each pub.
+            //    Eventually, each save/pub will be limited to the scope
+            //    underneath nested keyed objects.  Right now I'm just
+            //    recursing infinitely on the whole data structure with each
+            //    pub.
 
             // Clone arrays
             if (Array.isArray(obj))
@@ -332,7 +346,7 @@
         save_handler = save_handler || executing_funk
         var fkey = funk_key(save_handler)
         //console.log('Fetches in is', fetches_in.hash)
-        if (!fetches_in.contains(key, fkey)) {
+        if (!fetches_in.has(key, fkey)) {
             console.error("***\n****\nTrying to forget lost key", key,
                           'from', funk_name(save_handler), fkey,
                           "that hasn't fetched that key.",
@@ -346,9 +360,9 @@
         fetches_in.delete(key, fkey)
         unbind(key, 'on_save', save_handler)
 
-        // If this is the last handler listening to this key, then we
-        // can delete the cache entry, send a forget upstream, and
-        // de-activate the .on_fetch handler.
+        // If this is the last handler listening to this key, then we can
+        // delete the cache entry, send a forget upstream, and de-activate the
+        // .on_fetch handler.
         if (!fetches_in.has_any(key)) {
             clearTimeout(to_be_forgotten[key])
             to_be_forgotten[key] = setTimeout(function () {
@@ -377,9 +391,7 @@
 
         // Todo: update versions[key]
         mark_changed(key)
-        if (changed_keys.has(key))
-            console.warn('We need to figure out what to do with deleted keys!')
-        changed_keys.delete(key)
+        console.warn('We need to figure out what to do with deleted keys!')
 
         log('del:', obj_or_key)
         bus.route(key, 'to_delete', key)
@@ -396,7 +408,7 @@
         clean_timer = clean_timer || setTimeout(clean)
     }
 
-    function mark_changed (key) {
+    function mark_changed (key, opts) {
         // Marks a key as dirty, meaning that functions on it need to update
         changed_keys.add(key)
         clean_timer = clean_timer || setTimeout(clean)
@@ -467,46 +479,74 @@
         return result
     }
 
+    function channel () {
+        // To do: make this clone the other parts of a bus object.  There
+        // might be an automated way to do this, like actually cloning the
+        // object, or making automatic getters for all properties on the
+        // object that look up the bus's version.
+
+        // To do: generalize the our_fetches_in and close() methods from
+        // sockjs_server to this channel.
+
+        var outstanding_saves = {}  // After each incoming save, we'll wait
+                                    // for a responsive outgoing save.fire()
+                                    // or save.abort()
+
+        var fetches_in = {}         // But we'll only be seeing those for
+                                    // things subscribed to via the channel
+
+        var result = function (key) {
+            var space = {}
+            Object.defineProperty(space, 'on_save', {
+                set: function (func) {
+                    console.assert(!obj.key in fetches_in,
+                                   'Channels expect only one on_save per key')
+                    fetches_in[key] = func
+                    bus(key).on_save = func
+                },
+                get: function () {
+                    return bus(key).on_save
+                }
+            })
+            return space
+        }
+        result.save = function (obj, opts) {
+            if (obj.key in fetches_in) {
+                opts = opts || {}
+                opts.version = opts.version || new_version()
+                outstanding_saves[obj.key] = opts.version
+            }
+            return bus.save(obj, opts)
+        }
+        result.fetch = function (obj, cb) {
+            console.assert(!obj.key in fetches_in,
+                           'Channels expect a key to be fetched only once')
+            fetches_in[obj.key] = cb
+            return bus.fetch(obj, cb)
+            // The callback should be called if an abort happens on an
+            // outstanding_save
+        }
+        result.forget = function (key, cb) {
+            delete fetches_in[key]
+            delete outstanding_saves[key]
+            return bus.forget(key, cb)
+        }
+        result.delete = function (key) { bus.delete(key) }
+    }
+
+    var num_peers = 0
+    function peer () { return {
+        id: 'peer' + num_peers++,
+        outstanding_saves: {},
+        fetches_in: {}
+    }}
+
     // The funks attached to each key, maps e.g. 'fetch /point/3' to '/30'
     var handlers = new One_To_Many()
     var wildcard_handlers = []  // An array of {prefix, method, funk}
-    //var funks = {}              // Maps funk_id -> function
 
     // A set of timers, for keys to send forgets on
     var to_be_forgotten = {}
-    function funk_key (funk) {
-        if (!funk.statebus_id) {
-            funk.statebus_id = Math.random().toString(36).substring(7)
-            funks[funk.statebus_id] = funk
-        }
-        return funk.statebus_id
-    }
-    function funk_keyr (funk) {
-        while (funk.proxies_for) funk = funk.proxies_for
-        return funk_key(funk)
-    }
-    function funk_name (f, char_limit) {
-        char_limit = char_limit || 30
-
-        var arg = f.react ? (f.args && f.args[0]) : ''
-        arg = f.react ? (JSON.stringify(f.arg)||'').substring(0,30) : ''
-        f = f.proxies_for || f
-        var f_string = 'function ' + (f.name||'') + '(' + (arg||'') + ') {...}'
-        // Or: f.toString().substr(0,char_limit) + '...'
-
-        var def = f.defined && f.defined.length > 0 && f.defined[0]
-        if (!def) return f_string
-        switch (def.as) {
-        case 'handler':
-            return def.bus+"('"+def.key+"')."+def.method+' = '+f_string
-        case 'fetch callback':
-            return "the callback for fetch('"+def.key+"', "+f_string+')'
-        case 'reactive':
-            return "reactive('"+f_string+"')"
-        default:
-            return 'UNKNOWN Funky Definition!!!... ???'
-        }
-    }
     function bind (key, method, func) {
         if (key[key.length-1] !== '*')
             handlers.add(method + ' ' + key, funk_key(func))
@@ -593,10 +633,9 @@
         // if (funck.statebus_name === undefined || funck.statebus_name === 'undefined')
         //     console.log('WEIRDO FUNCK', funck, typeof funck.statebus_name)
 
-        // When we first run a handler (e.g. a fetch or save), we wrap
-        // it in a reactive() funk that calls it with its arg.  Then
-        // if it fetches or saves, it'll register a .on_save handler
-        // with this funk.
+        // When we first run a handler (e.g. a fetch or save), we wrap it in a
+        // reactive() funk that calls it with its arg.  Then if it fetches or
+        // saves, it'll register a .on_save handler with this funk.
 
         // Is it reactive already?  Let's distinguish it.
         var funk = funck.react && funck,  // Funky!  So reactive!
@@ -616,10 +655,9 @@
         //console.log('     run_handler:  funk', funk_name(funk))
 
         if (funk) {
-            // Then this is an on_save event re-triggering an
-            // already-wrapped funk.  It has its own arg internally
-            // that it's calling itself with.  Let's tell it to
-            // re-trigger itself with that arg.
+            // Then this is an on_save event re-triggering an already-wrapped
+            // funk.  It has its own arg internally that it's calling itself
+            // with.  Let's tell it to re-trigger itself with that arg.
 
             console.assert(method === 'on_save')
             return funk.react()
@@ -647,9 +685,9 @@
 
         // Alright then.  Let's wrap this func with some funk.
 
-        // Fresh fetch/save/forget/delete handlers will just be
-        // regular functions.  We'll store their arg and let them
-        // re-run until they are done re-running.
+        // Fresh fetch/save/forget/delete handlers will just be regular
+        // functions.  We'll store their arg and let them re-run until they
+        // are done re-running.
         var f = reactive(function () {
             var result = func(arg)
 
@@ -714,8 +752,8 @@
     // ****************
     // Reactive functions
     // 
-    // We wrap any function with a reactive wrapper that re-calls it
-    // whenever state it's fetched changes.
+    // We wrap any function with a reactive wrapper that re-calls it whenever
+    // state it's fetched changes.
 
     if (!global_funk) {
         global_funk = reactive(function global_funk () {})
@@ -723,7 +761,6 @@
         executing_funk = global_funk
         funks[global_funk.statebus_id = 'global funk'] = global_funk
     }
-    //global_funk.fetched_keys = new Set()
 
     function reactive(func) {
         // You can call a funk directly:
@@ -731,10 +768,10 @@
         //    f = reactive(func)
         //    f(arg1, arg2)
         //
-        // This will remember every fetch it depends on, and make it
-        // re-call itself whenever that state changes.  It will
-        // remember arg1 and arg2 and use those again.  You can also
-        // trigger a re-action manually with:
+        // This will remember every fetch it depends on, and make it re-call
+        // itself whenever that state changes.  It will remember arg1 and arg2
+        // and use those again.  You can also trigger a re-action manually
+        // with:
         //
         //    funk.react().
         //
@@ -767,19 +804,17 @@
                         console.error(e.stack)
                         process.exit()
                     } else {
-                        // This is the best way to print errors in
-                        // browsers, so that they get clickable line
-                        // numbers
+                        // This is the best way to print errors in browsers,
+                        // so that they get clickable line numbers
                         var result = func.apply(funk.this, funk.args)
-                        // If code reaches here, there was an error
-                        // triggering the error.  We should warn the
-                        // programmer, and then probably move on, because
-                        // maybe the error went away... and it doesn't do
-                        // us any good to just crash now, does it?  Then
-                        // the programmer has less information on what
-                        // happened because he/she can't see it in the
-                        // result, which might also be fucked up, and
-                        // might be informative.
+                        // If code reaches here, there was an error triggering
+                        // the error.  We should warn the programmer, and then
+                        // probably move on, because maybe the error went
+                        // away... and it doesn't do us any good to just crash
+                        // now, does it?  Then the programmer has less
+                        // information on what happened because he/she can't
+                        // see it in the result, which might also be fucked
+                        // up, and might be informative.
                         console.error('Non-deterministic Error!', e.stack || e)
                         console.warn("A non-deterministic error is when your reactive function triggers an error only some of the times it's called.\nThe error originated from calling:", funk_name(func, 400))
                     }
@@ -808,13 +843,12 @@
             return result
         }
         funk.forget = function () {
-            // Todo: This will bug out if an .on_save handler for a
-            // key also fetches that key once, and then doesn't fetch
-            // it again, because when it fetches the key, that key
-            // will end up being a fetched_key, and will then be
-            // forgotten as soon as the funk is re-run, and doesn't
-            // fetch it again, and the fact that it is defined as an
-            // .on_save .on_save handler won't matter anymore.
+            // Todo: This will bug out if an .on_save handler for a key also
+            // fetches that key once, and then doesn't fetch it again, because
+            // when it fetches the key, that key will end up being a
+            // fetched_key, and will then be forgotten as soon as the funk is
+            // re-run, and doesn't fetch it again, and the fact that it is
+            // defined as an .on_save .on_save handler won't matter anymore.
 
             if (funk.statebus_id === 'global funk') return
 
@@ -825,15 +859,15 @@
                 var keys = funk.fetched_keys.get(buss_ids[i])
                 for (var j=0; j<keys.length; j++) {
                     //console.log('Forgetting', keys[j], buss_ids[i], 'from', Object.keys(busses))
-                    // There's a bug here when a funk depends on a bus
-                    // that has disconnected.  What do we do in this
-                    // situation?  Is the bus not cleaning up after
-                    // itself when it dies?  How does it die?  What
-                    // should it do?
 
-                    // Answer: socksj_server calls delete_bus(), which
-                    // just deletes the bussid from var busses[].  But
-                    // this doesn't clean up each funk's fetched keys.
+                    // There's a bug here when a funk depends on a bus that
+                    // has disconnected.  What do we do in this situation?  Is
+                    // the bus not cleaning up after itself when it dies?  How
+                    // does it die?  What should it do?
+
+                    // Answer: socksj_server calls delete_bus(), which just
+                    // deletes the bussid from var busses[].  But this doesn't
+                    // clean up each funk's fetched keys.
                     if (buss_ids[i] in busses)
                         busses[buss_ids[i]].forget(keys[j], funk)
                 }
@@ -871,9 +905,6 @@
     // Tells you whether the currently executing funk is loading
     function loading () { return executing_funk.loading() }
 
-    function channel () {
-        return {}
-    }
 
     // ******************
     // Utility funcs
@@ -889,7 +920,7 @@
         }
         this.delete = function (k, v) { delete hash[k][v]; counts[k]-- }
         this.delete_all = function (k) { delete hash[k]; delete counts[k] }
-        this.contains = function (k, v) { return hash[k] && hash[k][v] }
+        this.has = function (k, v) { return hash[k] && hash[k][v] }
         this.has_any = function (k) { return counts[k] }
         this.del = this.delete // for compatibility; remove this soon
     }
@@ -1021,6 +1052,39 @@
     }
     function key_id(string) { return string.match(/\/?[^\/]+\/(\d+)/)[1] }
     function key_name(string) { return string.match(/\/?([^\/]+).*/)[1] }
+    function funk_key (funk) {
+        if (!funk.statebus_id) {
+            funk.statebus_id = Math.random().toString(36).substring(7)
+            funks[funk.statebus_id] = funk
+        }
+        return funk.statebus_id
+    }
+    function funk_keyr (funk) {
+        while (funk.proxies_for) funk = funk.proxies_for
+        return funk_key(funk)
+    }
+    function funk_name (f, char_limit) {
+        char_limit = char_limit || 30
+
+        var arg = f.react ? (f.args && f.args[0]) : ''
+        arg = f.react ? (JSON.stringify(f.arg)||'').substring(0,30) : ''
+        f = f.proxies_for || f
+        var f_string = 'function ' + (f.name||'') + '(' + (arg||'') + ') {...}'
+        // Or: f.toString().substr(0,char_limit) + '...'
+
+        var def = f.defined && f.defined.length > 0 && f.defined[0]
+        if (!def) return f_string
+        switch (def.as) {
+        case 'handler':
+            return def.bus+"('"+def.key+"')."+def.method+' = '+f_string
+        case 'fetch callback':
+            return "the callback for fetch('"+def.key+"', "+f_string+')'
+        case 'reactive':
+            return "reactive('"+f_string+"')"
+        default:
+            return 'UNKNOWN Funky Definition!!!... ???'
+        }
+    }
     function deps (key) {
         // First print out everything waiting for it to pub
         var result = 'Deps: ('+key+') fires into:'
@@ -1059,7 +1123,7 @@
 
     // Make these private methods accessible
     var api = ['cache backup_cache versions fetch save forget del fire dirty',
-               'subspace handlers wildcard_handlers bindings',
+               'subspace handlers wildcard_handlers bindings channel',
                'run_handler bind unbind reactive',
                'funk_key funk_name funks key_id key_name id kp',
                'pending_fetches fetches_in loading_keys loading',
