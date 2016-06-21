@@ -3,13 +3,12 @@ var bus
 var extra_methods = {
     setup: function setup (options) {
         var bus = this
-        bus.label = 'server'
         //bus.honk = true
         options = options || {}
-        var c = options.client_definition
         if (!('file_store' in options) || options.file_store)
-            bus.file_store('*')                                // Save everything to a file
-        // bus('*').to_save = function reflect (o) { bus.save.fire(o) } // No security/validation
+            bus.file_store('*')           // Save everything to a file
+
+        bus.label = bus.label || 'server'
 
         // Custom route
         var OG_route = bus.route
@@ -28,15 +27,15 @@ var extra_methods = {
     },
     serve: function serve (options) {
         var bus = this
-        bus.label = 'server'
         //bus.honk = true
         options = options || {}
         var c = options.client_definition
         if (!('file_store' in options) || options.file_store)
-            bus.file_store('*')                          // Save everything to a file
-        bus.make_http_server(options)                    // Create our own http server
-        bus.sockjs_server(this.http_server, c)           // Serve via sockjs on it
-        // bus('*').to_save = function reflect (o) { bus.save.fire(o) }   // No security/validation
+            bus.file_store('*')                // Save everything to a file
+
+        bus.make_http_server(options)          // Create our own http server
+        bus.sockjs_server(this.http_server, c) // Serve via sockjs on it
+        bus.label = bus.label || 'server'
 
         // Custom route
         var OG_route = bus.route
@@ -102,7 +101,7 @@ var extra_methods = {
             connections[conn.id] = {}; master.save(connections)
             if (user_bus_func) {
                 var user = make_server_bus()
-                user.label = 'user' + client_num++
+                user.label = 'client' + client_num++
                 master.label = master.label || 'master'
                 user_bus_func(user, conn)
             } else
@@ -141,7 +140,7 @@ var extra_methods = {
 
                 // validate that our fetches_in are all in the bus
                 for (var key in our_fetches_in)
-                    if (!user.fetches_in.contains(key, master.funk_key(sockjs_pubber)))
+                    if (!user.fetches_in.has(key, master.funk_key(sockjs_pubber)))
                         console.trace("***\n****\nFound errant key", key,
                                       'when receiving a sockjs', message.method, 'on', arg)
                 //log('sockjs_s: done with message')
