@@ -2,6 +2,7 @@ bus = require('../statebus.js')()
 util = require('util')
 bus.label = 'bus'
 statelog_indent++
+
 function log () {
     var pre = '   '
     console.log(pre+util.format.apply(null,arguments).replace('\n','\n'+pre))
@@ -78,6 +79,7 @@ var tests = [
     // Callbacks are reactive
     function fetch_with_callback (next) {
         var count = 0
+
         function bbs() {
             return bus.bindings('bar', 'on_save').map(
                 function (f){return bus.funk_name(f)})
@@ -110,6 +112,7 @@ var tests = [
             log('firing a new bar')
             // log(bbs().length+ ' bindings')
             assert(count === 2, '2!=' + count)
+            bus.honk = true
             bus.save.fire({key: 'bar', count:count})       // Call 3
             log('fired the new bar')
             //log(bus.bindings('bar', 'on_save'))
@@ -605,6 +608,18 @@ var tests = [
         c.save(u)
     },
 
+    function wrong_password (next) {
+        var u = c.fetch('/current_user')
+        assert(u.logged_in && u.user.name == 'mike')
+        u.login_as = {name: 'j', pass: 'nah'}
+        c.save(u)
+        setTimeout(function () {
+            assert(!u.login_as, 'Aborted login needs to abort')
+            log('Good, the login failed.')
+            next()
+        }, 200)
+    },
+
     function create_account (next) {
         assert(c.fetch('/current_user').logged_in)
         var count = 0
@@ -620,37 +635,40 @@ var tests = [
                 assert(u.logged_in, '1 not logged in')
                 u.logout = true; c.save(u)
                 break
-            case 2:
-                log('In 2   -    Creating bob, logging in as bob')
-                assert(!u.logged_in, '2 logged in')
+            case 2: break
+            case 3:
+                log('In 3   -    Creating bob, logging in as bob')
+                assert(!u.logged_in, '3 logged in')
                 u.create_account = {name: 'bob', email: 'b@o.b', pass: 'boob'}
                 c.save(u)
                 u.login_as = {name: 'bob', pass: 'boob'}
                 c.save(u)
                 break
-            case 3:
-                log('In 3   -    Logging out')
+            case 4: break
+            case 5:
+                log('In 5   -    Logging out')
                 assert(u.logged_in)
                 assert(u.user.name === 'bob'
                        && u.user.email === 'b@o.b'
                        && u.user.pass === undefined
                        && u.user.key.match(/\/user\/.*/),
                        'Bad user', u)
-                log('Big foo 3')
                 // Now let's log out
-                log('Almost done 3')
+                log('Almost done 5')
                 u.logout = true; c.save(u)
-                log('Done 3')
+                log('Done 5')
                 break
-            case 4:
-                log('In 4   -    Logging back in as boob')
-                assert(!u.logged_in, '4. still logged in')
+            case 6: break
+            case 7:
+                log('In 7   -    Logging back in as boob')
+                assert(!u.logged_in, '7. still logged in')
                 u.login_as = {name: 'bob', pass:'boob'}
                 c.save(u)
                 break
-            case 5:
-                log('In 5   -    Forget and finish.')
-                assert(u.logged_in, '5 not logged in')
+            case 8: break
+            case 9:
+                log('In 9   -    Forget and finish.')
+                assert(u.logged_in, '9 not logged in')
                 forget()
                 setTimeout(function () {next()})
                 break

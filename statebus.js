@@ -21,7 +21,10 @@
 
         if (callback) {
             (callback.defined = callback.defined || []
-            ).push({as:'fetch callback', key:key})
+            ).push({as:'fetch callback', key:key});
+            callback.has_seen = callback.has_seen || function (bus, key, version) {
+                callback.seen_keys[JSON.stringify([bus.id, key])] = version
+            }
         }
 
         // Remove this limitation at some point.  One reason for it is that
@@ -34,7 +37,7 @@
         // ** Subscribe the calling funk **
 
         if (called_from_reactive_funk)
-            funk.depends_on(bus, key)
+            funk.has_seen(bus, key, versions[key])
         fetches_in.add(key, funk_key(funk))
         if (to_be_forgotten[key]) {
             clearTimeout(to_be_forgotten[key])
@@ -160,6 +163,9 @@
         } else {
             // Ignore if nothing happened
             if (object.key && !changed(object)) {
+                // log('fire: o|c=', deep_equals(object, cache[object.key]),
+                //     'b|c=', deep_equals(backup_cache[object.key], cache[object.key]),
+                //     'o|b=', deep_equals(backup_cache[object.key], object))
                 color = grey
                 icon = 'x'
                 if (opts.to_fetch)
@@ -206,6 +212,8 @@
     }
 
     save.abort = function (obj, opts) {
+        log('Abort:', obj.key)
+        mark_changed(obj.key, opts)
     }
 
     var version_count = 0
@@ -426,8 +434,11 @@
 
         // 3. Re-run the functions
         dirty_funks = dirty_funks.values()
-        for (var i=0; i<dirty_funks.length; i++)
+        log('Cleaning up', dirty_funks.length, 'funks')
+        for (var i=0; i<dirty_funks.length; i++) {
+            log('Clean:', funk_name(funks[dirty_funks[i]]))
             funks[dirty_funks[i]].react()
+        }
         // log('We just cleaned up', dirty_funks.length, 'funks!')
     }
 
@@ -436,13 +447,29 @@
         var keys = changed_keys.values()
         var fetchers = dirty_fetchers.values()
 
-        // log(bus+' Cleaning up!', keys, 'keys, and', fetchers, 'fetchers')
+        //log(bus+' Cleaning up!', keys.length, 'keys, and', fetchers.length, 'fetchers')
         for (var i=0; i<keys.length; i++) {          // Collect all keys
             var fs = bindings(keys[i], 'on_save')
             for (var j=0; j<fs.length; j++) {
                 var f = fs[j]
-                if (!f.react)
+                if (f.react) {
+                    // Skip if it's already up to date
+                    var v = f.fetched_keys[JSON.stringify([this.id, keys[i]])]
+                    //log('re-run:', keys[i], f.statebus_id, f.fetched_keys)
+                    if (v && v === versions[keys[i]]) {
+                        log('skipping', funk_name(f), 'already at version', v)
+                        continue
+                    }
+                } else {
+                    // Fresh handlers are always run, but need a wrapper
+                    f.seen_keys = f.seen_keys || {}
+                    var v = f.seen_keys[JSON.stringify([this.id, keys[i]])]
+                    if (v && v === versions[keys[i]]) {
+                        //log('skipping', funk_name(f), 'already at version', v)
+                        continue
+                    }
                     f = run_handler(f, 'on_save', cache[keys[i]], 'dont run it')
+                }
                 result.push(funk_key(f))
             }
         }
@@ -451,6 +478,8 @@
 
         changed_keys.clear()
         dirty_fetchers.clear()
+
+        //log('found', result.length, 'funks to re run')
 
         return result
     }
@@ -827,10 +856,12 @@
 
         funk.func = func  // just for debugging
         funk.called_directly = true
-        funk.fetched_keys = new One_To_Many() // maps bus to keys
+        funk.fetched_keys = {} // maps [bus,key] to version
+                               // version will be undefined until loaded
         funk.abortable_keys = []
-        funk.depends_on = function (bus, key) {
-            this.fetched_keys.add(bus.id, key)
+        funk.has_seen = function (bus, key, version) {
+            //console.log('depend:', bus, key, versions[key])
+            this.fetched_keys[JSON.stringify([bus.id, key])] = version
         }
         funk.react = function () {
             var result
@@ -852,37 +883,20 @@
 
             if (funk.statebus_id === 'global funk') return
 
-            //console.log('Funk.forget() on', funk_name(funk))
-
-            var buss_ids = Object.keys(funk.fetched_keys.hash)
-            for (var i=0; i<buss_ids.length; i++) {
-                var keys = funk.fetched_keys.get(buss_ids[i])
-                for (var j=0; j<keys.length; j++) {
-                    //console.log('Forgetting', keys[j], buss_ids[i], 'from', Object.keys(busses))
-
-                    // There's a bug here when a funk depends on a bus that
-                    // has disconnected.  What do we do in this situation?  Is
-                    // the bus not cleaning up after itself when it dies?  How
-                    // does it die?  What should it do?
-
-                    // Answer: socksj_server calls delete_bus(), which just
-                    // deletes the bussid from var busses[].  But this doesn't
-                    // clean up each funk's fetched keys.
-                    if (buss_ids[i] in busses)
-                        busses[buss_ids[i]].forget(keys[j], funk)
-                }
-                funk.fetched_keys.delete_all(buss_ids[i])
+            for (hash in funk.fetched_keys) {
+                var tmp = JSON.parse(hash),
+                    bus = busses[tmp[0]], key = tmp[1]
+                if (bus)  // Cause it might have been deleted
+                    bus.forget(key, funk)
             }
-            // var keys = funk.fetched_keys.all()
-            // //console.log('react: forgetting', keys)
-            // for (var i=0; i<keys.length; i++) forget(keys[i], funk)
-            // funk.fetched_keys.clear()
+            funk.fetched_keys = {}
         }
         funk.loading = function () {
-            var buss_ids = Object.keys(funk.fetched_keys.hash)
-            for (var i=0; i<buss_ids.length; i++) {
-                var b = buss_ids[i]
-                if (busses[b] && busses[b].loading_keys(funk.fetched_keys.get(b)))
+            for (hash in funk.fetched_keys) {
+                var tmp = JSON.parse(hash),
+                    bus = busses[tmp[0]], key = tmp[1]
+                if (bus  // Cause it might have been deleted
+                    && bus.pending_fetches[key])
                     return true
             }
             return false
@@ -1122,9 +1136,9 @@
     // #######################################
 
     // Make these private methods accessible
-    var api = ['cache backup_cache versions fetch save forget del fire dirty',
+    var api = ['cache backup_cache fetch save forget del fire dirty',
                'subspace handlers wildcard_handlers bindings channel',
-               'run_handler bind unbind reactive',
+               'run_handler bind unbind reactive versions new_version',
                'funk_key funk_name funks key_id key_name id kp',
                'pending_fetches fetches_in loading_keys loading',
                'global_funk busses rerunnable_funks',

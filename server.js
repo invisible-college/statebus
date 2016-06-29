@@ -131,9 +131,18 @@ var extra_methods = {
                 case 'forget': delete our_fetches_in[arg]
                                user.forget(arg, sockjs_pubber) ; break
                 case 'delete': user.delete(arg)                ; break
-                case 'save'  : user.save(arg,
-                                 {version: message.version,
-                                  parents: message.parents})   ; break
+                case 'save'  :
+                    message.version = message.version || user.new_version()
+                    user.save(arg,
+                              {version: message.version,
+                               parents: message.parents,
+                               peer: sockjs_pubber})
+                    if (sockjs_pubber.has_seen) {
+                        user.log('Adding', arg.key+'#'+message.version,
+                                 'to pubber!')
+                        sockjs_pubber.has_seen(user, arg.key, message.version)
+                    }
+                    break
                 }
 
                 //user[message.method](arg, sockjs_pubber)
@@ -206,6 +215,7 @@ var extra_methods = {
         }
         bus(prefix).to_save
             = function ws_save   (obj) { send({method: 'save', obj: obj})
+                                         bus.save.fire(obj)
                                          if (global.ignore_flashbacks)
                                              recent_saves.push(JSON.stringify(obj))
                                          if (recent_saves.length > 100) {
@@ -741,6 +751,7 @@ var extra_methods = {
                     if (creds.name && creds.pass) {
                         // With a username and password
                         var u = authenticate(creds.name, creds.pass)
+                        user.log('auth said:', u)
                         if (u) {
                             // Success!
                             // Associate this user with this session
@@ -755,6 +766,7 @@ var extra_methods = {
                             master.save(clients)
                             master.save(connections)
                         }
+                        else user.save.abort(o)
                     }
                 }
 
