@@ -508,68 +508,6 @@
         return result
     }
 
-    function channel () {
-        // To do: make this clone the other parts of a bus object.  There
-        // might be an automated way to do this, like actually cloning the
-        // object, or making automatic getters for all properties on the
-        // object that look up the bus's version.
-
-        // To do: generalize the our_fetches_in and close() methods from
-        // sockjs_server to this channel.
-
-        var outstanding_saves = {}  // After each incoming save, we'll wait
-                                    // for a responsive outgoing save.fire()
-                                    // or save.abort()
-
-        var fetches_in = {}         // But we'll only be seeing those for
-                                    // things subscribed to via the channel
-
-        var result = function (key) {
-            var space = {}
-            Object.defineProperty(space, 'on_save', {
-                set: function (func) {
-                    console.assert(!obj.key in fetches_in,
-                                   'Channels expect only one on_save per key')
-                    fetches_in[key] = func
-                    bus(key).on_save = func
-                },
-                get: function () {
-                    return bus(key).on_save
-                }
-            })
-            return space
-        }
-        result.save = function (obj, opts) {
-            if (obj.key in fetches_in) {
-                opts = opts || {}
-                opts.version = opts.version || new_version()
-                outstanding_saves[obj.key] = opts.version
-            }
-            return bus.save(obj, opts)
-        }
-        result.fetch = function (obj, cb) {
-            console.assert(!obj.key in fetches_in,
-                           'Channels expect a key to be fetched only once')
-            fetches_in[obj.key] = cb
-            return bus.fetch(obj, cb)
-            // The callback should be called if an abort happens on an
-            // outstanding_save
-        }
-        result.forget = function (key, cb) {
-            delete fetches_in[key]
-            delete outstanding_saves[key]
-            return bus.forget(key, cb)
-        }
-        result.delete = function (key) { bus.delete(key) }
-    }
-
-    var num_peers = 0
-    function peer () { return {
-        id: 'peer' + num_peers++,
-        outstanding_saves: {},
-        fetches_in: {}
-    }}
-
     // The funks attached to each key, maps e.g. 'fetch /point/3' to '/30'
     var handlers = new One_To_Many()
     var wildcard_handlers = []  // An array of {prefix, method, funk}
