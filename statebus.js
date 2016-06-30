@@ -895,6 +895,38 @@
             if (obj.hasOwnProperty(attr)) copy[attr] = obj[attr]
         return copy
     }
+    function clone(item) {
+        if (!item               // null, undefined values check
+            || item instanceof Number
+            || item instanceof String
+            || item instanceof Boolean)
+            return item
+
+        if (Array.isArray(item)) {
+            item = item.slice()
+            for (var i=0; i<item.length; i++)
+                item[i] = clone(item[i])
+            return item
+        }
+        
+        if (typeof item == "object") {
+            // Is it DOM
+            if (item.nodeType && typeof item.cloneNode == "function")
+                return item.cloneNode(true)
+
+            if (item instanceof Date)
+                return new Date(item)
+            else {
+                var result = {}
+                for (var i in item) result[i] = clone(item[i])
+                return result
+            }
+        }
+
+        // Give up on everything else...
+        return item
+    }
+
     function extend(obj, with_obj) {
         if (with_obj === undefined) return obj
         for (var attr in with_obj)
