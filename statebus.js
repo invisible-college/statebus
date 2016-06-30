@@ -23,6 +23,7 @@
             (callback.defined = callback.defined || []
             ).push({as:'fetch callback', key:key});
             callback.has_seen = callback.has_seen || function (bus, key, version) {
+                callback.seen_keys = callback.seen_keys || {}
                 callback.seen_keys[JSON.stringify([bus.id, key])] = version
             }
         }
@@ -1075,7 +1076,7 @@
 
     // Make these private methods accessible
     var api = ['cache backup_cache fetch save forget del fire dirty',
-               'subspace handlers wildcard_handlers bindings channel',
+               'subspace handlers wildcard_handlers bindings',
                'run_handler bind unbind reactive versions new_version',
                'funk_key funk_name funks key_id key_name id kp',
                'pending_fetches fetches_in loading_keys loading',
