@@ -51,12 +51,20 @@ var extra_methods = {
 
             return count
         }
+
+        // Back door to the control room
+        if (options.backdoor) {
+            bus.make_http_server({
+                port: options.backdoor,
+                name: 'backdoor_http_server'
+            })
+            bus.sockjs_server(this.backdoor_http_server)
+        }
     },
 
     make_http_server: function make_http_server (options) {
         options = options || {}
         var port = options.port || 3000
-        var request_listern = options.request_listern || undefined
         var fs = require('fs')
 
         if (fs.existsSync('certs')) {
@@ -83,10 +91,11 @@ var extra_methods = {
             var ssl_options = undefined
         }
 
-        this.http_server = http.createServer(ssl_options)
-        this.http_server.listen(port, function(){
+        var http_server = http.createServer(ssl_options)
+        http_server.listen(port, function(){
             console.log('Listening on '+protocol+ '//:<host>:' + port)
         })
+        this[options.name || 'http_server'] = http_server
     },
 
     sockjs_server: function sockjs_server(httpserver, user_bus_func) {
