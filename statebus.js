@@ -419,6 +419,7 @@
 
     function mark_changed (key, opts) {
         // Marks a key as dirty, meaning that functions on it need to update
+        log('Marking changed', bus, key)
         changed_keys.add(key)
         clean_timer = clean_timer || setTimeout(clean)
     }

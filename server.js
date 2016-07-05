@@ -102,13 +102,15 @@ var extra_methods = {
         var master = this
         var client_num = 0
         var log = master.log
-        master.save({key: 'connections'}) // Clean out old sessions
-        var connections = master.fetch('connections')
+        if (user_bus_func) {
+            master.save({key: 'connections'}) // Clean out old sessions
+            var connections = master.fetch('connections')
+        }
         var s = require('sockjs').createServer({
             sockjs_url: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js' })
         s.on('connection', function(conn) {
-            connections[conn.id] = {}; master.save(connections)
             if (user_bus_func) {
+                connections[conn.id] = {}; master.save(connections)
                 var user = make_server_bus()
                 user.label = 'client' + client_num++
                 master.label = master.label || 'master'
@@ -123,10 +125,10 @@ var extra_methods = {
                 log('sockjs_s: SENT a', obj, 'to client')
             }
             conn.on('data', function(message) {
+                log('sockjs_s:', message)
                 try {
                     message = JSON.parse(message)
                     var arg = message.key || message.obj
-                    //log('sockjs_s:', method, arg)
                     if (!arg) throw 'Missing argument in message'
                 } catch (e) {
                     console.error('Received bad sockjs message from '
@@ -146,7 +148,8 @@ var extra_methods = {
                               {version: message.version,
                                parents: message.parents,
                                peer: sockjs_pubber})
-                    if (sockjs_pubber.has_seen) {
+                    if (our_fetches_in[arg.key]) {  // Store what we've seen if we
+                                                    // might have to publish it later
                         user.log('Adding', arg.key+'#'+message.version,
                                  'to pubber!')
                         sockjs_pubber.has_seen(user, arg.key, message.version)
@@ -167,8 +170,10 @@ var extra_methods = {
                 log('sockjs_s: disconnected from', conn.remoteAddress, conn.id, user.id)
                 for (var key in our_fetches_in)
                     user.forget(key, sockjs_pubber)
-                delete connections[conn.id]; master.save(connections)
-                user.delete_bus()
+                if (user_bus_func) {
+                    delete connections[conn.id]; master.save(connections)
+                    user.delete_bus()
+                }
             })
             if (user_bus_func) {
                 user('/connection').to_fetch = function () {
@@ -848,7 +853,7 @@ var extra_methods = {
 
             // This forwards anything we don't have a specific handler for
             // to the global cache
-            if (count === 0 && key[0] === '/') {
+            if (count === 0) {
                 count++
                 if (method === 'to_fetch')
                     bus.run_handler(function get_from_master (k) { return master_bus.fetch(k) }, method, arg)
