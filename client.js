@@ -459,8 +459,7 @@
 
     load_scripts() // This function could actually be inlined
     function load_scripts() {
-        var statebus_dir = document.querySelector('script[src*="client"][src$=".js"]')
-            .getAttribute('src').match(/(.*)[\/\\]/)
+        var statebus_dir = script_elem().getAttribute('src').match(/(.*)[\/\\]/)
         statebus_dir = (statebus_dir && statebus_dir[1] + '/')||''
 
         var js_urls = {
@@ -478,7 +477,13 @@
         document.addEventListener('DOMContentLoaded', scripts_ready, false)
     }
 
-    window.statebus_server = window.statebus_server || 'https://stateb.us:3004'
+    function script_elem () {
+        return document.querySelector('script[src*="client"][src$=".js"]')
+    }
+    window.statebus_server = window.statebus_server ||
+        script_elem().getAttribute('server') || 'https://stateb.us:3004'
+    window.statebus_backdoor = window.statebus_backdoor ||
+        script_elem().getAttribute('backdoor')
     function scripts_ready () {
         make_client_statebus_maker()
         window.bus = window.statebus()
