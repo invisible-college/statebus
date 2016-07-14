@@ -30,6 +30,18 @@ var extra_methods = {
         //bus.honk = true
         options = options || {}
         var c = options.client_definition
+        if (options.client) {
+            var master = bus
+            master.label = 'master'
+            delete global.fetch
+            delete global.save
+            c = function (client, conn) {
+                client.serves_auth(conn, master)
+                client.route_defaults_to(master)
+                options.client(client)
+            }
+        }
+
         if (!('file_store' in options) || options.file_store)
             bus.file_store('*')                // Save everything to a file
 
