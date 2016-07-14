@@ -213,6 +213,7 @@
     }
 
     save.abort = function (obj, opts) {
+        console.assert(obj)
         log('Abort:', obj.key)
         mark_changed(obj.key, opts)
     }
@@ -401,6 +402,10 @@
         // Todo: update versions[key]
         mark_changed(key)
         console.warn('We need to figure out what to do with deleted keys!')
+        // Probably we want to mark_deleted(key) instead of mark_changed(key),
+        // and then send delete()s to all busses subscribed to the key.  We
+        // might also record a new version of the state to show that it's been
+        // deleted, which we can use to cancel echoes from the sending bus.
 
         log('del:', obj_or_key)
         bus.route(key, 'to_delete', key)
@@ -661,7 +666,9 @@
             var result = func(arg)
 
             // For fetch
-            if (method === 'to_fetch' && result instanceof Object && !f.loading()) {
+            if (method === 'to_fetch' && result instanceof Object
+                && !f.loading()     // Experimental.
+               ) {
                 result.key = arg
                 save.fire(result, {to_fetch: true})
                 return result
@@ -1124,7 +1131,7 @@
 
     // Export globals
     if (Object.keys(busses).length === 0) {
-        var globals = 'fetch save del forget'.split(' ')
+        var globals = 'fetch save del forget loading clone'.split(' ')
         for (var i=0; i<globals.length; i++)
             this[globals[i]] = eval(globals[i])
     }
