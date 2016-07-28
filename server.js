@@ -89,15 +89,20 @@ var extra_methods = {
     sockjs_server: function sockjs_server(httpserver, user_bus_func) {
         var master = this
         var log = master.log
-        master.pub({key: 'connections'}) // Clean out old sessions
-        var connections = master.fetch('connections')
+        if (user_bus_func) {
+            master.pub({key: 'connections'}) // Clean out old sessions
+            var connections = master.fetch('connections')
+        }
         var s = require('sockjs').createServer({
             sockjs_url: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js' })
         s.on('connection', function(conn) {
-            connections[conn.id] = {}; master.pub(connections)
-            var user = user_bus_func ? make_server_bus() : master
-            //user.label = user.label || 'client ' + conn.id
-            if (user_bus_func) user_bus_func(user, conn)
+            if (user_bus_func) {
+                connections[conn.id] = {}; master.pub(connections)
+                var user = make_server_bus()
+                //user.label = user.label || 'client ' + conn.id
+                user_bus_func(user, conn)
+            } else
+                var user = master
 
             var our_fetches_in = {}  // Every key that every client has fetched.
             log('sockjs_s: New connection from', conn.remoteAddress)
@@ -137,8 +142,10 @@ var extra_methods = {
                 log('sockjs_s: disconnected from', conn.remoteAddress, conn.id, user.id)
                 for (var key in our_fetches_in)
                     user.forget(key, sockjs_pubber)
-                delete connections[conn.id]; master.pub(connections)
-                user.delete_bus()
+                if (user_bus_func) {
+                    delete connections[conn.id]; master.pub(connections)
+                    user.delete_bus()
+                }
             })
             if (user_bus_func) {
                 user('/connection').on_fetch = function () {
