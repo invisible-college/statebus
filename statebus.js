@@ -10,7 +10,6 @@
     // Public API
 
     function fetch (key, callback) {
-        // log('fetch:', key)
         key = key.key || key    // You can pass in an object instead of key
 
         if (typeof key !== 'string')
@@ -27,6 +26,8 @@
                 callback.seen_keys[JSON.stringify([bus.id, key])] = version
             }
         }
+
+        //log('fetch:', key, {called_from_reactive_funk: called_from_reactive_funk})
 
         // Remove this limitation at some point.  One reason for it is that
         // bind() doesn't check if a wildcard handler already exists... it
@@ -53,8 +54,9 @@
         // arrived nested within a bigger object, because we never explicity
         // fetched those keys.  But we don't need to fetch them now cause we
         // already have them.
+        var to_fetchers = 0
         if (!fetches_out[key])
-            var to_fetchers = bus.route(key, 'to_fetch', key)
+            to_fetchers = bus.route(key, 'to_fetch', key)
 
         // Now there might be a new value pubbed onto this bus.
         // Or there might be a pending fetch.
@@ -81,7 +83,6 @@
             backup_cache[key] = backup_cache[key] || {key: key}
             run_handler(funk, 'on_save', cache[key] = cache[key] || {key: key})
         }
-
     }
     var pending_fetches = {}
     var fetches_out = {}                // Maps `key' to `func' iff we've fetched `key'
@@ -101,6 +102,7 @@
             for (var i=0; i<40-end_col; i++) message += ' '
             message += diff.substring(0,80)
         }
+        else message += ' <no diff>'
         return message
     }
     function save_msg (obj, opts, meth) {
@@ -454,7 +456,7 @@
         var keys = changed_keys.values()
         var fetchers = dirty_fetchers.values()
 
-        //log(bus+' Cleaning up!', keys.length, 'keys, and', fetchers.length, 'fetchers')
+        //log(bus+' Cleaning up!', keys, 'keys, and', fetchers.length, 'fetchers')
         for (var i=0; i<keys.length; i++) {          // Collect all keys
             var fs = bindings(keys[i], 'on_save')
             for (var j=0; j<fs.length; j++) {
@@ -1059,24 +1061,62 @@
     function funk_name (f, char_limit) {
         char_limit = char_limit || 30
 
+        // if (f.react)
+        //     var arg = JSON.stringify((f.args && f.args[0] && (f.args[0].key || f.args[0])) || '').substring(0.30)
+        // else
+        //     var arg = ''
         var arg = f.react ? (f.args && f.args[0]) : ''
         arg = f.react ? (JSON.stringify(f.arg)||'').substring(0,30) : ''
         f = f.proxies_for || f
-        var f_string = 'function ' + (f.name||'') + '(' + (arg||'') + ') {...}'
+        var f_string = 'function ' + (f.name||'') + '(' + (arg||'') + ') {..}'
         // Or: f.toString().substr(0,char_limit) + '...'
 
-        var def = f.defined && f.defined.length > 0 && f.defined[0]
-        if (!def) return f_string
+        if (!f.defined) return f_string
+        if (f.defined.length > 1) return '**' + f_string + '**'
+
+        var def = f.defined[0]
         switch (def.as) {
         case 'handler':
             return def.bus+"('"+def.key+"')."+def.method+' = '+f_string
         case 'fetch callback':
-            return "the callback for fetch('"+def.key+"', "+f_string+')'
+                return 'fetch('+def.key+', '+f_string+')'
         case 'reactive':
             return "reactive('"+f_string+"')"
         default:
             return 'UNKNOWN Funky Definition!!!... ???'
         }
+    }
+
+    function funk_name2 (f, char_limit) {
+        char_limit = char_limit || 30
+
+        var arg = f.react ? (f.args && f.args[0]) : ''
+        arg = f.react ? (JSON.stringify(f.arg)||'').substring(0,30) : ''
+        f = f.proxies_for || f
+        var f_string = 'function ' + (f.name||'') + '(' + (arg||'') + ') {..}'
+        // Or: f.toString().substr(0,char_limit) + '...'
+
+        if (!f.defined) return f_string
+
+        var result = ''
+        if (f.defined.length > 1) result += '['
+        for (var i=0; i<f.defined.length; i++) {
+            var def = f.defined[i]
+            switch (def.as) {
+            case 'handler':
+                result += def.bus+"('"+def.key+"')."+def.method+' = '+f_string; break
+            case 'fetch callback':
+                result += 'fetch('+def.key+', '+f_string+')'; break
+                result += "the callback for fetch('"+def.key+"', "+f_string+')'; break
+            case 'reactive':
+                result += "reactive('"+f_string+"')"; break
+            default:
+                result += 'UNKNOWN Funky Definition!!!... ???'; break
+            }
+            if (i+1 < f.defined.length) result += ', '
+        }
+        if (f.defined.length > 1) result += ']'
+        return result
     }
     function deps (key) {
         // First print out everything waiting for it to pub

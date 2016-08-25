@@ -59,9 +59,10 @@
         url = url.replace(/^state:\/\//, 'https://')
         url = url.replace(/^statei:\/\//, 'http://')
         if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
-        function send (o) {
+        function send (o, pushpop) {
+            pushpop = pushpop || 'push'
             bus.log('sockjs.send:', JSON.stringify(o))
-            outbox.push(JSON.stringify(o))
+            outbox[pushpop](JSON.stringify(o))
             flush_outbox()
         }
         function flush_outbox() {
@@ -100,7 +101,8 @@
                                  + Math.random().toString(36).substring(2))
                     save(me)
                 }
-                send({method: 'save', obj: {key: '/current_user', client: me.client}})
+                send({method: 'save', obj: {key: '/current_user', client: me.client}},
+                     'unshift')
 
                 if (attempts > 0) {
                     // Then we need to refetch everything, cause it
@@ -633,7 +635,7 @@
                 // Compile coffeescript to javascript
                 var compiled
                 try {
-                    compiled = CoffeeScript.compile(scripts[i].text,
+                    compiled = CoffeeScript.compile(scripts[i].text.replace(/(\s[A-Z_]+)\n/g, '$1 null,\n'),
                                                     {bare: true,
                                                      sourceMap: true,
                                                      filename: filename})

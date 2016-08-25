@@ -3,7 +3,6 @@ var bus
 var extra_methods = {
     setup: function setup (options) {
         var bus = this
-        //bus.honk = true
         options = options || {}
         if (!('file_store' in options) || options.file_store)
             bus.file_store('*')           // Save everything to a file
@@ -27,7 +26,6 @@ var extra_methods = {
     },
     serve: function serve (options) {
         var bus = this
-        //bus.honk = true
         options = options || {}
         var c = options.client_definition
         if (options.client) {
@@ -877,10 +875,12 @@ var extra_methods = {
     },
 }
 
-function make_server_bus () {
+function make_server_bus (options) {
     bus = require('./statebus')()
     for (m in extra_methods)
         bus[m] = extra_methods[m]
+    if (options && options.client)
+        bus.serve(options)
     return bus
 }
 module.exports = make_server_bus
