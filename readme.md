@@ -255,9 +255,9 @@ var master = require('statebus/server')({  // The master bus is defined here
 // master('/bar').to_fetch = ...
 ```
 
-Any handler defined on the `client` bus will shadow the `master` bus, but if
-you don't define any custom behavior for a key, it will default to passing
-through to master.  For example:
+Any handler defined on the `client` bus will shadow the `master` bus.  If you
+don't define any custom behavior for a key, all `fetch` and `save` calls will
+pass through to `master`.  For example:
 
 ```javascript
 // client 1:
