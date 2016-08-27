@@ -65,9 +65,9 @@ The default port for statebus version 4 is `3004`.
 Up until now, the statebus has been dumb and passive—it saves and fetches
 whatever anyone asks it to.  But now there's an API to *control* reads and
 writes to state.  You can:
+- Give distinct users distinct permissions and views of state **⬅︎ You can write server code!**
 - Connect statebusses together
 - Make proxies or caches that define state in terms of other state
-- Give distinct users distinct permissions and views of state
 - Create handy state abstractions that live-update on any schedule you can program
 
 How does it work? Recall the four statebus methods:
