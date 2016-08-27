@@ -204,11 +204,11 @@ gus.fetch('foo').bar          // ==> undefined
 
 You can connect busses together with handlers.  For instance:
 ```javascript
-// Connect fetchs on 'foo' to gus
+// Connect fetches on 'foo' to gus
 bus('foo').to_fetch = function () { return gus.fetch('foo') }
 
 // Connect saves on 'foo' to gus
-bus('foo').to_save = function (obj) { gus.save(obj); bus.save.fire(obj) }
+bus('foo').to_save = function (obj) { gus.save(obj) }
 ```
 
 If you only have one bus, you can also use the global `fetch()` and `save()`
