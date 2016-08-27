@@ -493,8 +493,8 @@ bus('/time').to_forget = function (key) {
 
 // Control changes to state
 bus('/blog').to_save = function (obj) {
-    if (<permitted>) {
-        obj.var = <validated var>
+    if (Math.random() < .5) {
+        obj.var = "I'm forcing this var!"
         save.fire(obj)    // Go live!
     } else
         save.abort(obj)
