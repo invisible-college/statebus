@@ -355,7 +355,7 @@ c.mine.extra_info = 'Something!'
 save(c)
 ```
 
-This results in:
+This info is broadcast to everyone who fetched `/connections` on the server:
 
 ```javascript
 {
@@ -369,6 +369,11 @@ This results in:
 ```
 
 ## Little things
+
+### Debugging output
+Enable extra statebus logging info with `bus.honk = true`. If you're on the
+server, you need to enable it separately for the master and every client bus
+you are concerned with.
 
 ### Safety measures in Reactive Funk
 
