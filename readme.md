@@ -606,6 +606,10 @@ var master = require('statebus/server')({              // Define the master bus
 })
 ```
 
+# What's missing
+
+- Good SQL database adapters
+
 # What's not new
 
 ## Fetch and Save with Rerunnable Functions
