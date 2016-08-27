@@ -66,7 +66,7 @@ Up until now, the statebus has been dumb and passive—it saves and fetches
 whatever anyone asks it to.  But now there's an API to *control* reads and
 writes to state.  You can:
 - Connect statebusses together
-- Make proxies that define state in terms of other state
+- Make proxies or caches that define state in terms of other state
 - Give distinct users distinct permissions and views of state
 - Create handy state abstractions that live-update on any schedule you can program
 
@@ -123,11 +123,10 @@ If your `to_fetch` handler needs results from a callback, you won't be able to `
 
 ```javascript
 bus(prefix).to_fetch = function (key) {
-   call_something(function (result) {
-      return result   // This doesn't work!
-   })
-
-  return result   // This doesn't work either!
+  call_something(function (result) {
+    return result   // This doesn't work!
+  })
+  return result     // This doesn't work either!
 }
 ```
 
