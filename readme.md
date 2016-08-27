@@ -290,7 +290,7 @@ Each user will have a different `/current_user` state. By default, it looks like
 You can check if the current user is logged in with `fetch('/current_user').logged_in`.  
 If they are, you can get the current user's key with `fetch('/current_user').user.key`.
 
-You can also do things to the current user state:
+You can also manipulate `/current_user`, to log in, out, or edit or create your account:
 
 #### Log in
 
