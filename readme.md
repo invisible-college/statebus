@@ -125,8 +125,7 @@ The general form of a `to_fetch` handler is:
 ```javascript
 bus('the_answer').to_fetch = function (key) {
    // Do some stuff...
-
-   // ...and then produce new state to fire across the bus,
+   // ...and then fire the new state across the bus,
    // using one of these equivalent statements:
    return {key: 'the_answer', n: 42}
    return {n: 42}                             // Statebus can infer the key in return statements
