@@ -413,32 +413,6 @@ This info is broadcast to everyone who fetched `/connections` on the server:
 
 ## Little things
 
-### Debugging output
-Enable extra statebus logging info with `bus.honk = true`. If you're on the
-server, you need to enable it separately for the master and every client bus
-you are concerned with.
-
-### Safety measures in Reactive Funk
-
-Although you may fetch many things in a reactive funk, and some of those
-fetched results may be delayed by e.g. the network, reactive funks try to
-present the illusion of all state being loaded all the time, by re-running
-until all state has loaded.
-
-However, we want to make sure your code doesn't cause unintended side-effect
-damage in the interim state before all state has loaded.  To guard against
-this, statebus keeps a backup of the state cache, and automatically undoes any
-`save()` calls from the backup that occur while the function is still
-`loading()`.  Example:
-
-```javascript
-bus('foo').to_save = function (obj) {
-   obj.bar = fetch('/bar').name      // Fetch something over the network
-   save.fire(obj)                    // This will only happen once /bar has loaded!
-}
-```
-
-
 ### Back door entry
 
 The backdoor is cool. Enable it in options on the server:
@@ -461,6 +435,32 @@ directly to the master bus on the server!
 ```javascript
 master.fetch('/raw_master_stuff')
 ```
+
+### Safety measures in Reactive Funk
+
+Although you may fetch many things in a reactive funk, and some of those
+fetched results may be delayed by e.g. the network, reactive funks try to
+present the illusion of all state being loaded all the time, by re-running
+until all state has loaded.
+
+However, we want to make sure your code doesn't cause unintended side-effect
+damage in the interim state before all state has loaded.  To guard against
+this, statebus keeps a backup of the state cache, and automatically undoes any
+`save()` calls from the backup that occur while the function is still
+`loading()`.  Example:
+
+```javascript
+bus('foo').to_save = function (obj) {
+   obj.bar = fetch('/bar').name      // Fetch something over the network
+   save.fire(obj)                    // This will only happen once /bar has loaded!
+}
+```
+
+### Debugging output
+Enable extra statebus logging info with `bus.honk = true`. If you're on the
+server, you need to enable it separately for the master and every client bus
+you are concerned with.
+
 
 # Examples
 
