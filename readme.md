@@ -222,7 +222,7 @@ fetch('foo').fuzz          // ==> 3
 
 But these globals are disabled on multi-user servers, where they become ambiguous.
 
-(We might remove multiple busses in a future release.)
+(We might remove multiple busses in a future release.  Then you would disambiguate with keys, instead.)
 
 ## Support multiple users
 
@@ -245,6 +245,7 @@ connect to the server:
 ```javascript
 var master = require('statebus/server')({  // The master bus is defined here
     client: function (client) {            // Each client bus is passed as an argument here
+
         // Client-specific state definitions go here
 
         // Give each client a different view of the '/foo' state:
