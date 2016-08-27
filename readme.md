@@ -609,6 +609,7 @@ var master = require('statebus/server')({              // Define the master bus
 # What's missing
 
 - Good SQL database adapters
+- Finalized API names (the v5 release might break your code)
 
 # What's not new
 
