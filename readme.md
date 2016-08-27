@@ -3,11 +3,12 @@
 ## Program state behavior
 
 Up until now, the statebus has been dumb and passive—it saves and fetches
-whatever anyone asks it to.  But now there's a nice API to *control* reads and
-writes to state.  Now:
-- You can have different users, with different read/write permissions
-- You can define state in terms of other state (e.g. a "proxy")
-- You can add handlers to do things when state changes
+whatever anyone asks it to.  But now there's an API to *control* reads and
+writes to state.  You can:
+- Have distinct users, with distinct permissions and views of state
+- Create proxies that define state in terms of other state
+- Validate data before saving
+- Do things before/after state changes
 
 How does it work? Recall the four statebus methods:
 - fetch(key)
@@ -15,7 +16,7 @@ How does it work? Recall the four statebus methods:
 - forget(key)
 - delete(key)
 
-You can define a *handler* to controls how each method behaves on a set of keys:
+You can now define *handlers* that control how each method behaves on a set of keys:
 - bus(key_space).to_fetch = function (key) { ... }
 - bus(key_space).to_save = function (obj) { ... }
 - bus(key_space).to_forget = function (key) { ... }
