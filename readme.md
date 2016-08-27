@@ -99,19 +99,10 @@ anything that fetches it will be *loading*.
 
 ### Control saves with `to_save`
 
-A `to_save` handler can control:
-- Which changes to state are allowed
-- Validation and cleaning
-- Where state is stored (*e.g.* in a database)
-- Updating dependent state
-- When to broadcast updates
-
-Your `to_save` handler will receive the requested new state `obj` as a
-parameter, and must either call `save.abort(obj)` to ignore the request, or
-`save.fire(obj)` (after making any desired changes to obj) to broadcast it.
+A `to_save` handler looks like this:
 
 ```javascript
-bus(prefix).to_save = function (obj) {
+bus("key_pattern").to_save = function (obj) {
 
    // Here you can validate obj, tweak it, update a backing store...
 
@@ -123,6 +114,17 @@ bus(prefix).to_save = function (obj) {
 }
 ```
 
+Your `to_save` handler will receive the requested new state `obj` as a
+parameter, and must either call `save.abort(obj)` to ignore the request, or
+`save.fire(obj)` (after making any desired changes to `obj`) to broadcast it.
+
+This lets you control:
+- Which changes to state are allowed
+- Validation and cleaning
+- Where state is stored (*e.g.* in a database)
+- Updating dependent state
+- When to broadcast updates
+
 To_save handlers are also reactive, but stop reacting as soon as they run once
 to completion without anything fetched loading.  This lets you fetch state
 from other places (*e.g.* over the network) and be sure that your handler will
@@ -130,6 +132,15 @@ run once the state has loaded.
 
 
 ## Safety measures in Reactive Funk
+
+
+
+```javascript
+bus('foo').to_save = function (obj) {
+   obj.bar = fetch('/bar').name      // Fetch something over the network
+   save.fire(obj)                    // This will only happen once /bar has loaded!
+}
+```
 
 Although you may fetch many things in a reactive funk, and some of those
 fetched results may be delayed by e.g. the network, reactive funks try to
@@ -142,12 +153,6 @@ this, statebus keeps a backup of the state cache, and automatically undoes any
 `save()` calls from the backup that occur while the function is still
 `loading()`.  Example:
 
-```javascript
-bus('foo').to_save = function (obj) {
-   obj.bar = fetch('/bar').name      // Fetch something over the network
-   save.fire(obj)                    // This will only happen once /bar has loaded!
-}
-```
 
 ## Multiple Busses
 
@@ -440,9 +445,9 @@ Here's a blog with access control.
 var master = require('statebus/server')({              // Define the master bus
 
     port: 3004,         // Each client normally connects on port 3004
-    backdoor: 4004,     // For testing, you can enable direct access to the master bus on 4004
+    // backdoor: 4004,  // For testing, you can enable direct access to the master bus on 4004
 
-    with_clients: function (client) {                   // Define each client bus
+    client: function (client) {                        // Define each client bus
 
         // Each client gets its own "client" bus, which defines how to
         // fetch() and save() that client's state.
