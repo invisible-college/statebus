@@ -150,10 +150,13 @@ bus("key_pattern").to_save = function (obj) {
    // Here you can validate obj, tweak it, update a backing store...
 
    // And eventually, either call:
-   save.abort(obj)   // To deny this save request!
+   bus.save.abort(obj)   // To deny this save request!
 
    // ... or:
-   save.fire(obj)    // To broadcast the result across the bus!
+   bus.save.fire(obj)    // To broadcast the result across the bus!
+
+   // ... or:
+   bus.dirty(obj.key)    // To re-run a to_fetch handler, if you've defined one.
 }
 ```
 
