@@ -163,6 +163,8 @@ bus("key_pattern").to_save = function (obj) {
 Your `to_save` handler will receive the requested new state `obj` as a
 parameter, and must either call `save.abort(obj)` to ignore the request, or
 `save.fire(obj)` (after making any desired changes to `obj`) to broadcast it.
+It doesn't matter if the `to_save` handler *itself* fires the change, but the
+save will remain pending until *something* does.
 
 This lets you control:
 - Which changes to state are allowed
