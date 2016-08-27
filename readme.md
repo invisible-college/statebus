@@ -27,7 +27,7 @@ Let's start with the handlers for `fetch` and `save`.
 ### Define state programmatically with `to_fetch`
 
 Let's imagine I want to define an aggregate blog state, that pulls in state
-from multiple other blogs.  Let's define how to fetch it.  Then when someone
+from multiple other blogs.  To define new state, we define how to *fetch* it.  When someone
 fetches this state, it'll run our function, which returns the aggregated blog:
 
 ```javascript
