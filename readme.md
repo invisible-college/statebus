@@ -59,19 +59,21 @@ fetch('one_plus/2').num   // result: 3
 
 #### What if `to_fetch` needs data from a callback?
 
-If you get the state in a callback, you can't just `return` it in the handler:
+If your `to_fetch` handler needs results from a callback, you won't be able to `return` it:
 
 ```javascript
 bus(prefix).to_fetch = function (key) {
    call_something(function (result) {
       return result   // This doesn't work!
    })
+
+  return result   // This doesn't work either!
 }
 ```
 
 But that's ok, because the `return` statement in a to_fetch handler is
 actually just shorthand for `bus.save.fire(obj)`, which you can call directly
-instead, from anywhere:
+from anywhere:
 
 ```javascript
 bus(prefix).to_fetch = function (key) {
