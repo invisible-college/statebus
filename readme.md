@@ -276,7 +276,7 @@ client will automatically have a custom `/current_user`, `/connections`, and
 
 ### The `/current_user` state
 
-Each user will have a different `/current_user` state. By default, yours will look like this:
+Each user will have a different `/current_user` state. By default, it looks like this:
 
 ```javascript
 {
