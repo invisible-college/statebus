@@ -578,7 +578,8 @@ var master = require('statebus/server')({              // Define the master bus
             o.body = o.body || ''
             master.save(o)  // Save it to master
             // We don't have to call client.save.fire(o) here because
-            // master.save(o) will call master.save.fire(o), which will bubble up to this client
+            // master.save(o) will call master.save.fire(o), which will bubble
+            // up to this client
         }
 
         // Only editors can /see/ unpublished posts
