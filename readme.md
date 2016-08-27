@@ -31,7 +31,8 @@ Options is a dictionary, and you can put these things in it:
 
 If you specify a `port`, `backdoor`, or `client`, then this bus will start a
 websocket server and serve its state over the internet.  Otherwise, it'll just
-make a new bus object, as described in [Multiple Busses](#make-multiple-busses).
+make a new bus object, as described in
+[Multiple Busses](#make-multiple-busses).
 
 
 #### Client
@@ -230,6 +231,46 @@ bus, and which inherit state from a common `master` bus.
        o
    Master Bus
 ```
+
+To enable multiple users, use the `client:` option when you create a bus:
+
+```javascript
+var master = require('statebus/server')({  // The master bus is defined here
+    client: function (client) {            // Each client bus is passed as an argument here
+        // Client-specific state definitions go here
+
+        // Give each client a different view of the '/foo' state:
+        client('/foo').to_fetch = function (key) {
+            if (fetch('/current_user').logged_in)
+                return {you_are: 'logged in!!!'}
+            else
+                return {you_are: 'not logged in... sad.'}
+        }
+    }
+})
+
+// Master state definitions can go below
+// master('/bar').to_fetch = ...
+```
+
+Any handler defined on the `client` bus will shadow the master state, but if
+you don't define any custom behavior for a key, it will default to passing
+through to master.  For example:
+
+```javascript
+// client 1:
+fetch('/foo').you_are        // -> 'logged in!!!'
+fetch('/bar').num            // -> undefined
+save({key: '/bar', num: 3})  // Saved to master
+
+// client 2:
+fetch('/foo').you_are        // -> 'not logged in... sad.'
+fetch('/bar').num            // -> 3
+```
+
+Additionally, if you enable multi-user support with the `client:` option, each
+client will automatically have a custom `/current_user`, `/connections`, and
+`/connection` state defined for it.
 
 ### The `/current_user` state
 
