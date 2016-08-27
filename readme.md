@@ -20,24 +20,21 @@ The `#next` tells npm to give you version 4 instead of 3.
 
 Create a server with:
 ```javascript
-var bus = require('statebus/server')(options)
-```
+var bus = require('statebus/server')({
 
-Options is a dictionary, and you can put these things in it:
+    // You can pass these options to your new server:
 
-```javascript
-{
-    port: 3004,                  // Each client normally connects on port 3004
-    backdoor: 4004,              // For testing, you can enable direct access to the master bus at a port
+    port: 3004,                  // 3004 is the default port for Statebus v4 to listen on
+    backdoor: 4004,              // For testing. Direct access to master at this port. Defaults to null.
     file_store: false,           // Persists state across server restarts.  Defaults to true.
     client: function (client) {} // See "multiple users" below.  Defaults to null.
-}
+})
 ```
 
 If you specify a `port`, `backdoor`, or `client`, then this bus will start a
 websocket server and serve its state over the internet.  Otherwise, it'll just
 make a new bus object, as described in
-[Multiple Busses](#make-multiple-busses).
+[Multiple Busses](#make-multiple-busses), disconnected from the network.
 
 
 #### Client
