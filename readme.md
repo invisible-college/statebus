@@ -484,7 +484,7 @@ bus('/sum').to_fetch = function (key) {
 var timer
 bus('/time').to_fetch = function (key) {
     timer = setInterval(function () {
-        bus.save.fire({key: key, time: new Date().getTime()})  // Cause we can't just return from here
+        bus.save.fire({key: key, time: new Date().getTime()})
     }, 1000)
 }
 bus('/time').to_forget = function (key) {
