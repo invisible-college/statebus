@@ -320,6 +320,54 @@ fetch('/user/mike')
 => {key: "/user/mike", name: "mike"}
 ```
 
+### The `/connections` state
+
+This is the list of all clients connected to the server—whether logged, in or not.  For example, this
+server has 3 connected clients, and two of them are the same user (me):
+
+```javascript
+{
+  key: "/connections",
+  all: [
+    {user: {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}},
+    {},
+    {user: {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}}
+  ]
+}
+```
+
+I have two connections because I have two browser tabs open to the server.
+
+You can see your client's current connection with the `/connection` state:
+
+```javascript
+{
+  key: "/connection",
+  mine: {user: {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}}
+}
+```
+
+Each client can store additional information in their connection:
+
+```javascript
+c = fetch('/connection')
+c.mine.extra_info = 'Something!'
+save(c)
+```
+
+This results in:
+
+```javascript
+{
+  key: "/connections",
+  all: [
+    {user: {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}, extra_info: "Something!"},
+    {},
+    {user: {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}}
+  ]
+}
+```
+
 ## Little things
 
 ### Safety measures in Reactive Funk
@@ -568,7 +616,7 @@ dom.BODY = ->
    DIV "Hello, #{mom.name} and #{dad.name}!'
 ```
 
-# API
+# API Reference
 
 ## Statebus Protocol Methods
 Each bus implements the four methods of the statebus protocol: `fetch`, `save`, `forget`, and `delete`.
@@ -620,7 +668,7 @@ func()
   - Without a `key`, returns true if the currently-executing reactive function has subscribed to any keys with such pending fetches.
 
 
-## Configuring a Bus
+## Configuring a bus with handlers
 
 You configure a bus by specifying functions to fetch, save, forget, and delete
 state at keys.  Each function will automatically be made reactive, so you can
