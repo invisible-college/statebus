@@ -31,7 +31,7 @@ Options is a dictionary, and you can put these things in it:
 
 If you specify a `port`, `backdoor`, or `client`, then this bus will start a
 websocket server and serve its state over the internet.  Otherwise, it'll just
-make a new bus object, as described in [Multiple Busses](#multiple-busses).
+make a new bus object, as described in [Multiple Busses](#make-multiple-busses).
 
 
 #### Client
@@ -117,40 +117,22 @@ bus('one_plus/*').to_fetch = function (key) {
 fetch('one_plus/2').num   // result: 3
 ```
 
-#### What if `to_fetch` needs data from a callback?
-
-If your `to_fetch` handler needs results from a callback, you won't be able to `return` it:
-
-```javascript
-bus(prefix).to_fetch = function (key) {
-  call_something(function (result) {
-    return result   // This doesn't work!
-  })
-  return result     // This doesn't work either!
-}
-```
-
-But that's ok, because the `return` statement in a to_fetch handler is
-actually just shorthand for `bus.save.fire(obj)`, which you can call directly
-from anywhere:
-
-```javascript
-bus(prefix).to_fetch = function (key) {
-   call_something(function (result) {
-      bus.save.fire(result)   // This works!
-   })
-}
-```
-
-When you use the `return obj` form, statebus will infer the key for you if you
-omit it:
+The general form of a `to_fetch` handler is:
 
 ```javascript
 bus('the_answer').to_fetch = function (key) {
-   return {n: 42}   // Equivalent to "return {key: 'the_answer', n: 42}"
-                    // And to "bus.save.fire({key: 'the_answer', n: 42})"
+   // Do some stuff...
+
+   // ...and then produce new state to fire across the bus,
+   // using one of these equivalent statements:
+   return {key: 'the_answer', n: 42}
+   return {n: 42}                             // Statebus can infer the key in return statements
+   bus.save.fire({key: 'the_answer', n: 42})  // Use this from within callbacks
 }
 ```
+
+If your handler gets its data from within a callback, you will need to use the
+`save.fire()` form.
 
 Each .to_fetch function *must* eventually return new state, either with a
 return statement or bus.save.fire.  Until the .to_fetch function returns,
@@ -166,10 +148,10 @@ bus("key_pattern").to_save = function (obj) {
    // Here you can validate obj, tweak it, update a backing store...
 
    // And eventually, either call:
-   save.abort(obj)          // To deny this save request!
+   save.abort(obj)   // To deny this save request!
 
    // ... or:
-   save.fire(obj)           // To broadcast the result across the bus!
+   save.fire(obj)    // To broadcast the result across the bus!
 }
 ```
 
@@ -190,7 +172,7 @@ from other places (*e.g.* over the network) and be sure that your handler will
 run once the state has loaded.
 
 
-## Multiple Busses
+## Make multiple busses
 
 Each bus defines a separate state space.  You can make multiple busses
 anywhere—client or server—but we have some defaults set up for you on the client.
@@ -235,8 +217,7 @@ But these globals are disabled on multi-user servers, where they become ambiguou
 
 (We might remove multiple busses in a future release.)
 
-
-## Multiple Users
+## Support multiple users
 
 Multiple busses let you interact with multiple users on the server, where each
 user sees a different state space.  Each user will have a distinct `client`
@@ -519,7 +500,7 @@ var master = require('statebus/server')({              // Define the master bus
 })
 ```
 
-# Stuff you probably already know
+# What's not new
 
 ## Fetch and Save with Rerunnable Functions
 
@@ -585,22 +566,6 @@ dom.BODY = ->
      return DIV 'Loading...'
 
    DIV "Hello, #{mom.name} and #{dad.name}!'
-```
-
-### Multiple busses
-You can reference multiple busses from any reactive function:
-
-```javascript
-// Only users can see their private parts
-client('/user/*').to_fetch = function (obj) {
-   var user         = master.fetch(obj.key)           // Fetched from master
-   var current_user = client.fetch('/current_user')   // Fetched from client
-   var result = clone(user)
-   if (current_user.key !== user.key)
-      result.email = 'hidden'
-
-   return result
- }
 ```
 
 # API
