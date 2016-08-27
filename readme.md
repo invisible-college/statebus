@@ -131,7 +131,7 @@ bus('the_answer').to_fetch = function (key) {
 }
 ```
 
-If your handler gets its data from within a callback, you will need to use the
+If your handler needs to return state from within a callback, use the
 `save.fire()` form.
 
 Each .to_fetch function *must* eventually return new state, either with a
