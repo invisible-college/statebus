@@ -232,7 +232,9 @@ bus, and which inherit state from a common `master` bus.
    Master Bus
 ```
 
-To enable multiple users, use the `client:` option when you create a bus:
+To enable multiple users, use the `client:` option when you create a bus,
+padding it a function that will run to customize each client bus as new users
+connect to the server:
 
 ```javascript
 var master = require('statebus/server')({  // The master bus is defined here
