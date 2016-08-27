@@ -25,7 +25,7 @@ var bus = require('statebus/server')({
     // You can pass these options to your new server:
 
     port: 3004,                  // 3004 is the default port for Statebus v4 to listen on
-    backdoor: 4004,              // For testing. Direct access to master at this port. Defaults to null.
+    // backdoor: 4004,           // For testing. Direct access to master at this port. Defaults to null.
     file_store: false,           // Persists state across server restarts.  Defaults to true.
     client: function (client) {} // See "multiple users" below.  Defaults to null.
 })
