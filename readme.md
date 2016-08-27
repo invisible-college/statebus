@@ -3,7 +3,8 @@
 The big news is that you can now
 **[program state behavior](#program-state-behavior)**! When combined with
 [multiple busses](#make-multiple-busses), this lets us implement
-[multiple-user support](#support-multiple-users) on the server.
+[multiple-user support](#support-multiple-users) on the server, complete with
+permissions, authentication, and custom behavior.
 
 But first let's get installation out of the way.
 
