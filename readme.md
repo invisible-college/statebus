@@ -610,6 +610,8 @@ var master = require('statebus/server')({              // Define the master bus
 
 - Good SQL database adapters
 - Finalized API names (the v5 release might break your code)
+- Connect to multiple servers simultaneously
+
 
 # What's not new
 
