@@ -1,6 +1,6 @@
 # What's new in Statebus v4
 
-## State handlers give you control
+## Program state behavior
 
 Up until now, the statebus has been dumb and passive—it saves and fetches
 whatever anyone asks it to.  But now there's a nice API to *control* reads and
