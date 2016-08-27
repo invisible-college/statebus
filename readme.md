@@ -233,7 +233,7 @@ bus, and which inherit state from a common `master` bus.
 ```
 
 To enable multiple users, use the `client:` option when you create a bus,
-padding it a function that will run to customize each client bus as new users
+passing it a function that will run to customize each client bus as new users
 connect to the server:
 
 ```javascript
