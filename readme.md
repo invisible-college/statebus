@@ -49,6 +49,7 @@ You can also define a `.to_fetch` function for a *space* of keys, by appending
 
 ```javascript
 bus('one_plus/*').to_fetch = function (key) {
+   // The *individual* key being fetched is passed to this function as "key"
    var num = Number(key.split('/')[1])
    return {result: 1 + num}
 }
