@@ -168,7 +168,7 @@ gus.fetch('foo').bar          // ==> undefined
 ```
 
 You can connect busses together with handlers.  For instance:
-```
+```javascript
 // Connect fetchs on 'foo' to gus
 bus('foo').to_fetch = function () { return gus.fetch('foo') }
 
@@ -208,7 +208,7 @@ bus, and which inherit state from a common `master` bus.
 
 Each user will have a different `/current_user` state. By default, yours will look like this:
 
-```
+```javascript
 {
   key: "/current_user",
   logged_in: false,
@@ -225,7 +225,7 @@ You can also do things to the current user state:
 #### Log in
 
 Run this:
-```
+```javascript
 c = fetch('/current_user')
 c.login_as = {name: 'mike', pass: '••••'}
 save(c)
@@ -233,7 +233,7 @@ save(c)
 
 If successful, you'll see something like this:
 
-```
+```javascript
 {
   key: "/current_user",
   logged_in: true,
@@ -248,7 +248,7 @@ If successful, you'll see something like this:
 
 #### Edit your account
 
-```
+```javascript
 c.user.name = 'Miiiiike'
 c.user.email = 'my_new_email@gmail.com'
 c.user.pass = '••••••••••'
@@ -256,13 +256,13 @@ save(c.user)
 ```
 
 #### Log out
-```
+```javascript
 c.logout = true
 save(c)
 ```
 
 #### Create a new account
-```
+```javascript
 c.create_account = {name: 'Reginald McGee', pass: 'security-R-us', email: 'barf@toilet.guru'}
 save(c)
 
@@ -279,7 +279,7 @@ you can only see your own email address.
 
 For instance:
 
-```
+```javascript
 // As mike:
 fetch('/user/mike')
 => {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}
@@ -297,7 +297,7 @@ fetch('/user/mike')
 
 The backdoor is cool. Enable it in options on the server:
 
-```
+```javascript
 var bus = require('statebus/server')({backdoor: 4004})
 ```
 
