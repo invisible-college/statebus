@@ -879,7 +879,7 @@ function make_server_bus (options) {
     bus = require('./statebus')()
     for (m in extra_methods)
         bus[m] = extra_methods[m]
-    if (options && options.client)
+    if (options && (options.client || options.port || options.backdoor))
         bus.serve(options)
     return bus
 }
