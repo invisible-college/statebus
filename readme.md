@@ -105,7 +105,7 @@ bus('/aggregate_blog').to_fetch = function (key) {
 Handlers are automatically reactive, so whenever blog1 or blog2 change, our
 `to_fetch` handler will re-run and produce a new aggregate blog.  The
 reactions will start when a client fetches it, and stop when all clients
-have forgotten it.
+have forgotten it, so that we don't carry on with unnecessary reactions.
 
 You can also define a `.to_fetch` function for a *space* of keys, by appending
 `*` to the key:
