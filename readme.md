@@ -343,7 +343,7 @@ save(c)
 
 #### The `/user/*` state
 
-Each user will have a key starting with `/user/`.  You can look up any other
+Each user has a key starting with `/user/`.  You can look up any other
 user by fetching their `/user/` key.  You'll be able to see their name, but
 you can only see your own email address.
 
