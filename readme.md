@@ -487,14 +487,14 @@ bus('/sum').to_fetch = function (key) {
     return {sum: a.val + b.val}  // Shorthand for => save.fire({key: '/sum', sum: a.val + b.val})
 }
 
-// Define state that incorporates external state
+// Define state where we set up and tear down an external subscription
 var timer
-bus('/time').to_fetch = function (key) {
+bus('/time').to_fetch = function (key) {       // Called when first client fetches /time
     timer = setInterval(function () {
         bus.save.fire({key: key, time: new Date().getTime()})
     }, 1000)
 }
-bus('/time').to_forget = function (key) {
+bus('/time').to_forget = function (key) {      // Called when last client forgets /time
     clearInterval(timer)
 }
 
