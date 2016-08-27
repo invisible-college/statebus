@@ -1,7 +1,7 @@
 # What's new in Statebus v4
 
-The big new feature is that you can [program state behavior](#program-state-behavior). But first, let's
-get installation out of the way.
+The big new feature is that you can [program state behavior](#program-state-behavior).  
+But first let's get installation out of the way.
 
 ## Installing
 
