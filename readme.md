@@ -562,7 +562,7 @@ var master = require('statebus/server')({              // Define the master bus
         }
 
 
-        // But they can add new posts, and edit old ones, if they are an Editor.
+        // But they can add new posts, and edit old ones, if they are an editor.
         client('/post/*').to_save = function (o) {
 
             // 1. Ensure current user is an editor.
@@ -577,6 +577,8 @@ var master = require('statebus/server')({              // Define the master bus
             o.title = o.title || ''
             o.body = o.body || ''
             master.save(o)  // Save it to master
+            // We don't have to call client.save.fire(o) here because
+            // master.save(o) will call master.save.fire(o), which will bubble up to this client
         }
 
         // Only editors can /see/ unpublished posts
