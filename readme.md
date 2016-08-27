@@ -133,15 +133,6 @@ run once the state has loaded.
 
 ## Safety measures in Reactive Funk
 
-
-
-```javascript
-bus('foo').to_save = function (obj) {
-   obj.bar = fetch('/bar').name      // Fetch something over the network
-   save.fire(obj)                    // This will only happen once /bar has loaded!
-}
-```
-
 Although you may fetch many things in a reactive funk, and some of those
 fetched results may be delayed by e.g. the network, reactive funks try to
 present the illusion of all state being loaded all the time, by re-running
@@ -153,6 +144,12 @@ this, statebus keeps a backup of the state cache, and automatically undoes any
 `save()` calls from the backup that occur while the function is still
 `loading()`.  Example:
 
+```javascript
+bus('foo').to_save = function (obj) {
+   obj.bar = fetch('/bar').name      // Fetch something over the network
+   save.fire(obj)                    // This will only happen once /bar has loaded!
+}
+```
 
 ## Multiple Busses
 
