@@ -1,5 +1,65 @@
 # What's new in Statebus v4
 
+The big new feature is that you can [program state behavior](#program-state-behavior). But first, let's
+get installation out of the way.
+
+## Installing
+
+#### Server
+
+```shell
+npm install statebus#next
+```
+
+The `#next` tells npm to give you version 4 instead of 3.
+
+Create a server with:
+```javascript
+var bus = require('statebus/server')(options)
+```
+
+Options is a dictionary, and you can put these things in it:
+
+```javascript
+{
+    port: 3004,                  // Each client normally connects on port 3004
+    backdoor: 4004,              // For testing, you can enable direct access to the master bus at a port
+    file_store: false,           // Persists state across server restarts.  Defaults to true.
+    client: function (client) {} // See "multiple users" below.  Defaults to null.
+}
+```
+
+If you specify a `port`, `backdoor`, or `client`, then this bus will start a
+websocket server and serve its state over the internet.  Otherwise, it'll just
+make a new bus object, as described in [Multiple Busses](#multiple-busses).
+
+
+#### Client
+
+The template for client code has changed:
+
+```coffeescript
+<script type="statebus">
+
+dom.BODY = ->
+  DIV
+    'Hello world!'
+
+</script><script src="https://stateb.us/client4.js"></script>
+```
+
+- You don't need to add `null,` to that DIV anymore!
+- Link to `client4.js` instead of `client.js` to get version 4
+- And specifying a custom server is easier now, with the `server` attribute. Check it out:
+
+```html
+</script><script src="https://stateb.us/client4.js"
+                 server="http://localhost:3004"></script>
+```
+
+The default port for statebus version 4 is `3004`.
+
+
 ## Program state behavior
 
 Up until now, the statebus has been dumb and passive—it saves and fetches
@@ -322,63 +382,6 @@ directly to the master bus on the server!
 ```javascript
 master.fetch('/raw_master_stuff')
 ```
-
-## Installing
-
-#### Server
-
-```shell
-npm install statebus#next
-```
-
-The `#next` tells npm to give you version 4 instead of 3.
-
-Create a server with:
-```javascript
-var bus = require('statebus/server')(options)
-```
-
-Options is a dictionary, and you can put these things in it:
-
-```javascript
-{
-    port: 3004,                  // Each client normally connects on port 3004
-    backdoor: 4004,              // For testing, you can enable direct access to the master bus at a port
-    file_store: false,           // Persists state across server restarts.  Defaults to true.
-    client: function (client) {} // See "multiple users" below.  Defaults to null.
-}
-```
-
-If you specify a `port`, `backdoor`, or `client`, then this bus will start a
-websocket server and serve its state over the internet.  Otherwise, it'll just
-make a new bus object, as described below.
-
-
-#### Client
-
-The template for client code has changed:
-
-```coffeescript
-<script type="statebus">
-
-dom.BODY = ->
-  DIV
-    'Hello world!'
-
-</script><script src="https://stateb.us/client4.js"></script>
-```
-
-- You don't need to add `null,` to that DIV anymore!
-- Link to `client4.js` instead of `client.js` to get version 4
-- And specifying a custom server is easier now, with the `server` attribute. Check it out:
-
-```html
-</script><script src="https://stateb.us/client4.js"
-                 server="http://localhost:3004"></script>
-```
-
-The default port for statebus version 4 is `3004`.
-
 
 # Examples
 
