@@ -140,7 +140,7 @@ Each .to_fetch function *must* eventually return new state, either with a
 return statement or bus.save.fire.  Until the .to_fetch function returns,
 anything that fetches it will be *loading*.
 
-### Control saves with `to_save`
+### Control saves with a `to_save` handler
 
 A `to_save` handler looks like this:
 
