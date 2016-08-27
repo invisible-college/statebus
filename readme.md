@@ -53,7 +53,7 @@ dom.BODY = ->
 
 - You don't need to add `null,` to that `DIV` anymore!
 - Link to `client4.js` instead of `client.js` to get version 4
-- Specifying a custom server is easier now, with the `server` attribute. Check it out:
+- Specify a custom server with the `server` attribute:
 
 ```html
 </script><script src="https://stateb.us/client4.js"
