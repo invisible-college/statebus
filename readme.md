@@ -1,6 +1,10 @@
 # What's new in Statebus v4
 
-The big news is that you can now **[program state behavior](#program-state-behavior)**!  
+The big news is that you can now
+**[program state behavior](#program-state-behavior)**! When combined with
+[multiple busses](#make-multiple-busses), this lets us implement
+[multiple-user support](#support-multiple-users) on the server.
+
 But first let's get installation out of the way.
 
 ## Installing
@@ -49,7 +53,7 @@ dom.BODY = ->
 </script><script src="https://stateb.us/client4.js"></script>
 ```
 
-- You don't need to add `null,` to that DIV anymore!
+- You don't need to add `null,` to that `DIV` anymore!
 - Link to `client4.js` instead of `client.js` to get version 4
 - And specifying a custom server is easier now, with the `server` attribute. Check it out:
 
