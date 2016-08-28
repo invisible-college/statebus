@@ -13,10 +13,10 @@ But first let's get installation out of the way.
 #### Server
 
 ```shell
-npm install statebus#next
+npm install statebus@4
 ```
 
-The `#next` tells npm to give you version 4 instead of 3.
+The `@4` tells npm to give you version 4 instead of 3.
 
 Create a server with:
 ```javascript
@@ -474,7 +474,7 @@ you are concerned with.
 ## Server example
 
 ```shell
-npm install statebus#next
+npm install statebus@4
 ```
 
 Make a `demo.js`:
