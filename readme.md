@@ -45,13 +45,13 @@ The template for client code has changed:
 <script type="statebus">
 
 dom.BODY = ->
-  DIV
+  DIV null,
     'Hello world!'
 
 </script><script src="https://stateb.us/client4.js"></script>
 ```
 
-- You don't need to add `null,` to that `DIV` anymore!
+- ~~You don't need to add `null,` to that `DIV` anymore!~~
 - Link to `client4.js` instead of `client.js` to get version 4
 - Specify a custom server with the `server` attribute:
 
