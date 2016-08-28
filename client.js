@@ -635,7 +635,7 @@
                 // Compile coffeescript to javascript
                 var compiled
                 try {
-                    compiled = CoffeeScript.compile(scripts[i].text.replace(/(\s[A-Z_]+)\n/g, '$1 null,\n'),
+                    compiled = CoffeeScript.compile(scripts[i].text/*.replace(/(\s[A-Z_]+)\n/g, '$1 null,\n')*/,
                                                     {bare: true,
                                                      sourceMap: true,
                                                      filename: filename})
