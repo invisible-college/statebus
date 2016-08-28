@@ -196,7 +196,7 @@ You can fetch and save from busses independently:
 
 ```javascript
 bus.fetch('foo').bar          // ==> undefined
-bus.save({key:'foo', bar=3})
+bus.save({key:'foo', bar: 3})
 bus.fetch('foo').bar          // ==> 3
 
 gus.fetch('foo').bar          // ==> undefined
@@ -216,7 +216,7 @@ functions.
 
 ```javascript
 fetch('foo').fuzz          // ==> undefined
-save({key:'foo', fuzz=3})
+save({key: 'foo', fuzz: 3})
 fetch('foo').fuzz          // ==> 3
 ```
 
@@ -499,9 +499,10 @@ bus('/time').to_forget = function (key) {      // Called when last client forget
 }
 
 // Control changes to state
-bus('/blog').to_save = function (obj) {
+bus('/sometimes_saveable').to_save = function (obj) {
     if (Math.random() < .5) {
         obj.var = "I'm forcing this var!"
+        delete obj.bad_thing
         save.fire(obj)    // Go live!
     } else
         save.abort(obj)
