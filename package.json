@@ -9,6 +9,7 @@
   "author": "Michael Toomim",
   "repository": "invisible-college/statebus",
   "dependencies": {
+    "sockjs": "^0.3.17",
     "websocket": "^1.0.22"
   }
 }
