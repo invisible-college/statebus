@@ -898,14 +898,16 @@
         this.all = this.values // for compatibility; remove this soon
     }
     //Set = window.Set || Set
-    function clone(obj) {
-        if (obj == null) return obj
-        var copy = obj.constructor()
-        for (var attr in obj)
-            if (obj.hasOwnProperty(attr)) copy[attr] = obj[attr]
-        return copy
-    }
+    // function clone(obj) {
+    //     if (obj == null) return obj
+    //     var copy = obj.constructor()
+    //     for (var attr in obj)
+    //         if (obj.hasOwnProperty(attr)) copy[attr] = obj[attr]
+    //     return copy
+    // }
     function clone(item) {
+        if (window.clone_debug)
+            console.log('Cloning ' + JSON.stringify(item))
         if (!item               // null, undefined values check
             || item instanceof Number
             || item instanceof String
