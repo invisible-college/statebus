@@ -906,10 +906,6 @@
     //     return copy
     // }
     function clone(item) {
-        if (window.clone_debug) {
-            console.log('Cloning ', item)
-            console.log('Cloning ' + JSON.stringify(item))
-        }
         if (!item               // null, undefined values check
             || item instanceof Number
             || item instanceof String

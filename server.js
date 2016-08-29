@@ -868,7 +868,9 @@ var extra_methods = {
                 if (method === 'to_fetch')
                     bus.run_handler(function get_from_master (k) { return master_bus.fetch(k) }, method, arg)
                 else if (method === 'to_save')
-                    bus.run_handler(function save_to_master (o) { master_bus.save(bus.clone(o)) }, method, arg)
+                    bus.run_handler(function save_to_master (o, opts) {
+                        console.log('DEFAULT ROUTE', opts)
+                        master_bus.save(bus.clone(o)) }, method, arg)
             }
             return count
         }
