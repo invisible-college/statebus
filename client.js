@@ -219,14 +219,14 @@
         var bus = this
         var old_route = bus.route
         var connections = {}
-        bus.route = function (key, method, arg) {
+        bus.route = function (key, method, arg, opts) {
             var d = get_domain(key)
             if (d && !connections[d]) {
                 bus.sockjs_client(d + '*', d)
                 connections[d] = true
             }
 
-            return old_route(key, method, arg)
+            return old_route(key, method, arg, opts)
         }
         function get_domain(key) {
             var m = key.match(/^state\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)

@@ -11,13 +11,13 @@ var extra_methods = {
 
         // Custom route
         var OG_route = bus.route
-        bus.route = function(key, method, arg) {
-            var count = OG_route(key, method, arg)
+        bus.route = function(key, method, arg, opts) {
+            var count = OG_route(key, method, arg, opts)
 
             // This whitelists anything we don't have a specific handler for,
             // reflecting it to all clients!
             if (count === 0 && method === 'to_save') {
-                bus.save.fire(arg)
+                bus.save.fire(arg, opts)
                 count++
             }
 
@@ -49,13 +49,13 @@ var extra_methods = {
 
         // Custom route
         var OG_route = bus.route
-        bus.route = function(key, method, arg) {
-            var count = OG_route(key, method, arg)
+        bus.route = function(key, method, arg, opts) {
+            var count = OG_route(key, method, arg, opts)
 
             // This whitelists anything we don't have a specific handler for,
             // reflecting it to all clients!
             if (count === 0 && method === 'to_save') {
-                bus.save.fire(arg)
+                bus.save.fire(arg, opts)
                 count++
             }
 
@@ -858,19 +858,24 @@ var extra_methods = {
 
         // Custom route
         var OG_route = bus.route
-        bus.route = function(key, method, arg) {
-            var count = OG_route(key, method, arg)
+        bus.route = function(key, method, arg, opts) {
+            var count = OG_route(key, method, arg, opts)
 
             // This forwards anything we don't have a specific handler for
             // to the global cache
             if (count === 0) {
                 count++
                 if (method === 'to_fetch')
-                    bus.run_handler(function get_from_master (k) { return master_bus.fetch(k) }, method, arg)
+                    bus.run_handler(function get_from_master (k) {
+                        // console.log('DEFAULT FETCHing', k)
+                        var r = master_bus.fetch(k)
+                        // console.log('DEFAULT FETCHed', r)
+                        bus.save.fire(r, {version: master_bus.versions[r.key]})
+                        }, method, arg)
                 else if (method === 'to_save')
                     bus.run_handler(function save_to_master (o, opts) {
-                        console.log('DEFAULT ROUTE', opts)
-                        master_bus.save(bus.clone(o)) }, method, arg)
+                        // console.log('DEFAULT ROUTE', opts)
+                        master_bus.save(bus.clone(o), opts) }, method, arg, opts)
             }
             return count
         }

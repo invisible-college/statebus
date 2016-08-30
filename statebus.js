@@ -107,7 +107,9 @@
     }
     function save_msg (obj, opts, meth) {
         var message = (opts && opts.m) || bus + "."+meth+"('"+obj.key+"')"
-        return add_diff_msg(message, obj)
+        message = add_diff_msg(message, obj)
+        if (opts.version) message += ' [' + opts.version + ']'
+        return message
     }
     function save (obj, opts) {
         opts = opts || {}
@@ -134,7 +136,7 @@
             currently_saving = obj.key
 
             // Call the to_save() handler!
-            var num_handlers = bus.route(obj.key, 'to_save', obj)
+            var num_handlers = bus.route(obj.key, 'to_save', obj, opts)
             if (num_handlers === 0)
                 // And fire if there weren't any!
                 save.fire(obj, opts)
@@ -161,7 +163,7 @@
         if (currently_saving === object.key &&
             !(object.key && !changed(object))) {
             statelog_indent--
-            statelog(red, '•', '↵')
+            statelog(red, '•', '↵' + (opts.version ? '\t\t\t[' + opts.version + ']' : ''))
             statelog_indent++
         } else {
             // Ignore if nothing happened
@@ -173,6 +175,7 @@
                 icon = 'x'
                 if (opts.to_fetch)
                     message = (opts.m) || 'Fetched ' + bus + "('"+object.key+"')"
+                if (opts.version) message += ' [' + opts.version + ']'
                 statelog(color, icon, message)
                 return
             }
@@ -183,6 +186,7 @@
                 icon = '^'
                 message = add_diff_msg((opts.m)||'Fetched '+bus+"('"+object.key+"')",
                                        object)
+                if (opts.version) message += ' [' + opts.version + ']'
             }
 
             statelog(color, icon, message)
@@ -477,7 +481,7 @@
                         //log('skipping', funk_name(f), 'already at version', v)
                         continue
                     }
-                    f = run_handler(f, 'on_save', cache[keys[i]], 'dont run it')
+                    f = run_handler(f, 'on_save', cache[keys[i]], undefined, 'dont run it')
                 }
                 result.push(funk_key(f))
             }
@@ -603,7 +607,7 @@
     }
     */
 
-    function run_handler(funck, method, arg, just_make_it) {
+    function run_handler(funck, method, arg, opts, just_make_it) {
         // console.log("run_handler: ('"+(arg.key||arg)+"').on_"
         //             +method+' = f^'+funk_key(funck))
         // if (funck.statebus_name === undefined || funck.statebus_name === 'undefined')
@@ -665,14 +669,16 @@
         // functions.  We'll store their arg and let them re-run until they
         // are done re-running.
         var f = reactive(function () {
-            var result = func(arg)
+            var result = func(arg, opts)
 
             // For fetch
             if (method === 'to_fetch' && result instanceof Object
                 && !f.loading()     // Experimental.
                ) {
                 result.key = arg
-                save.fire(result, {to_fetch: true})
+                var new_opts = clone(opts || {})
+                new_opts.to_fetch = true
+                save.fire(result, new_opts)
                 return result
             }
 
@@ -710,14 +716,14 @@
     }
 
     // route() can be overridden
-    bus.route = function (key, method, arg) {
+    bus.route = function (key, method, arg, opts) {
         var funcs = bus.bindings(key, method)
         if (funcs.length)
             log('route:', bus+'("'+key+'").'+method+'['+funcs.length+'](key:"'+(arg.key||arg)+'")')
         // log('route: got bindings',
         //     funcs.map(function (f) {return funk_key(f)+':'+funk_keyr(f)}))
         for (var i=0; i<funcs.length; i++)
-            bus.run_handler(funcs[i], method, arg)
+            bus.run_handler(funcs[i], method, arg, opts)
 
         if (method === 'to_fetch')
             console.assert(funcs.length<2,
