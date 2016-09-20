@@ -393,7 +393,7 @@ You can see your client's current connection with the `/connection` state:
 ```javascript
 {
   key: "/connection",
-  mine: {user: {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}}
+  user: {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}
 }
 ```
 
@@ -401,7 +401,7 @@ Each client can store additional information in their connection:
 
 ```javascript
 c = fetch('/connection')
-c.mine.extra_info = 'Something!'
+c.extra_info = 'Something!'
 save(c)
 ```
 

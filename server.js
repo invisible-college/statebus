@@ -189,10 +189,11 @@ var extra_methods = {
                 user('/connection').to_fetch = function () {
                     var c = user.clone(connections[conn.id])
                     if (c.user) c.user = user.fetch(c.user.key)
-                    return {mine: c}
+                    return c
                 }
                 user('/connection').to_save = function (o) {
-                    connections[conn.id] = o.mine
+                    delete o.key
+                    connections[conn.id] = o
                     master.save(connections)
                 }
                 user('/connections').to_save = function noop () {}
