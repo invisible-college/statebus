@@ -461,7 +461,7 @@
 
     load_scripts() // This function could actually be inlined
     function load_scripts() {
-        console.info('Loading scripts!', window.statebus)
+        // console.info('Loading scripts!', window.statebus)
         if (!window.statebus) {
             var statebus_dir = script_elem().getAttribute('src').match(/(.*)[\/\\]/)
             statebus_dir = (statebus_dir && statebus_dir[1] + '/')||''
