@@ -452,20 +452,22 @@
 
     load_scripts() // This function could actually be inlined
     function load_scripts() {
-        var statebus_dir = document.querySelector('script[src*="client.js"]')
-            .getAttribute('src').match(/(.*)[\/\\]/)
-        statebus_dir = (statebus_dir && statebus_dir[1] + '/')||''
+        if (!window.statebus) {
+            var statebus_dir = document.querySelector('script[src*="client.js"]')
+                .getAttribute('src').match(/(.*)[\/\\]/)
+            statebus_dir = (statebus_dir && statebus_dir[1] + '/')||''
 
-        var js_urls = {
-            react: statebus_dir + 'extras/react.js',
-            sockjs: statebus_dir + 'extras/sockjs.js',
-            coffee: statebus_dir + 'extras/coffee.js',
-            statebus: statebus_dir + 'statebus.js'
+            var js_urls = {
+                react: statebus_dir + 'extras/react.js',
+                sockjs: statebus_dir + 'extras/sockjs.js',
+                coffee: statebus_dir + 'extras/coffee.js',
+                statebus: statebus_dir + 'statebus.js'
+            }
+
+            for (name in js_urls)
+                document.write('<script src="' + js_urls[name] + '" charset="utf-8"></script>')
+
         }
-        
-        for (name in js_urls)
-            document.write('<script src="' + js_urls[name] + '" charset="utf-8"></script>')
-
         document.addEventListener('DOMContentLoaded', scripts_ready, false)
     }
 
