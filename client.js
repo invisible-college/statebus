@@ -468,7 +468,7 @@
                 document.write('<script src="' + js_urls[name] + '" charset="utf-8"></script>')
 
         }
-        document.write('<script>scripts_ready()</script>')
+        document.write('<script>statebus_scripts_ready()</script>')
         // document.addEventListener('DOMContentLoaded', scripts_ready, false)
     }
 
@@ -495,7 +495,7 @@
         load_coffee()
         if (dom.Body || dom.body || dom.BODY)
             React.render((window.Body || window.body || window.BODY)(), document.body)
-    }
+    }window.statebus_scripts_ready = scripts_ready
 
     function improve_react() {
         function capitalize (s) {return s[0].toUpperCase() + s.slice(1)}
