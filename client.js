@@ -468,7 +468,8 @@
                 document.write('<script src="' + js_urls[name] + '" charset="utf-8"></script>')
 
         }
-        document.addEventListener('DOMContentLoaded', scripts_ready, false)
+        document.write('<script>scripts_ready()</script>')
+        // document.addEventListener('DOMContentLoaded', scripts_ready, false)
     }
 
     window.statebus_server = window.statebus_server || 'https://stateb.us:3003'
