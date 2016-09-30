@@ -450,29 +450,8 @@
         }
     }
 
-    load_scripts() // This function could actually be inlined
-    function load_scripts() {
-        if (!window.statebus) {
-            var statebus_dir = document.querySelector('script[src*="client.js"]')
-                .getAttribute('src').match(/(.*)[\/\\]/)
-            statebus_dir = (statebus_dir && statebus_dir[1] + '/')||''
-
-            var js_urls = {
-                react: statebus_dir + 'extras/react.js',
-                sockjs: statebus_dir + 'extras/sockjs.js',
-                coffee: statebus_dir + 'extras/coffee.js',
-                statebus: statebus_dir + 'statebus.js'
-            }
-
-            for (name in js_urls)
-                document.write('<script src="' + js_urls[name] + '" charset="utf-8"></script>')
-
-        }
-        document.write('<script>statebus_scripts_ready()</script>')
-        // document.addEventListener('DOMContentLoaded', scripts_ready, false)
-    }
-
     window.statebus_server = window.statebus_server || 'https://stateb.us:3003'
+
     function scripts_ready () {
         make_client_statebus_maker()
         window.bus = window.statebus()
@@ -646,4 +625,32 @@
                 }
             }
     }
+
+
+    // Now load the scripts
+    if (!window.statebus) {  // But not if someone else has loaded them already
+        var statebus_dir = document.querySelector('script[src*="client.js"]')
+            .getAttribute('src').match(/(.*)[\/\\]/)
+        statebus_dir = (statebus_dir && statebus_dir[1] + '/')||''
+
+        var js_urls = [
+            statebus_dir + 'extras/react.js',
+            statebus_dir + 'extras/sockjs.js',
+            statebus_dir + 'extras/coffee.js',
+            statebus_dir + 'statebus.js'
+        ]
+
+        var loaded_scripts = 0
+        for (var i=0; i< js_urls.length; i++) {
+            var s = document.createElement('script')
+            s.setAttribute('charset', 'utf-8')
+            s.setAttribute('src', js_urls[i])
+            s.onload = function () {
+                if (++loaded_scripts === js_urls.length)
+                    scripts_ready()
+            }
+            document.head.appendChild(s)
+        }
+    }
+    else scripts_ready()
 })()
