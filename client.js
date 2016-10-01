@@ -7,7 +7,7 @@
         var socket = io(url)
         var fetched_keys = new Set()
 
-        bus(prefix).on_fetch = function (key) {
+        bus(prefix).to_fetch = function (key) {
             bus.log('fetching', key, 'from', url)
             // Error check
             // if (pending_fetches[key]) {
@@ -19,12 +19,13 @@
             socket.emit('fetch', key)
         }
 
-        var saver = bus(prefix).on_save = function (object) {
+        var saver = bus(prefix).to_save = function (object) {
             bus.log('sending save', object)
             socket.emit('save', object)
+            bus.save.fire(object)
         }
-        bus(prefix).on_delete = function (key)    { socket.emit('delete', key) }
-        bus(prefix).on_forget = function (key) {
+        bus(prefix).to_delete = function (key)    { socket.emit('delete', key) }
+        bus(prefix).to_forget = function (key) {
             socket.emit('forget', key)
             fetched_keys.delete(key)
         }
@@ -58,9 +59,10 @@
         url = url.replace(/^state:\/\//, 'https://')
         url = url.replace(/^statei:\/\//, 'http://')
         if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
-        function send (o) {
+        function send (o, pushpop) {
+            pushpop = pushpop || 'push'
             bus.log('sockjs.send:', JSON.stringify(o))
-            outbox.push(JSON.stringify(o))
+            outbox[pushpop](JSON.stringify(o))
             flush_outbox()
         }
         function flush_outbox() {
@@ -70,7 +72,8 @@
             else
                 setTimeout(flush_outbox, 400)
         }
-        bus(prefix).on_save   = function (obj) { send({method: 'save', obj: obj})
+        bus(prefix).to_save   = function (obj) { send({method: 'save', obj: obj})
+                                                 bus.save.fire(obj)
                                                  if (window.ignore_flashbacks)
                                                      recent_saves.push(JSON.stringify(obj))
                                                  if (recent_saves.length > 100) {
@@ -78,11 +81,11 @@
                                                      recent_saves.splice(0, extra)
                                                  }
                                                }
-        bus(prefix).on_fetch  = function (key) { send({method: 'fetch', key: key}),
+        bus(prefix).to_fetch  = function (key) { send({method: 'fetch', key: key}),
                                                  fetched_keys.add(key) }
-        bus(prefix).on_forget = function (key) { send({method: 'forget', key: key}),
+        bus(prefix).to_forget = function (key) { send({method: 'forget', key: key}),
                                                  fetched_keys.delete(key) }
-        bus(prefix).on_delete = function (key) { send({method: 'delete', key: key}) }
+        bus(prefix).to_delete = function (key) { send({method: 'delete', key: key}) }
 
         function connect () {
             console.log('%c[ ] trying to open ' + url, 'color: blue')
@@ -98,7 +101,8 @@
                                  + Math.random().toString(36).substring(2))
                     save(me)
                 }
-                send({method: 'save', obj: {key: '/current_user', client: me.client}})
+                send({method: 'save', obj: {key: '/current_user', client: me.client}},
+                     'unshift')
 
                 if (attempts > 0) {
                     // Then we need to refetch everything, cause it
@@ -133,8 +137,10 @@
                     var message = JSON.parse(event.data)
                     var method = message.method.toLowerCase()
 
-                    // We only take pubs from the server for now
-                    if (method !== 'pub' && method !== 'pong') throw 'barf'
+                    // Convert v3 pubs to v4 saves for compatibility
+                    if (method == 'pub') method = 'save'
+                    // We only take saves from the server for now
+                    if (method !== 'save' && method !== 'pong') throw 'barf'
                     bus.log('sockjs_client received', message.obj)
 
                     var is_recent_save = false
@@ -150,8 +156,8 @@
                     }
 
                     if (!is_recent_save)
-                        bus.pub(message.obj)
-                        //setTimeout(function () {bus.pub(message.obj)}, 1000)
+                        bus.save.fire(message.obj)
+                        //setTimeout(function () {bus.announce(message.obj)}, 1000)
                 } catch (err) {
                     console.error('Received bad sockjs message from '
                                   +url+': ', event.data, err)
@@ -170,8 +176,8 @@
         var bus = this
         bus.log(this)
 
-        // GET returns the value immediately in a PUT
-        // PUTs are queued up, to store values with a delay, in batch
+        // Fetch returns the value immediately in a save
+        // Saves are queued up, to store values with a delay, in batch
         var saves_are_pending = false
         var pending_saves = {}
 
@@ -182,11 +188,11 @@
             saves_are_pending = false
         }
 
-        bus(prefix).on_fetch = function (key) {
+        bus(prefix).to_fetch = function (key) {
             var result = localStorage.getItem(key)
             return result ? JSON.parse(result) : {key: key}
         }
-        bus(prefix).on_save = function (obj) {
+        bus(prefix).to_save = function (obj) {
             // Do I need to make this recurse into the object?
             bus.log('localStore: on_save:', obj.key)
             pending_saves[obj.key] = obj
@@ -194,9 +200,10 @@
                 setTimeout(save_the_pending_saves, 50)
                 saves_are_pending = true
             }
+            bus.save.fire(obj)
             return obj
         }
-        bus(prefix).on_delete = function (key) { localStorage.removeItem(key) }
+        bus(prefix).to_delete = function (key) { localStorage.removeItem(key) }
 
 
         // Hm... this update stuff doesn't seem to work on file:/// urls in chrome
@@ -212,14 +219,14 @@
         var bus = this
         var old_route = bus.route
         var connections = {}
-        bus.route = function (key, method, arg) {
+        bus.route = function (key, method, arg, opts) {
             var d = get_domain(key)
             if (d && !connections[d]) {
                 bus.sockjs_client(d + '*', d)
                 connections[d] = true
             }
 
-            return old_route(key, method, arg)
+            return old_route(key, method, arg, opts)
         }
         function get_domain(key) {
             var m = key.match(/^state\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
@@ -235,7 +242,8 @@
                 return fetch('state://stateb.us' + key)
             }
             bus('/*').to_save = function (obj) {
-                save(copy(obj, 'state://stateb.us' + obj.key))
+                bus.save(copy(obj, 'state://stateb.us' + obj.key))
+                bus.save.fire(obj)
             }
 
             bus('/*').proxy = function (key) { return 'state://stateb.us' + key }
@@ -264,13 +272,14 @@
         //  - Change the key prefix
         //  - Save this into the cache
 
-        bus(prefix).on_save = function (obj) {
+        bus(prefix).to_save = function (obj) {
             window.history.replaceState(
                 '',
                 '',
                 document.location.origin
                     + document.location.pathname
                     + escape('?'+key+'='+JSON.stringify(obj)))
+            bus.save.fire(obj)
         }
     }
 
@@ -452,9 +461,9 @@
 
     load_scripts() // This function could actually be inlined
     function load_scripts() {
+        // console.info('Loading scripts!', window.statebus)
         if (!window.statebus) {
-            var statebus_dir = document.querySelector('script[src*="client.js"]')
-                .getAttribute('src').match(/(.*)[\/\\]/)
+            var statebus_dir = script_elem().getAttribute('src').match(/(.*)[\/\\]/)
             statebus_dir = (statebus_dir && statebus_dir[1] + '/')||''
 
             var js_urls = {
@@ -463,33 +472,48 @@
                 coffee: statebus_dir + 'extras/coffee.js',
                 statebus: statebus_dir + 'statebus.js'
             }
+            if (statebus_dir == 'https://stateb.us/')
+                js_urls.statebus = statebus_dir + 'statebus4.js'
 
             for (name in js_urls)
                 document.write('<script src="' + js_urls[name] + '" charset="utf-8"></script>')
-
         }
+
         document.addEventListener('DOMContentLoaded', scripts_ready, false)
     }
 
-    window.statebus_server = window.statebus_server || 'https://stateb.us:3003'
+    function script_elem () {
+        return document.querySelector('script[src*="client"][src$=".js"]')
+    }
+    window.statebus_server = window.statebus_server ||
+        script_elem().getAttribute('server') || 'https://stateb.us:3004'
+    window.statebus_backdoor = window.statebus_backdoor ||
+        script_elem().getAttribute('backdoor')
     function scripts_ready () {
         make_client_statebus_maker()
         window.bus = window.statebus()
+        window.bus.label = 'bus'
 
         improve_react()
         window.dom = {}
         window.ignore_flashbacks = true
         bus.localstorage_client('ls/*')
         bus.sockjs_client ('/*', statebus_server)
-        bus('*').on_save = function (obj) { bus.pub(obj) }
-        bus('/new/*').on_save = function (o) {
+
+        if (window.statebus_backdoor) {
+            window.master = statebus()
+            master.sockjs_client('*', statebus_backdoor)
+        }
+
+        // bus('*').to_save = function (obj) { bus.save.fire(obj) }
+        bus('/new/*').to_save = function (o) {
             if (o.key.split('/').length > 3) return
 
             var old_key = o.key
             o.key = old_key + '/' + Math.random().toString(36).substring(2,12)
             statebus.cache[o.key] = o
             delete statebus.cache[old_key]
-            save(o)
+            bus.save(o)
         }
         load_coffee()
         if (dom.Body || dom.body || dom.BODY)
@@ -614,7 +638,7 @@
                 // Compile coffeescript to javascript
                 var compiled
                 try {
-                    compiled = CoffeeScript.compile(scripts[i].text,
+                    compiled = CoffeeScript.compile(scripts[i].text/*.replace(/(\s[A-Z_]+)\n/g, '$1 null,\n')*/,
                                                     {bare: true,
                                                      sourceMap: true,
                                                      filename: filename})
