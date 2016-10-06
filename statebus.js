@@ -370,7 +370,8 @@
                           funks[fetches_in.get(key)[0]] && funks[fetches_in.get(key)[0]].statebus_id
                          )
             console.trace()
-            throw Error('asdfalsdkfajsdf')
+            return
+            // throw Error('asdfalsdkfajsdf')
         }
 
         fetches_in.delete(key, fkey)
