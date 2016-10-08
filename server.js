@@ -108,6 +108,15 @@ var extra_methods = {
         this[options.name || 'http_server'] = http_server
     },
 
+    install_express: function install_express (express_app) {
+        this.http_server.on('request',  // Install express
+		            function (request, response) {
+		                // But express should ignore all sockjs requests
+		                if (!request.url.startsWith('/statebus/'))
+			            express_app(request, response)
+		            })
+
+    },
     sockjs_server: function sockjs_server(httpserver, user_bus_func) {
         var master = this
         var client_num = 0
@@ -766,6 +775,7 @@ var extra_methods = {
                     user.log('current_user: creating account')
                     var tmp = create_account(o.create_account)
                     user.log('Result of creating account is', tmp)
+                    if (!tmp) user.save.abort(o)
                 }
 
                 if (o.login_as) {

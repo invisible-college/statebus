@@ -112,6 +112,9 @@
         return message
     }
     function save (obj, opts) {
+        if (!('key' in obj) || typeof obj.key !== 'string')
+            console.error('Error: save(obj) called on object without a key: ', obj)
+
         opts = opts || {}
         // Make sure it has a version.
         opts.version = opts.version || new_version()
