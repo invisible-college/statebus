@@ -578,19 +578,19 @@ var tests = [
                           name: 'mike',
                           email: 'toomim@gmail.com',
                           admin: true,
-                          pass: 'yeah' }
+                          pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y' }
 
                        ,{ key: '/user/2',
                           name: 'j',
                           email: 'jtoomim@gmail.com',
                           admin: true,
-                          pass: 'yeah' }
+                          pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y' }
 
                        ,{ key: '/user/3',
                           name: 'boo',
                           email: 'boo@gmail.com',
                           admin: false,
-                          pass: 'yea' } ] })
+                          pass: '$2a$10$4UTjzf5OOGdkrCEsT.hO/.csKqf7u8mZ23ZT6stamBAWNV7u5WJuu' } ] })
 
         c(function () {
             var u = c.fetch('/current_user')
@@ -617,7 +617,7 @@ var tests = [
             assert(!u.login_as, 'Aborted login needs to abort')
             log('Good, the login failed.')
             next()
-        }, 200)
+        }, 300)
     },
 
     function create_account (next) {

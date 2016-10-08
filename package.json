@@ -9,6 +9,7 @@
   "author": "Michael Toomim",
   "repository": "invisible-college/statebus",
   "dependencies": {
+    "bcrypt-nodejs": "0.0.3",
     "sockjs": "^0.3.17",
     "websocket": "^1.0.22"
   }

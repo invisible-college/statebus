@@ -671,11 +671,6 @@ var extra_methods = {
     serves_auth: function serves_auth (conn, master) {
         var user = this // to keep me straight while programming
 
-        // Initialize salt
-        var a = master.fetch('auth')
-        if (!a.salt) { a.salt = Math.random(); master.save(a) }
-        var salt = a.salt
-            
         // Initialize master
         if (master('users/passwords').to_fetch.length === 0) {
             master('users/passwords').to_fetch = function (k) {
@@ -716,9 +711,10 @@ var extra_methods = {
             master.log('authenticate: we see',
                 master.fetch('users/passwords'),
                 userpass.pass,
-                pass,
-                userpass.pass === pass)
-            if (userpass.pass === pass)
+                pass)
+
+            //console.log('comparing passwords', pass, userpass.pass)
+            if (require('bcrypt-nodejs').compareSync(pass, userpass.pass))
                 return master.fetch(userpass.user)
         }
         function create_account (params) {
@@ -730,6 +726,9 @@ var extra_methods = {
             var passes = master.fetch('users/passwords')
             if ([params.name] in passes)
                 return false
+
+            // Hash password
+            params.pass = require('bcrypt-nodejs').hashSync(params.pass)
 
             // Choose account key
             var key = '/user/' + params.name
@@ -757,7 +756,7 @@ var extra_methods = {
             if (!conn.client) return
             var u = master.fetch('logged_in_clients')[conn.client]
             u = u && user_obj(u.key, true)
-            return {user: u || null, salt: salt, logged_in: !!u}
+            return {user: u || null, logged_in: !!u}
         }
 
         user('/current_user').to_save = function (o) {
