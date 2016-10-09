@@ -35,7 +35,7 @@ var extra_methods = {
             delete global.save
             c = function (client, conn) {
                 client.serves_auth(conn, master)
-                client.route_defaults_to(master)
+                if (!bus.options.__secure) client.route_defaults_to(master)
                 options.client(client)
             }
         }
@@ -194,7 +194,7 @@ var extra_methods = {
                     user.delete_bus()
                 }
             })
-            if (user_bus_func) {
+            if (user_bus_func && !master.options.__secure) {
                 user('/connection').to_fetch = function () {
                     var c = user.clone(connections[conn.id])
                     if (c.user) c.user = user.fetch(c.user.key)
@@ -892,10 +892,28 @@ var extra_methods = {
     },
 }
 
+
 function make_server_bus (options) {
     bus = require('./statebus')()
+
+    // Options
+    var default_options = {
+        port: 3004,
+        backdoor: null,
+        client: null,
+        file_store: true,
+        __secure: false
+    }
+    bus.options = default_options
+    options = options || {}
+    for (k in (options || {}))
+        bus.options[k] = options[k]
+
+    // Add methods to bus object
     for (m in extra_methods)
         bus[m] = extra_methods[m]
+
+    // Maybe serve
     if (options && (options.client || options.port || options.backdoor))
         bus.serve(options)
     return bus
