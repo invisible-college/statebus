@@ -55,6 +55,32 @@ var tests = [
         next()
     },
 
+    function validation (next) {
+        var v_tests = [
+            ['something', 'string', true],
+            ['something', 'something', true],
+            ['something', 3, false],
+            [3, 3, true],
+            [3, 'number', true],
+            [3, 'string', false],
+            [3, {}, false],
+            [3, [], false],
+            [{}, {}, true],
+            [{}, {'key': 'string'}, false],
+            [{}, {'?key': 'string'}, true],
+            [{key: '/foo'}, {key: 'string'}, true],
+            [{a: 2, b: [], c: 'foo'},           {a: 'number', b: 'array', c: 'string'}, true],
+            [{a: 2, b: [], c: 'foo', d: false}, {a: 'number', b: 'array', c: 'string'}, false],
+            [{a: false}, {a: 'boolean'}, true]
+        ]
+
+        for (var i=0; i<v_tests.length; i++)
+            assert(bus.validate(v_tests[i][0], v_tests[i][1]) === v_tests[i][2],
+                   'Validation test failed', v_tests[i])
+
+        next()
+    },
+
     function basics (next) {
         bus('basic wait').to_fetch = function () {
             setTimeout(function () {save.fire({key:'basic wait', a:1})},

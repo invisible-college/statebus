@@ -1055,6 +1055,52 @@
         // Then Not Equal.
         return ' = ' + JSON.stringify(b)
     }
+
+    function validate (obj, schema) {
+        var optional = false
+        if (schema === '*') return true
+        if (obj === schema) return true
+
+        if (typeof obj === 'string')
+            return schema === 'string'
+        if (typeof obj === 'number')
+            return schema === 'number'
+        if (typeof obj === 'boolean')
+            return schema === 'boolean'
+
+        if (Array.isArray(obj))
+            return schema === 'array'
+
+        if (typeof obj === 'object') {
+            if (schema === 'object')
+                return true
+
+            if (typeof schema === 'object') {
+                for (var k in obj) {
+                    var sk
+                    if (k in schema)
+                        sk = k
+                    else if ('?'+k in schema)
+                        sk = '?'+k
+                    else return false
+
+                    if (!validate(obj[k], schema[sk]))
+                        return false
+                }
+                for (var k in schema)
+                    if (k[0] !== '?')
+                        if (!(k in obj))
+                            return false
+
+                return true
+            }
+
+            return false
+        }
+
+        throw "You hit a Statebus bug!"
+    }
+
     function key_id(string) { return string.match(/\/?[^\/]+\/(\d+)/)[1] }
     function key_name(string) { return string.match(/\/?([^\/]+).*/)[1] }
     function funk_key (funk) {
@@ -1171,7 +1217,7 @@
                'funk_key funk_name funks key_id key_name id kp',
                'pending_fetches fetches_in loading_keys loading',
                'global_funk busses rerunnable_funks',
-               'Set One_To_Many clone extend deep_map deep_equals sorta_diff log deps'
+               'Set One_To_Many clone extend deep_map deep_equals validate sorta_diff log deps'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)
         bus[api[i]] = eval(api[i])
