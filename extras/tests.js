@@ -68,6 +68,7 @@ var tests = [
             [{}, {}, true],
             [{}, {'key': 'string'}, false],
             [{}, {'?key': 'string'}, true],
+            [{key: 3}, {'?key': 'string'}, false],
             [{key: '/foo'}, {key: 'string'}, true],
             [{a: 2, b: [], c: 'foo'},           {a: 'number', b: 'array', c: 'string'}, true],
             [{a: 2, b: [], c: 'foo', d: false}, {a: 'number', b: 'array', c: 'string'}, false],
