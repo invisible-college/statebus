@@ -1185,7 +1185,7 @@
     }
 
     function log () {
-        if (!bus.honk) return
+        if (bus.honk !== true) return
         if (typeof window === 'undefined') {
             var indent = ''
             for (var i=0; i<statelog_indent; i++) indent += '   '
@@ -1196,7 +1196,7 @@
 
     function statelog (color, icon, message) {
         var old_honk = bus.honk
-        bus.honk = true
+        if (bus.honk) bus.honk = true
         log(color + icon + ' ' + message + normal)
         //log.apply(null, arguments)
         bus.honk = old_honk

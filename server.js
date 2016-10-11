@@ -26,6 +26,7 @@ var extra_methods = {
     },
     serve: function serve (options) {
         var bus = this
+        bus.honk = 'statelog'
         options = options || {}
         var c = options.client_definition
         if (options.client) {
@@ -34,6 +35,7 @@ var extra_methods = {
             delete global.fetch
             delete global.save
             c = function (client, conn) {
+                client.honk = 'statelog'
                 client.serves_auth(conn, master)
                 if (!bus.options.__secure) client.route_defaults_to(master)
                 options.client(client)
@@ -934,6 +936,7 @@ var extra_methods = {
 
 function make_server_bus (options) {
     bus = require('./statebus')()
+    bus.honk = 'statelog'
 
     // Options
     var default_options = {
