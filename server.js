@@ -147,31 +147,57 @@ var extra_methods = {
                 log('sockjs_s:', message)
                 try {
                     message = JSON.parse(message)
-                    var arg = message.key || message.obj
-                    if (!arg) throw 'Missing argument in message'
+                    var method = message.method.toLowerCase()
+
+                    // Validate the message
+                    if (!((method === 'fetch'
+                           && master.validate(message, {method: 'string', key: 'string',
+                                                        '?parent': 'string', '?version': 'string'}))
+                          ||
+                          (method === 'save'
+                           && master.validate(message, {method: 'string', obj: 'object',
+                                                        '?parents': 'array', '?version': 'string'})
+                           && typeof(message.obj.key === 'string'))
+                          ||
+                          (method === 'forget'
+                           && master.validate(message, {method: 'string', key: 'string'}))
+                          ||
+                          (method === 'delete'
+                           && master.validate(message, {method: 'string', key: 'string'}))))
+                        throw 'validation error'
+
                 } catch (e) {
+                    for (var i=0; i<4; i++) console.error('#######')
                     console.error('Received bad sockjs message from '
                                   + conn.remoteAddress +': ', message, e)
                     return
                 }
 
-                switch (message.method) {
-                case 'fetch' : our_fetches_in[arg] = true
-                               user.fetch(arg, sockjs_pubber)  ; break
-                case 'forget': delete our_fetches_in[arg]
-                               user.forget(arg, sockjs_pubber) ; break
-                case 'delete': user.delete(arg)                ; break
-                case 'save'  :
+                switch (message.method.toLowerCase()) {
+                case 'fetch':
+                    our_fetches_in[message.key] = true
+                    user.fetch(message.key, sockjs_pubber)
+                    break
+                case 'forget':
+                    delete our_fetches_in[message.key]
+                    user.forget(message.key, sockjs_pubber)
+                    break
+                case 'delete':
+                    // Delete doesn't quite work yet so let's just give up for now
+                    break
+                    // user.delete(arg)
+                    // break
+                case 'save':
                     message.version = message.version || user.new_version()
-                    user.save(arg,
+                    user.save(message.obj,
                               {version: message.version,
                                parents: message.parents,
                                peer: sockjs_pubber})
-                    if (our_fetches_in[arg.key]) {  // Store what we've seen if we
-                                                    // might have to publish it later
-                        user.log('Adding', arg.key+'#'+message.version,
+                    if (our_fetches_in[message.obj.key]) {  // Store what we've seen if we
+                                                            // might have to publish it later
+                        user.log('Adding', message.obj.key+'#'+message.version,
                                  'to pubber!')
-                        sockjs_pubber.has_seen(user, arg.key, message.version)
+                        sockjs_pubber.has_seen(user, message.obj.key, message.version)
                     }
                     break
                 }
@@ -182,7 +208,7 @@ var extra_methods = {
                 for (var key in our_fetches_in)
                     if (!user.fetches_in.has(key, master.funk_key(sockjs_pubber)))
                         console.trace("***\n****\nFound errant key", key,
-                                      'when receiving a sockjs', message.method, 'on', arg)
+                                      'when receiving a sockjs', message.method, 'on', message.key || message.obj)
                 //log('sockjs_s: done with message')
             })
             conn.on('close', function() {
@@ -760,6 +786,13 @@ var extra_methods = {
         }
 
         user('/current_user').to_save = function (o) {
+            function error (msg) {
+                user.save.abort(o)
+                var n = user.fetch('/current_user')
+                n.error = msg
+                user.save(n)
+            }
+
             user.log('* Current User Saver going!')
             if (o.client && !conn.client) {
                 // Set the client
@@ -772,9 +805,12 @@ var extra_methods = {
             else {
                 if (o.create_account) {
                     user.log('current_user: creating account')
-                    var tmp = create_account(o.create_account)
-                    user.log('Result of creating account is', tmp)
-                    if (!tmp) user.save.abort(o)
+                    if (create_account(o.create_account))
+                        user.log('Success creating account!')
+                    else {
+                        error('Cannot create that account')
+                        return
+                    }
                 }
 
                 if (o.login_as) {
@@ -800,7 +836,10 @@ var extra_methods = {
                             master.save(clients)
                             master.save(connections)
                         }
-                        else user.save.abort(o)
+                        else {
+                            error('Cannot log in with that information')
+                            return
+                        }
                     }
                 }
 

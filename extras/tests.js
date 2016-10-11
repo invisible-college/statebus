@@ -668,6 +668,10 @@ var tests = [
                 assert(!u.logged_in, '3 logged in')
                 u.create_account = {name: 'bob', email: 'b@o.b', pass: 'boob'}
                 c.save(u)
+
+                // Note: I hope this next line isn't necessary in the future!
+                delete u.create_account
+
                 u.login_as = {name: 'bob', pass: 'boob'}
                 c.save(u)
                 break
