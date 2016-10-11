@@ -496,7 +496,7 @@
 
         improve_react()
         window.dom = {}
-        window.ignore_flashbacks = true
+        window.ignore_flashbacks = false
         bus.localstorage_client('ls/*')
         bus.sockjs_client ('/*', statebus_server)
 
