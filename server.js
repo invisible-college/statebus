@@ -910,7 +910,7 @@ var extra_methods = {
          }
      },
 
-    sync_to_master: function (prefix_to_sync) {
+    persist: function (prefix_to_sync, validate) {
         var client = this
         var was_logged_in = false
 
@@ -967,6 +967,12 @@ var extra_methods = {
         }
 
         client(prefix_to_sync).to_save = function (obj) {
+            if (validate && !validate(obj)) {
+                console.warn('Validation failed on', obj)
+                client.save.abort(obj)
+                return
+            }
+
             var c = client.fetch('/current_user')
             if (client.loading()) return
             var prefix = client_prefix(c)
@@ -978,8 +984,6 @@ var extra_methods = {
                     o.key = prefix + o.key
                 return o
             })
-
-            console.log('Converted obj to', obj)
 
             // Save to master
             client.master.save(obj)
