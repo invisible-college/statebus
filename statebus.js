@@ -410,7 +410,8 @@
         delete cache[key]
 
         // Todo: update versions[key]
-        mark_changed(key)
+        // mark_changed(key)
+
         console.warn('We need to figure out what to do with deleted keys!')
         // Probably we want to mark_deleted(key) instead of mark_changed(key),
         // and then send delete()s to all busses subscribed to the key.  We
