@@ -795,9 +795,9 @@ var extra_methods = {
         user('/current_user').to_save = function (o) {
             function error (msg) {
                 user.save.abort(o)
-                var n = user.fetch('/current_user')
-                n.error = msg
-                user.save(n)
+                var c = user.fetch('/current_user')
+                c.error = msg
+                user.save(c)
             }
 
             user.log('* Current User Saver going!')
@@ -848,6 +848,10 @@ var extra_methods = {
                             error('Cannot log in with that information')
                             return
                         }
+                    }
+                    else {
+                        error('Cannot log in with that information')
+                        return
                     }
                 }
 
