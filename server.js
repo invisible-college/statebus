@@ -78,8 +78,6 @@ var extra_methods = {
         var bus = this
         bus.honk = 'statelog'
 
-        //if (!bus.options.client) throw 'Need client definition for full_node'
-
         var master = bus
         master.label = 'master'
         delete global.fetch
@@ -145,7 +143,7 @@ var extra_methods = {
         // Back door to the control room
         if (bus.options.backdoor) {
             bus.make_http_server({
-                port: options.backdoor,
+                port: bus.options.backdoor,
                 name: 'backdoor_http_server'
             })
             bus.sockjs_server(this.backdoor_http_server)
