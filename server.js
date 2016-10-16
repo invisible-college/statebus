@@ -135,6 +135,7 @@ var extra_methods = {
                 var user = make_server_bus()
                 user.label = 'client' + client_num++
                 master.label = master.label || 'master'
+                user.master = master
                 user_bus_func(user, conn)
             } else
                 var user = master
@@ -799,6 +800,7 @@ var extra_methods = {
             if (o.client && !conn.client) {
                 // Set the client
                 conn.client = o.client
+                user.client_id = o.client
 
                 var connections = master.fetch('connections')
                 connections[conn.id].user = master.fetch('logged_in_clients')[conn.client]
@@ -903,6 +905,31 @@ var extra_methods = {
                  got[o.key] = true
          }
      },
+
+    cp_save: function (obj) {
+        var prefix = '/client/' + this.client_id
+
+        // Make it safe
+        obj = this.clone(obj)
+        this.deep_map(obj, function (o) {
+            if ('key' in o && typeof o.key === 'string')
+                o.key = prefix + o.key
+        })
+
+        // Save to master
+        this.master.save(obj)
+    },
+    cp_fetch: function (key) {
+        var prefix = '/client/' + this.client_id
+        var obj = this.master.fetch(prefix + key)
+
+        // Translate it back
+        this.deep_map(obj, function (o) {
+            if ('key' in o && typeof o.key === 'string')
+                o.key = o.key.substr(0, prefix.length)
+        })
+        return obj
+    },
 
     route_defaults_to: function route_defaults_to (master_bus) {
         var bus = this
