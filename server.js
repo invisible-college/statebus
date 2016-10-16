@@ -42,12 +42,12 @@ var extra_methods = {
             }
         }
 
-        if (!('file_store' in options) || options.file_store)
-            bus.file_store('*')                // Save everything to a file
-
         bus.make_http_server(options)          // Create our own http server
         bus.sockjs_server(this.http_server, c) // Serve via sockjs on it
         bus.label = bus.label || 'server'
+
+        if (!('file_store' in options) || options.file_store)
+            bus.file_store('*')                // Save everything to a file
 
         // Custom route
         var OG_route = bus.route
@@ -74,10 +74,90 @@ var extra_methods = {
         }
     },
 
+    serve_node: function serve_node () {
+        var bus = this
+        bus.honk = 'statelog'
+
+        //if (!bus.options.client) throw 'Need client definition for full_node'
+
+        var master = bus
+        master.label = 'master'
+        delete global.fetch
+        delete global.save
+
+        if (process.getuid() === 0) {
+            var port = require('fs').existsSync('certs') ? 443 : 80
+
+            // Attempt to bind to 80 and 443
+            var ports_bound = 0
+            bus.options.after_port_bind = function undo_sudo () {
+                console.log('Calling after_port_bind for time ', ports_bound+1)
+                var outstanding_binds = port === 443 ? 2 : 1
+                if (++ports_bound < outstanding_binds) return
+                // Find out which user used sudo through the environment variable
+                var uid = parseInt(process.env.SUDO_UID)
+                // Set our server's uid to that user
+                if (uid) process.setuid(uid)
+                console.log('Server\'s UID is now ' + process.getuid())
+            }
+
+            // Redirect http -> https
+            if (port === 443) {
+                var red = require('http')
+                red.createServer(function (req, res) {
+                    res.writeHead(301, {"Location": "https://"+req.headers['host']+req.url})
+                    res.end()
+                }).listen(80, function () {bus.options.after_port_bind()})
+            }
+        } else
+            var port = 3004
+
+        function c (client, conn) {
+            client.honk = 'statelog'
+            client.serves_auth(conn, master)
+            bus.options.client && bus.options.client(client)
+        }
+        
+        bus.make_http_server({port: port})     // Create our own http server
+        bus.sockjs_server(this.http_server, c) // Serve via sockjs on it
+        bus.http = require('express')()
+        bus.install_express(bus.http)
+        bus.label = bus.label || 'server'
+
+        if (bus.options.file_store)
+            bus.file_store('*')                // Save everything to a file
+
+        // Custom route
+        var OG_route = bus.route
+        bus.route = function(key, method, arg, opts) {
+            var count = OG_route(key, method, arg, opts)
+
+            // This whitelists anything we don't have a specific handler for,
+            // reflecting it to all clients!
+            if (count === 0 && method === 'to_save') {
+                bus.save.fire(arg, opts)
+                count++
+            }
+
+            return count
+        }
+
+        // Back door to the control room
+        if (bus.options.backdoor) {
+            bus.make_http_server({
+                port: options.backdoor,
+                name: 'backdoor_http_server'
+            })
+            bus.sockjs_server(this.backdoor_http_server)
+        }
+        
+    },
+
     make_http_server: function make_http_server (options) {
         options = options || {}
         var port = options.port || 3000
         var fs = require('fs')
+        var bus = this
 
         if (fs.existsSync('certs')) {
             // Load with TLS/SSL
@@ -104,10 +184,11 @@ var extra_methods = {
         }
 
         var http_server = http.createServer(ssl_options)
-        http_server.listen(port, function(){
+        http_server.listen(port, function () {
             console.log('Listening on '+protocol+ '//:<host>:' + port)
+            bus.options.after_port_bind && bus.options.after_port_bind()
         })
-        this[options.name || 'http_server'] = http_server
+        bus[options.name || 'http_server'] = http_server
     },
 
     install_express: function install_express (express_app) {
@@ -1032,7 +1113,8 @@ function make_server_bus (options) {
         backdoor: null,
         client: null,
         file_store: true,
-        __secure: false
+        __secure: false,
+        full_node: false
     }
     bus.options = default_options
     options = options || {}
@@ -1043,8 +1125,11 @@ function make_server_bus (options) {
     for (m in extra_methods)
         bus[m] = extra_methods[m]
 
+    if (options.full_node)
+        bus.serve_node()
+
     // Maybe serve
-    if (options && (options.client || options.port || options.backdoor))
+    else if (options && (options.client || options.port || options.backdoor))
         bus.serve(options)
     return bus
 }
