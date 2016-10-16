@@ -186,10 +186,8 @@ var extra_methods = {
                     user.forget(message.key, sockjs_pubber)
                     break
                 case 'delete':
-                    // Delete doesn't quite work yet so let's just give up for now
+                    user.delete(message.key)
                     break
-                    // user.delete(arg)
-                    // break
                 case 'save':
                     message.version = message.version || user.new_version()
                     user.save(message.obj,

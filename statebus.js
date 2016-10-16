@@ -409,14 +409,18 @@
 
         delete cache[key]
 
-        // Todo: update versions[key]
-        // mark_changed(key)
+        console.warn("Deleting " + key + "-- Statebus doesn't yet re-run functions subscribed to it, or update versions")
 
-        console.warn('We need to figure out what to do with deleted keys!')
-        // Probably we want to mark_deleted(key) instead of mark_changed(key),
-        // and then send delete()s to all busses subscribed to the key.  We
-        // might also record a new version of the state to show that it's been
-        // deleted, which we can use to cancel echoes from the sending bus.
+        // Todos:
+        //
+        // Right now we fire the to_delete handlers right here.
+        //
+        //  - Do we want to batch them up and fire them later?
+        //    e.g. we could make a mark_deleted(key) like mark_changed(key)
+        //
+        //  - We might also record a new version of the state to show that
+        //    it's been deleted, which we can use to cancel echoes from the
+        //    sending bus.
 
         log('del:', obj_or_key)
         bus.route(key, 'to_delete', key)
