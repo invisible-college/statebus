@@ -472,6 +472,10 @@ var extra_methods = {
             db[obj.key]=obj
             save_timer = save_timer || setTimeout(save_db, 100)
         }
+        bus(prefix).to_delete = function (key) {
+            delete db[key]
+            save_timer = save_timer || setTimeout(save_db, 100)
+        }
 
         setInterval(
             // This copies the current db over backups/db.<curr_date> every minute
@@ -906,29 +910,80 @@ var extra_methods = {
          }
      },
 
-    cp_save: function (obj) {
-        var prefix = '/client/' + this.client_id
+    sync_to_master: function (prefix_to_sync) {
+        var client = this
+        var was_logged_in = false
 
-        // Make it safe
-        obj = this.clone(obj)
-        this.deep_map(obj, function (o) {
-            if ('key' in o && typeof o.key === 'string')
-                o.key = prefix + o.key
-        })
+        function client_prefix (current_user) {
+            return '/client/' + (current_user.logged_in
+                                 ? current_user.user.key.split('/')[2]
+                                 : client.client_id)
+        }
 
-        // Save to master
-        this.master.save(obj)
-    },
-    cp_fetch: function (key) {
-        var prefix = '/client/' + this.client_id
-        var obj = this.master.fetch(prefix + key)
+        function copy_client_to_user(client, user) {
+            var old_prefix = '/client/' + client.client_id
+            var new_prefix = '/client/' + user.key.split('/')[2]
+            var cache = client.master.cache
 
-        // Translate it back
-        this.deep_map(obj, function (o) {
-            if ('key' in o && typeof o.key === 'string')
-                o.key = o.key.substr(0, prefix.length)
-        })
-        return obj
+            var keys = Object.keys(cache)         // Make a copy
+            for (var i=0; i<keys.length; i++) {   // Because we'll mutate
+                var old_key = keys[i]             // As we iterate
+
+                if (old_key.startsWith(old_prefix)) {
+                    var new_key = new_prefix + old_key.substr(old_prefix.length)
+                    var o = client.clone(cache[old_key])
+                    // Delete the old
+                    client.master.del(old_key)
+
+                    if (!(new_key in cache)) {
+                        // Save the new
+                        o.key = new_key
+                        client.master.save(o)
+                    }
+                }
+            }
+        }
+
+        client(prefix_to_sync).to_fetch = function (key) {
+            var c = client.fetch('/current_user')
+            if (client.loading()) return
+            var prefix = client_prefix(c)
+
+            if (!was_logged_in && c.logged_in)
+                // User just logged in!  Let's copy his stuff over
+                copy_client_to_user(client, c.user)
+            was_logged_in = c.logged_in
+
+            // Get the state from master
+            var obj = client.clone(client.master.fetch(prefix + key))
+
+            // Translate it back to client
+            obj = client.deep_map(obj, function (o) {
+                if (typeof o === 'object' && 'key' in o && typeof o.key === 'string')
+                    o.key = o.key.substr(prefix.length)
+                return o
+            })
+            return obj
+        }
+
+        client(prefix_to_sync).to_save = function (obj) {
+            var c = client.fetch('/current_user')
+            if (client.loading()) return
+            var prefix = client_prefix(c)
+
+            // Make it safe
+            obj = client.clone(obj)
+            obj = client.deep_map(obj, function (o) {
+                if (typeof o === 'object' && 'key' in o && typeof o.key === 'string')
+                    o.key = prefix + o.key
+                return o
+            })
+
+            console.log('Converted obj to', obj)
+
+            // Save to master
+            client.master.save(obj)
+        }
     },
 
     route_defaults_to: function route_defaults_to (master_bus) {
