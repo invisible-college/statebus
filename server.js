@@ -89,7 +89,6 @@ var extra_methods = {
             // Attempt to bind to 80 and 443
             var ports_bound = 0
             bus.options.after_port_bind = function undo_sudo () {
-                console.log('Calling after_port_bind for time ', ports_bound+1)
                 var outstanding_binds = port === 443 ? 2 : 1
                 if (++ports_bound < outstanding_binds) return
                 // Find out which user used sudo through the environment variable
@@ -1068,6 +1067,10 @@ var extra_methods = {
 
             // Save to master
             client.master.save(obj)
+        }
+
+        client(prefix_to_sync).to_delete = function (k) {
+            client.master.delete(client_prefix(client.fetch('/current_user')) + k)
         }
     },
 
