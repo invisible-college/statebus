@@ -881,6 +881,7 @@ var extra_methods = {
                 // Set the client
                 conn.client = o.client
                 user.client_id = o.client
+                user.client_ip = conn.remoteAddress
 
                 var connections = master.fetch('connections')
                 connections[conn.id].user = master.fetch('logged_in_clients')[conn.client]
