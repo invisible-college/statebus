@@ -996,13 +996,13 @@ var extra_methods = {
 
         function client_prefix (current_user) {
             return '/client/' + (current_user.logged_in
-                                 ? current_user.user.key.split('/')[2]
+                                 ? current_user.user.key.substr('/user/'.length)
                                  : client.client_id)
         }
 
         function copy_client_to_user(client, user) {
             var old_prefix = '/client/' + client.client_id
-            var new_prefix = '/client/' + user.key.split('/')[2]
+            var new_prefix = '/client/' + user.key.substr('/user/'.length)
             var cache = client.master.cache
 
             var keys = Object.keys(cache)         // Make a copy
