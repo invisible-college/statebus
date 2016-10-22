@@ -1,5 +1,6 @@
 var util = require('util')
-function make_server_bus (options) { var extra_methods = {
+function make_server_bus (options)
+{   var extra_methods = {
     setup: function setup (options) {
         options = options || {}
         if (!('file_store' in options) || options.file_store)
@@ -503,7 +504,7 @@ function make_server_bus (options) { var extra_methods = {
         var fs = require('fs')
         var db = {}
         var db_is_ok = false
-        var save_timer = null
+        var pending_save = null
         var active
         function file_store (prefix, options) {
             filename = (options && options.filename) || filename
@@ -526,35 +527,51 @@ function make_server_bus (options) { var extra_methods = {
 
             // Saving db
             function save_db() {
-                save_timer = null
                 if (!db_is_ok) return
                 fs.writeFile(filename+'.tmp', JSON.stringify(db, null, 1), function(err) {
                     if (err) {
-                        console.log('Crap! DB IS DYING!!!!', err)
+                        console.error('Crap! DB IS DYING!!!!', err)
                         db_is_ok = false
                     } else
                         fs.rename(filename+'.tmp', filename, function (err) {
                             if (err) {
-                                console.log('Crap !! DB IS DYING !!!!', err)
+                                console.error('Crap !! DB IS DYING !!!!', err)
                                 db_is_ok = false
-                            } else bus.log('saved db')
+                            } else {
+                                bus.log('saved db')
+                                pending_save = null
+                            }
                         })
                 })
             }
 
-            active = !options || !options.delay_activate
-            bus(prefix).on_save = function file_store (obj) {
-                db[obj.key]=obj
-                if (active) save_timer = save_timer || setTimeout(save_db, 100)
+            function save_later() {
+                pending_save = pending_save || setTimeout(save_db, 300)
             }
+            active = !options || !options.delay_activate
+            function on_save (obj) {
+                db[obj.key]=obj
+                if (active) save_later()
+            }
+            on_save.priority = true
+            bus(prefix).on_save = on_save
             bus(prefix).to_delete = function (key) {
                 delete db[key]
-                if (active) save_timer = save_timer || setTimeout(save_db, 100)
+                if (active) save_later()
             }
             file_store.activate = function () {
                 active = true
-                save_timer = save_timer || setTimeout(save_db, 100)
+                save_later()
             }
+
+            // Handling errors
+            require('node-cleanup')(function () {
+                if (pending_save) {
+                    console.log('Saving db after crash')
+                    fs.writeFileSync(filename, JSON.stringify(db, null, 1))
+                    console.log('Saved db after crash')
+                }
+            })
 
             // Rotating backups
             setInterval(

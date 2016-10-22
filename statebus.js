@@ -454,9 +454,21 @@
         }
         clean_timer = null
 
-        // 3. Re-run the functions
+        // 2. Run any priority function first (e.g. file_store's on_save)
         dirty_funks = dirty_funks.values()
         log('Cleaning up', dirty_funks.length, 'funks')
+        for (var i=0; i<dirty_funks.length; i++) {
+            // console.log(funks[dirty_funks[i]].proxies_for)
+            var p = funks[dirty_funks[i]].proxies_for
+            if (p && p.priority) {
+                log('Clean-early:', funk_name(funks[dirty_funks[i]]))
+                funks[dirty_funks[i]].react()
+                dirty_funks.splice(i,1)
+                i--
+            }
+        }
+
+        // 3. Re-run the functions
         for (var i=0; i<dirty_funks.length; i++) {
             log('Clean:', funk_name(funks[dirty_funks[i]]))
             funks[dirty_funks[i]].react()
