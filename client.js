@@ -120,6 +120,14 @@
                 console.log('%c[*] closed ' + url, 'color: blue')
                 heartbeat && clearInterval(heartbeat); heartbeat = null
                 setTimeout(connect, attempts++ < 3 ? 1500 : 5000)
+
+                // Remove all fetches and forgets from queue
+                var new_outbox = []
+                var bad = {'fetch':1, 'forget':1}
+                for (var i=0; i<outbox.length; i++)
+                    if (!bad[JSON.parse(outbox[i]).method])
+                        new_outbox.push(outbox[i])
+                outbox = new_outbox
             }
 
             sock.onmessage = function(event) {
