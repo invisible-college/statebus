@@ -80,28 +80,44 @@ function make_server_bus (options)
         delete global.fetch
         delete global.save
 
+        var on_listen = null
+        // Do extra stuff if we're root:
+        //  - Bind to port 443 if SSL
+        //    - Redirect port 80 to 443
+        //  - Undo the sudo
+        //  - Wait until that's finished before touching any files
         if (process.getuid() === 0) {
-            var port = require('fs').existsSync('certs') ? 443 : 80
 
-            // Attempt to bind to 80 and 443
-            var ports_bound = 0
-            bus.options.after_port_bind = function undo_sudo () {
-                var outstanding_binds = port === 443 ? 2 : 1
-                if (++ports_bound < outstanding_binds) return
-                // Find out which user used sudo through the environment variable
-                var uid = parseInt(process.env.SUDO_UID)
-                // Set our server's uid to that user
-                if (uid) process.setuid(uid)
-                console.log('Server\'s UID is now ' + process.getuid())
+            // Setup handler for when we are listening
+            var num_servers_listening = 0
+            var num_servers_desired = 1
+            on_listen = function () {
+                num_servers_listening++
+                if (num_servers_listening === num_servers_desired) {
+                    // Undo the sudo
+                    // Find out original user through environment variable
+                    var uid = parseInt(process.env.SUDO_UID)
+                    // Set our server's uid to that user
+                    if (uid) process.setuid(uid)
+                    console.log('Server\'s UID is now ' + process.getuid())
+
+                    // Start writing to the file_store, since we aren't root
+                    bus.file_store.activate()
+                    console.log('db is active')
+                }
             }
 
-            // Redirect http -> https
-            if (port === 443) {
-                var red = require('http')
-                red.createServer(function (req, res) {
+            // Add a redirect server if we have SSL
+            var port = 80
+            if (require('fs').existsSync('certs')) {
+                port = 443
+                num_servers_desired = 2
+
+                var redirector = require('http')
+                redirector.createServer(function (req, res) {
                     res.writeHead(301, {"Location": "https://"+req.headers['host']+req.url})
                     res.end()
-                }).listen(80, function () {bus.options.after_port_bind()})
+                }).listen(80, on_listen)
             }
         } else
             var port = 3004
@@ -113,15 +129,14 @@ function make_server_bus (options)
         }
         
         if (bus.options.file_store)
-            bus.file_store('*', {delay_activate: true})
+            bus.file_store('*', {delay_activate: port <= 443})
 
-        bus.make_http_server({port: port})     // Create our own http server
+        // Create our own http server
+        bus.make_http_server({port: port, on_listen: on_listen})
         bus.sockjs_server(this.http_server, c) // Serve via sockjs on it
         bus.http = require('express')()
         bus.install_express(bus.http)
         bus.label = bus.label || 'server'
-
-        bus.file_store.activate()
 
         // Custom route
         var OG_route = bus.route
@@ -181,7 +196,8 @@ function make_server_bus (options)
         var http_server = http.createServer(ssl_options)
         http_server.listen(port, function () {
             console.log('Listening on '+protocol+ '//:<host>:' + port)
-            bus.options.after_port_bind && bus.options.after_port_bind()
+            if (options.on_listen)
+                options.on_listen()
         })
         bus[options.name || 'http_server'] = http_server
     },
@@ -568,7 +584,7 @@ function make_server_bus (options)
             function recover (e) {
                 console.log('### cleanup func')
                 if (e) {
-                    process.stderr.write(messages.uncaughtException + "\n");
+                    process.stderr.write("Uncaught Exception:\n");
                     process.stderr.write(e.stack + "\n");
                 }
                 if (pending_save) {
