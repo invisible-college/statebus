@@ -538,7 +538,7 @@ function make_server_bus (options)
                                 console.error('Crap !! DB IS DYING !!!!', err)
                                 db_is_ok = false
                             } else {
-                                bus.log('saved db')
+                                console.log('saved db')
                                 pending_save = null
                             }
                         })
@@ -546,7 +546,7 @@ function make_server_bus (options)
             }
 
             function save_later() {
-                pending_save = pending_save || setTimeout(save_db, 300)
+                pending_save = pending_save || setTimeout(save_db, 100)
             }
             active = !options || !options.delay_activate
             function on_save (obj) {
@@ -565,13 +565,22 @@ function make_server_bus (options)
             }
 
             // Handling errors
-            require('node-cleanup')(function () {
+            function recover (e) {
+                console.log('### cleanup func')
+                if (e) {
+                    process.stderr.write(messages.uncaughtException + "\n");
+                    process.stderr.write(e.stack + "\n");
+                }
                 if (pending_save) {
                     console.log('Saving db after crash')
                     fs.writeFileSync(filename, JSON.stringify(db, null, 1))
                     console.log('Saved db after crash')
                 }
-            })
+                process.exit(1)
+            }
+            process.on('SIGINT', recover)
+            process.on('SIGTERM', recover)
+            process.on('uncaughtException', recover)
 
             // Rotating backups
             setInterval(
