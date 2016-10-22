@@ -1,8 +1,6 @@
 var util = require('util')
-var bus
-var extra_methods = {
+function make_server_bus (options) { var extra_methods = {
     setup: function setup (options) {
-        var bus = this
         options = options || {}
         if (!('file_store' in options) || options.file_store)
             bus.file_store('*')           // Save everything to a file
@@ -25,7 +23,6 @@ var extra_methods = {
         }
     },
     serve: function serve (options) {
-        var bus = this
         bus.honk = 'statelog'
         options = options || {}
         var c = options.client_definition
@@ -42,12 +39,12 @@ var extra_methods = {
             }
         }
 
+        if (!('file_store' in options) || options.file_store)
+            bus.file_store('*')                // Save everything to a file
+
         bus.make_http_server(options)          // Create our own http server
         bus.sockjs_server(this.http_server, c) // Serve via sockjs on it
         bus.label = bus.label || 'server'
-
-        if (!('file_store' in options) || options.file_store)
-            bus.file_store('*')                // Save everything to a file
 
         // Custom route
         var OG_route = bus.route
@@ -75,7 +72,6 @@ var extra_methods = {
     },
 
     serve_node: function serve_node () {
-        var bus = this
         bus.honk = 'statelog'
 
         var master = bus
@@ -115,14 +111,16 @@ var extra_methods = {
             bus.options.client && bus.options.client(client)
         }
         
+        if (bus.options.file_store)
+            bus.file_store('*', {delay_activate: true})
+
         bus.make_http_server({port: port})     // Create our own http server
         bus.sockjs_server(this.http_server, c) // Serve via sockjs on it
         bus.http = require('express')()
         bus.install_express(bus.http)
         bus.label = bus.label || 'server'
 
-        if (bus.options.file_store)
-            bus.file_store('*')                // Save everything to a file
+        bus.file_store.activate()
 
         // Custom route
         var OG_route = bus.route
@@ -154,7 +152,6 @@ var extra_methods = {
         options = options || {}
         var port = options.port || 3000
         var fs = require('fs')
-        var bus = this
 
         if (fs.existsSync('certs')) {
             // Load with TLS/SSL
@@ -330,7 +327,6 @@ var extra_methods = {
     },
 
     ws_client: function ws_client (prefix, url) {
-        var bus = this
         var WebSocket = require('websocket').w3cwebsocket
         url = url || 'wss://stateb.us:3004'
         var recent_saves = []
@@ -448,7 +444,6 @@ var extra_methods = {
     },
 
     socketio_server: function socketio_server (http_server, socket_io_module) {
-        var bus = this
         var io = socket_io_module.listen(http_server)
         
         var fetches_in = {}  // Every key that every client has fetched.
@@ -500,85 +495,97 @@ var extra_methods = {
         })
     },
 
-    file_store: function file_store (prefix, options) {
-        // This should get run before anything else so it can load
-        // data into the statebus cache
-
-        var bus = this
-
-        // Make a database for the server
-        var filename = (options && options.filename) || 'db'
-        var backup_dir = (options && options.backup_dir) || 'backups'
+    file_store: (function () {
+        // Make a database
+        var filename = 'db'
+        var backup_dir = 'backups'
 
         var fs = require('fs')
         var db = {}
         var db_is_ok = false
         var save_timer = null
-        function save_db() {
-            save_timer = null
-            if (!db_is_ok) return
-            fs.writeFile(filename+'.tmp', JSON.stringify(db, null, 1), function(err) {
-                if (err) {
-                    console.log('Crap! DB IS DYING!!!!', err)
-                    db_is_ok = false
-                } else
-                    fs.rename(filename+'.tmp', filename, function (err) {
-                        if (err) {
-                            console.log('Crap !! DB IS DYING !!!!', err)
-                            db_is_ok = false
-                        } else bus.log('saved db')
-                    })
-            })
-        }
-        try {
-            if (fs.existsSync && !fs.existsSync(filename))
-                (fs.writeFileSync(filename, '{}'), bus.log('Made a new db file'))
-            db = JSON.parse(fs.readFileSync(filename))
-            db_is_ok = true
-            // If we save before anything else is connected, we'll get this
-            // into the cache but not affect anything else
-            bus.save.fire(db)
-            bus.log('Read db')
-        } catch (e) {
-            console.error(e)
-            console.error('bad db file')
-        }
+        var active
+        function file_store (prefix, options) {
+            filename = (options && options.filename) || filename
+            backup_dir = (options && options.backup_dir) || backup_dir
 
-        bus(prefix).on_save = function file_store (obj) {
-            db[obj.key]=obj
-            save_timer = save_timer || setTimeout(save_db, 100)
-        }
-        bus(prefix).to_delete = function (key) {
-            delete db[key]
-            save_timer = save_timer || setTimeout(save_db, 100)
-        }
+            // Loading db
+            try {
+                if (fs.existsSync && !fs.existsSync(filename))
+                    (fs.writeFileSync(filename, '{}'), bus.log('Made a new db file'))
+                db = JSON.parse(fs.readFileSync(filename))
+                db_is_ok = true
+                // If we save before anything else is connected, we'll get this
+                // into the cache but not affect anything else
+                bus.save.fire(db)
+                bus.log('Read db')
+            } catch (e) {
+                console.error(e)
+                console.error('bad db file')
+            }
 
-        setInterval(
-            // This copies the current db over backups/db.<curr_date> every minute
-            function backup_db() {
+            // Saving db
+            function save_db() {
+                save_timer = null
                 if (!db_is_ok) return
-                if (fs.existsSync && !fs.existsSync(backup_dir))
-                    fs.mkdirSync(backup_dir)
+                fs.writeFile(filename+'.tmp', JSON.stringify(db, null, 1), function(err) {
+                    if (err) {
+                        console.log('Crap! DB IS DYING!!!!', err)
+                        db_is_ok = false
+                    } else
+                        fs.rename(filename+'.tmp', filename, function (err) {
+                            if (err) {
+                                console.log('Crap !! DB IS DYING !!!!', err)
+                                db_is_ok = false
+                            } else bus.log('saved db')
+                        })
+                })
+            }
 
-                var d = new Date()
-                var y = d.getYear() + 1900
-                var m = d.getMonth() + 1
-                if (m < 10) m = '0' + m
-                var day = d.getDate()
-                if (day < 10) day = '0' + day
-                var date = y + '-' + m + '-' + day
+            active = !options || !options.delay_activate
+            bus(prefix).on_save = function file_store (obj) {
+                db[obj.key]=obj
+                if (active) save_timer = save_timer || setTimeout(save_db, 100)
+            }
+            bus(prefix).to_delete = function (key) {
+                delete db[key]
+                if (active) save_timer = save_timer || setTimeout(save_db, 100)
+            }
+            file_store.activate = function () {
+                active = true
+                save_timer = save_timer || setTimeout(save_db, 100)
+            }
 
-                //bus.log('Backing up db on', date)
+            // Rotating backups
+            setInterval(
+                // This copies the current db over backups/db.<curr_date> every minute
+                function backup_db() {
+                    if (!db_is_ok) return
+                    if (fs.existsSync && !fs.existsSync(backup_dir))
+                        fs.mkdirSync(backup_dir)
 
-                require('child_process').execFile(
-                    '/bin/cp', [filename, backup_dir+'/'+filename+'.'+date])
-            },
-            1000 * 60 // Every minute
-        )
-    },
+                    var d = new Date()
+                    var y = d.getYear() + 1900
+                    var m = d.getMonth() + 1
+                    if (m < 10) m = '0' + m
+                    var day = d.getDate()
+                    if (day < 10) day = '0' + day
+                    var date = y + '-' + m + '-' + day
+
+                    //bus.log('Backing up db on', date)
+
+                    require('child_process').execFile(
+                        '/bin/cp', [filename, backup_dir+'/'+filename+'.'+date])
+                },
+                1000 * 60 // Every minute
+            )
+        }
+
+        return file_store
+    })(),
+
 
     sqlite_query_server: function sqlite_query_server (db) {
-        var bus = this
         var fetch = bus.fetch
         bus('/table_columns/*').to_fetch =
             function fetch_table_columns (key) {
@@ -631,7 +638,6 @@ var extra_methods = {
     },
 
     sqlite_table_server: function sqlite_table_server(db, table_name) {
-        var bus = this
         var save = bus.save, fetch = bus.fetch
         var table_columns = fetch('/table_columns/'+table_name) // This will fail if used too soon
         var foreign_keys  = fetch('/table_foreign_keys/'+table_name)
@@ -981,7 +987,7 @@ var extra_methods = {
     },
 
      code_restarts: function () {
-         var got = {}, bus = this
+         var got = {}
          bus('/code/*').on_save = function (o) {
              bus.log('Ok restart, we\'ll quit if ' + (got[o.key]||false))
              if (got[o.key])
@@ -1076,8 +1082,6 @@ var extra_methods = {
     },
 
     route_defaults_to: function route_defaults_to (master_bus) {
-        var bus = this
-
         // Custom route
         var OG_route = bus.route
         bus.route = function(key, method, arg, opts) {
@@ -1104,9 +1108,7 @@ var extra_methods = {
     },
 }
 
-
-function make_server_bus (options) {
-    bus = require('./statebus')()
+    var bus = require('./statebus')()
     bus.honk = 'statelog'
 
     // Options
