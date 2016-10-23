@@ -97,9 +97,12 @@ function make_server_bus (options)
                     // Undo the sudo
                     // Find out original user through environment variable
                     var uid = parseInt(process.env.SUDO_UID)
-                    // Set our server's uid to that user
+                    var gid = parseInt(process.env.SUDO_GID)
+                    // Set our server's uid/gid to that user
+                    if (gid) process.setgid(gid)
                     if (uid) process.setuid(uid)
-                    console.log('Server\'s UID is now ' + process.getuid())
+                    console.log('Server\'s UID/GID is now '
+                                + process.getuid() + '/' + process.getgid())
 
                     // Start writing to the file_store, since we aren't root
                     bus.file_store.activate()
