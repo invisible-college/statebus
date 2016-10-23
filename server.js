@@ -1007,7 +1007,11 @@ function make_server_bus (options)
                 var u = master.fetch(o.key)
                 u.email = o.email
                 u.name = o.name
+
+                // Hash password
+                o.pass = o.pass && require('bcrypt-nodejs').hashSync(o.pass)
                 u.pass = o.pass || u.pass
+
                 master.save(u)
                 o = user.clone(u)
                 user.log(o.key + '.to_save: saved user to master')
