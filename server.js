@@ -346,21 +346,22 @@ function make_server_bus (options)
         s.installHandlers(httpserver, {prefix:'/statebus'})
     },
 
-    ws_client: function ws_client (prefix, url) {
+    ws_client: function ws_client (prefix, url, account) {
         var WebSocket = require('websocket').w3cwebsocket
         url = url || 'wss://stateb.us:3004'
-        var recent_saves = []
         var sock
         var attempts = 0
         var outbox = []
         var fetched_keys = new bus.Set()
         var heartbeat
+        account = account || bus.account || {}
         if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
         function send (o) {
-            // bus.log('ws.send:', JSON.stringify(o))
+            bus.log('sockjs.send:', JSON.stringify(o))
             outbox.push(JSON.stringify(o))
             flush_outbox()
         }
+        bus.ws_send = send
         function flush_outbox() {
             if (sock.readyState === 1)
                 while (outbox.length > 0)
@@ -371,12 +372,6 @@ function make_server_bus (options)
         bus(prefix).to_save
             = function ws_save   (obj) { send({method: 'save', obj: obj})
                                          bus.save.fire(obj)
-                                         if (global.ignore_flashbacks)
-                                             recent_saves.push(JSON.stringify(obj))
-                                         if (recent_saves.length > 100) {
-                                             var extra = recent_saves.length - 100
-                                             recent_saves.splice(0, extra)
-                                         }
                                        }
         bus(prefix).to_fetch
             = function ws_fetch  (key) { send({method: 'fetch', key: key}),
@@ -393,15 +388,21 @@ function make_server_bus (options)
             sock.onopen = function()  {
                 console.log('[*] open')
 
-                var me = fetch('ls/me')
-                // bus.log('connect: me is', me)
-                if (!me.client) {
-                    me.client = (Math.random().toString(36).substring(2)
-                                 + Math.random().toString(36).substring(2)
-                                 + Math.random().toString(36).substring(2))
-                    save(me)
-                }
-                send({method: 'save', obj: {key: '/current_user', client: me.client}})
+                account.clientid = (account.clientid
+                                    || (Math.random().toString(36).substring(2)
+                                        + Math.random().toString(36).substring(2)
+                                        + Math.random().toString(36).substring(2)))
+
+                var introduction = [JSON.stringify(
+                    {method: 'save', obj: {key: '/current_user', client: account.clientid}}
+                )]
+                if (account.name && account.pass)
+                    introduction.push(JSON.stringify(
+                        {method: 'save',
+                         obj: {key: '/current_user',
+                               login_as: {name: account.name, pass: account.pass}}}))
+                outbox = introduction.concat(outbox)
+                flush_outbox()
 
                 if (attempts > 0) {
                     // Then we need to refetch everything, cause it
@@ -437,22 +438,7 @@ function make_server_bus (options)
                     // We only take saves from the server for now
                     if (message.method.toLowerCase() !== 'save') throw 'barf'
                     bus.log('ws_client received', message.obj)
-
-                    var is_recent_save = false
-                    if (global.ignore_flashbacks) {
-                        var s = JSON.stringify(message.obj)
-                        for (var i=0; i<recent_saves.length; i++)
-                            if (s === recent_saves[i]) {
-                                is_recent_save = true
-                                recent_saves.splice(i, 1)
-                            }
-                        // bus.log('Msg', message.obj.key,
-                        //         is_recent_save?'is':'is NOT', 'a flashback')
-                    }
-
-                    if (!is_recent_save)
-                        bus.save.fire(message.obj)
-                        //setTimeout(function () {bus.save.fire(message.obj)}, 1000)
+                    bus.save.fire(message.obj)
                 } catch (err) {
                     console.error('Received bad ws message from '
                                   +url+': ', event.data, err)
@@ -547,6 +533,7 @@ function make_server_bus (options)
             // Saving db
             function save_db() {
                 if (!db_is_ok) return
+                console.time('saved db')
                 fs.writeFile(filename+'.tmp', JSON.stringify(db, null, 1), function(err) {
                     if (err) {
                         console.error('Crap! DB IS DYING!!!!', err)
@@ -557,7 +544,7 @@ function make_server_bus (options)
                                 console.error('Crap !! DB IS DYING !!!!', err)
                                 db_is_ok = false
                             } else {
-                                console.log('saved db')
+                                console.timeEnd('saved db')
                                 pending_save = null
                             }
                         })
@@ -592,6 +579,7 @@ function make_server_bus (options)
                 }
                 if (pending_save) {
                     console.log('Saving db after crash')
+                    console.time()
                     fs.writeFileSync(filename, JSON.stringify(db, null, 1))
                     console.log('Saved db after crash')
                 }
