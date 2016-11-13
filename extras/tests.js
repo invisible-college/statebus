@@ -103,6 +103,33 @@ var tests = [
         })
     },
 
+    function auto_vars (next) {
+        n = require('../server')()
+        n('r/*').to_fetch = function (rest, o) {return {rest: rest, o: o}}
+        log(n.fetch('r/3'))
+        assert(n.fetch('r/3').rest === '3')
+        assert(n.fetch('r/3').o === undefined)
+
+        n('v/*').to_fetch = function (vars, star) {return {vars: vars, rest: star}}
+        log(n.fetch('v/[3,9 4]').rest)
+        log(n.fetch('v/[3,9 4]').rest.match(/$Bad/))
+        assert(n.fetch('v/[3,9 4]').rest === '[3,9 4]')
+
+        log(n.fetch('v/[3,9 4]').vars)
+        log(n.fetch('v/[3,9 4]').vars.match(/^Bad/))
+        assert(n.fetch('v/[3,9 4]').vars.match(/^Bad/))
+        assert(Array.isArray(n.fetch('v/[3,4]').vars))
+
+        n('a/*').to_save = function (t, k, obj) {
+            log('k:', k, 't:', t, 'o:', obj)
+            n.save.fire(obj)
+        }
+        for (var i=0; i<4; i++)
+            n.save({key: 'a/foo', i:i})
+
+        next()
+    },
+
     // Callbacks are reactive
     function fetch_with_callback (next) {
         var count = 0

@@ -501,6 +501,7 @@
         make_client_statebus_maker()
         window.bus = window.statebus()
         window.bus.label = 'bus'
+        window.sb = bus.sb
 
         improve_react()
         window.dom = {}
@@ -642,7 +643,8 @@
         var scripts = document.getElementsByTagName("script")
         var filename = window.location.href.substring(window.location.href.lastIndexOf('/') + 1)
         for (var i=0; i<scripts.length; i++)
-            if (scripts[i].getAttribute('type') === 'statebus') {
+            if (scripts[i].getAttribute('type') === 'statebus'
+                || scripts[i].getAttribute('type') === 'coffeedom') {
                 // Compile coffeescript to javascript
                 var compiled
                 try {

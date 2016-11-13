@@ -4,13 +4,14 @@
     else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
     else this[name] = definition()
 }('statebus', function() { statelog_indent = 0; var busses = {}, executing_funk, global_funk, funks = {}, clean_timer; return function make_bus () {
-
+    var nodejs = typeof window === 'undefined'
 
     // ****************
     // Public API
 
     function fetch (key, callback) {
         key = key.key || key    // You can pass in an object instead of key
+                                // We should probably disable this in future
 
         if (typeof key !== 'string')
             throw ('Error: fetch(key) called with a non-string key: '+key)
@@ -88,7 +89,7 @@
     var fetches_out = {}                // Maps `key' to `func' iff we've fetched `key'
     var fetches_in = new One_To_Many()  // Maps `key' to `pub_funcs' subscribed to our key
 
-    if (typeof window === 'undefined')
+    if (nodejs)
         var red = '\x1b[31m', normal = '\x1b[0m', grey = '\x1b[0;38;5;245m',
             green = '\x1b[0;38;5;46m', brown = '\x1b[0;38;5;130m'
     else
@@ -105,26 +106,26 @@
         else message += ' <no diff>'
         return message
     }
-    function save_msg (obj, opts, meth) {
-        var message = (opts && opts.m) || bus + "."+meth+"('"+obj.key+"')"
+    function save_msg (obj, t, meth) {
+        var message = (t && t.m) || bus + "."+meth+"('"+obj.key+"')"
         message = add_diff_msg(message, obj)
-        if (opts.version) message += ' [' + opts.version + ']'
+        if (t.version) message += ' [' + t.version + ']'
         return message
     }
-    function save (obj, opts) {
+    function save (obj, t) {
         if (!('key' in obj) || typeof obj.key !== 'string')
             console.error('Error: save(obj) called on object without a key: ', obj)
 
-        opts = opts || {}
+        t = t || {}
         // Make sure it has a version.
-        opts.version = opts.version || new_version()
+        t.version = t.version || new_version()
 
         if ((executing_funk !== global_funk) && executing_funk.loading()) {
             abort_changes([obj.key])
             return
         }
 
-        var message = save_msg(obj, opts, 'save')
+        var message = save_msg(obj, t, 'save')
 
         // Ignore if nothing happened
         if (obj.key && !changed(obj)) {
@@ -139,10 +140,10 @@
             currently_saving = obj.key
 
             // Call the to_save() handler!
-            var num_handlers = bus.route(obj.key, 'to_save', obj, opts)
+            var num_handlers = bus.route(obj.key, 'to_save', obj, t)
             if (num_handlers === 0)
                 // And fire if there weren't any!
-                save.fire(obj, opts)
+                save.fire(obj, t)
         }
         finally {
             statelog_indent--
@@ -154,19 +155,19 @@
         // earlier ones.
     }
     save.fire = fire
-    function fire (object, opts) {
-        opts = opts || {}
+    function fire (object, t) {
+        t = t || {}
         // Make sure it has a version.
-        opts.version = opts.version || new_version()
+        t.version = t.version || new_version()
 
         // First, let's print out the statelog entry.
         // (And abort if there's no change.)
-        var message = save_msg(object, opts, 'save.fire')
+        var message = save_msg(object, t, 'save.fire')
         var color, icon
         if (currently_saving === object.key &&
             !(object.key && !changed(object))) {
             statelog_indent--
-            statelog(red, '•', '↵' + (opts.version ? '\t\t\t[' + opts.version + ']' : ''))
+            statelog(red, '•', '↵' + (t.version ? '\t\t\t[' + t.version + ']' : ''))
             statelog_indent++
         } else {
             // Ignore if nothing happened
@@ -176,20 +177,20 @@
                 //     'o|b=', deep_equals(backup_cache[object.key], object))
                 color = grey
                 icon = 'x'
-                if (opts.to_fetch)
-                    message = (opts.m) || 'Fetched ' + bus + "('"+object.key+"')"
-                if (opts.version) message += ' [' + opts.version + ']'
+                if (t.to_fetch)
+                    message = (t.m) || 'Fetched ' + bus + "('"+object.key+"')"
+                if (t.version) message += ' [' + t.version + ']'
                 statelog(color, icon, message)
                 return
             }
 
             color = red, icon = '•'
-            if (opts.to_fetch || pending_fetches[object.key]) {
+            if (t.to_fetch || pending_fetches[object.key]) {
                 color = green
                 icon = '^'
-                message = add_diff_msg((opts.m)||'Fetched '+bus+"('"+object.key+"')",
+                message = add_diff_msg((t.m)||'Fetched '+bus+"('"+object.key+"')",
                                        object)
-                if (opts.version) message += ' [' + opts.version + ']'
+                if (t.version) message += ' [' + t.version + ']'
             }
 
             statelog(color, icon, message)
@@ -215,21 +216,21 @@
             for (var i=0; i < modified_keys.length; i++) {
                 var key = modified_keys[i]
                 var parents = [versions[key]]   // Not stored yet
-                versions[key] = opts.version
-                mark_changed(key, opts)
+                versions[key] = t.version
+                mark_changed(key, t)
             }
         }
     }
 
-    save.abort = function (obj, opts) {
+    save.abort = function (obj, t) {
         console.assert(obj)
         log('Abort:', obj.key)
-        mark_changed(obj.key, opts)
+        mark_changed(obj.key, t)
     }
 
     var version_count = 0
     function new_version () {
-        return bus.label + (version_count++).toString(36)
+        return (bus.label||(id+' ')) + (version_count++).toString(36)
     }
 
     // Now create the statebus object
@@ -399,8 +400,8 @@
             }, 200)
         }
     }
-    function del (obj_or_key) {
-        var key = obj_or_key.key || obj_or_key
+    function del (key) {
+        key = key.key || key   // Prolly disable this in future
 
         if ((executing_funk !== global_funk) && executing_funk.loading()) {
             abort_changes([key])
@@ -422,7 +423,7 @@
         //    it's been deleted, which we can use to cancel echoes from the
         //    sending bus.
 
-        log('del:', obj_or_key)
+        log('del:', key)
         bus.route(key, 'to_delete', key)
         //forget(key /*, bus??*/)
     }
@@ -437,7 +438,7 @@
         clean_timer = clean_timer || setTimeout(clean)
     }
 
-    function mark_changed (key, opts) {
+    function mark_changed (key, t) {
         // Marks a key as dirty, meaning that functions on it need to update
         log('Marking changed', bus, key)
         changed_keys.add(key)
@@ -485,7 +486,7 @@
         for (var i=0; i<keys.length; i++) {          // Collect all keys
             var fs = bindings(keys[i], 'on_save')
             for (var j=0; j<fs.length; j++) {
-                var f = fs[j]
+                var f = fs[j].func
                 if (f.react) {
                     // Skip if it's already up to date
                     var v = f.fetched_keys[JSON.stringify([this.id, keys[i]])]
@@ -502,7 +503,9 @@
                         //log('skipping', funk_name(f), 'already at version', v)
                         continue
                     }
-                    f = run_handler(f, 'on_save', cache[keys[i]], undefined, 'dont run it')
+                    autodetect_args(f)
+                    f = run_handler(f, 'on_save', cache[keys[i]], {dont_run: true,
+                                                                   binding: keys[i]})
                 }
                 result.push(funk_key(f))
             }
@@ -527,6 +530,7 @@
             (function (method) {
                 Object.defineProperty(result, method, {
                     set: function (func) {
+                        autodetect_args(func)
                         func.defined = func.defined || []
                         func.defined.push(
                             {as:'handler', bus:bus, method:method, key:key})
@@ -534,12 +538,45 @@
                     },
                     get: function () {
                         var result = bindings(key, method)
+                        for (var i=0; i<result.length; i++) result[i] = result[i].func
                         result.delete = function (func) { unbind (key, method, func) }
                         return result
                     }
                 })
             })(method)
         return result
+    }
+
+    function autodetect_args (handler) {
+        if (handler.args) return
+
+        // Get an array of the handler's params
+        var comments = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg,
+            params = /([^\s,]+)/g,
+            s = handler.toString().replace(comments, '')
+        params = s.slice(s.indexOf('(')+1, s.indexOf(')')).match(params) || []
+        
+        handler.args = {}
+        for (var i=0; i<params.length; i++)
+            switch (params[i]) {
+            case 'key':
+            case 'k':
+                handler.args['key'] = i; break
+            case 'vars':
+                handler.args['vars'] = i; break
+            case 'star':
+            case 'rest':
+                handler.args['rest'] = i; break
+            case 't':
+            case 'transaction':
+                handler.args['t'] = i; break
+            case 'o':
+            case 'obj':
+            case 'val':
+                handler.args['obj'] = i; break
+            case 'old':
+                handler.args['old'] = i; break
+            }
     }
 
     // The funks attached to each key, maps e.g. 'fetch /point/3' to '/30'
@@ -593,7 +630,7 @@
             var f = funks[exacts[i]]
             if (!seen[funk_key(f)]) {
                 f.statebus_binding = {key:key, method:method}
-                result.push(f)
+                result.push({method:method, key:key, func:f})
                 seen[funk_key(f)] = true
             }
         }
@@ -607,7 +644,7 @@
                 && method === handler.method               // And it has the right method
                 && !seen[funk_key(handler.funk)]) {
                 handler.funk.statebus_binding = {key:handler.prefix, method:method}
-                result.push(handler.funk)
+                result.push({method:method, key:handler.prefix, func:handler.funk})
                 seen[funk_key(handler.funk)] = true
             }
         }
@@ -628,7 +665,11 @@
     }
     */
 
-    function run_handler(funck, method, arg, opts, just_make_it) {
+    function run_handler(funck, method, arg, options) {
+        options = options || {}
+        var t = options.t,
+            just_make_it = options.dont_run,
+            binding = options.binding
         // console.log("run_handler: ('"+(arg.key||arg)+"').on_"
         //             +method+' = f^'+funk_key(funck))
         // if (funck.statebus_name === undefined || funck.statebus_name === 'undefined')
@@ -689,17 +730,59 @@
         // Fresh fetch/save/forget/delete handlers will just be regular
         // functions.  We'll store their arg and let them re-run until they
         // are done re-running.
+        function key_arg () { return ((typeof arg.key) == 'string') ? arg.key : key }
+        function rest_arg () { return (key_arg()).substr(binding.length-1) }
+        function vars_arg () {
+            var r = rest_arg()
+            try {
+                return JSON.parse(r)
+            } catch (e) {
+                return 'Bad JSON "' + r + '" for key ' + key_arg()
+            }
+        }
         var f = reactive(function () {
-            var result = func(arg, opts)
+            // Then in run_handler, we'll call it with:
+            var args = []
+            args[0] = arg
+            args[1] = t
+            //console.log('This funcs args are', func.args)
+            for (var k in func.args) {
+                switch (k) {
+                case 'key':
+                    args[func.args[k]] = key_arg(); break
+                case 'rest':
+                    args[func.args[k]] = rest_arg(); break
+                case 'vars':
+                    args[func.args[k]] = vars_arg();
+                    //console.log('We just made an arg', args[func.args[k]], 'in slot', func.args[k], 'for', k)
+                    break
+                case 't':
+                    args[func.args[k]] = t; break
+                case 'obj':
+                    args[func.args[k]] = arg.key ? arg : bus.cache[arg]; break
+                case 'old':
+                    args[func.args[k]] = bus.cache[key_arg()]; break
+                }
+                //console.log('processed', k, 'at slot', func.args[k], 'to make', args[func.args[k]])
+            }
+            //console.log('args is', args)
+
+            var result = func.apply(null, args)
+
+            // We will wanna add in the fancy arg stuff here, with:
+            // arr = []
+            // for (var k of func.args || {})
+            //    arr[func.args[k]] = <compute_blah(k)>
+
 
             // For fetch
             if (method === 'to_fetch' && result instanceof Object
                 && !f.loading()     // Experimental.
                ) {
                 result.key = arg
-                var new_opts = clone(opts || {})
-                new_opts.to_fetch = true
-                save.fire(result, new_opts)
+                var new_t = clone(t || {})
+                new_t.to_fetch = true
+                save.fire(result, new_t)
                 return result
             }
 
@@ -737,20 +820,20 @@
     }
 
     // route() can be overridden
-    bus.route = function (key, method, arg, opts) {
-        var funcs = bus.bindings(key, method)
-        if (funcs.length)
-            log('route:', bus+'("'+key+'").'+method+'['+funcs.length+'](key:"'+(arg.key||arg)+'")')
+    bus.route = function (key, method, arg, t) {
+        var handlers = bus.bindings(key, method)
+        if (handlers.length)
+            log('route:', bus+'("'+key+'").'+method+'['+handlers.length+'](key:"'+(arg.key||arg)+'")')
         // log('route: got bindings',
         //     funcs.map(function (f) {return funk_key(f)+':'+funk_keyr(f)}))
-        for (var i=0; i<funcs.length; i++)
-            bus.run_handler(funcs[i], method, arg, opts)
+        for (var i=0; i<handlers.length; i++)
+            bus.run_handler(handlers[i].func, method, arg, {t: t, binding: handlers[i].key})
 
         if (method === 'to_fetch')
-            console.assert(funcs.length<2,
+            console.assert(handlers.length<2,
                            'Two to_fetch functions are registered for the same key '+key,
-                           funcs)
-        return funcs.length
+                           handlers)
+        return handlers.length
     }
 
 
@@ -805,7 +888,7 @@
                 if (funk.loading()) return null
                 else {
                     // If we ware on node, then just print out the error
-                    if (typeof window === 'undefined') {
+                    if (nodejs) {
                         console.error(e.stack)
                         process.exit()
                     } else {
@@ -895,6 +978,132 @@
     // Tells you whether the currently executing funk is loading
     function loading () { return executing_funk.loading() }
 
+    bus.default = function () {
+        bus.deep_map(arguments, function (o) {
+            if (o.key && !(o.key in bus.cache))
+                bus.cache[o.key] = o
+            return o
+        })
+    }
+
+    function deep_map (object, func) {
+        object = func(object)
+
+        // Recurse through each element in arrays
+        if (Array.isArray(object))
+            for (var i=0; i < object.length; i++)
+                object[i] = deep_map(object[i], func)
+
+        // Recurse through each property on objects
+        else if (typeof object === 'object')
+            for (var k in object)
+                object[k] = deep_map(object[k], func)
+
+        return object
+    }
+
+    function escape_key(k) {
+        return k.replace(/(_(keys?|time)?$|^key$)/, '$1_')
+    }
+    function unescape_key (k) {
+        return k.replace(/(_$)/, '')
+    }
+    // function escape_obj (o) {
+    //     var result = {}
+    //     for (k in o)
+    //         result[escape_key(k)] = escape_obj(o[k])
+    //     return result
+    // }
+    // function unescape_obj (o) {
+    // }
+    // // Assumes there are no pointers
+    // function hash (o) {
+    //     var data = escape_obj(o)
+
+    //     return {
+    //         get: function (k) {
+    //             return unescape_obj(data[k])
+    //         },
+    //         set: function (k, v) {
+    //             data[escape_key(k)] = v
+    //         }
+    //     }
+    // }
+
+    function sb () {
+        // I have the cache behind the scenes
+        // Each proxy has a target object -- the raw data on cache
+        // If we're proxying a {_: ...} singleton then ...
+
+        function item_proxy (base, o) {
+            if (typeof o === 'number'
+                || typeof o === 'string'
+                || o === undefined
+                || o === null
+                || typeof o === 'function') return o
+
+            return new Proxy(o, {
+                get: function get(o, k) {
+                    if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
+                        return undefined
+                    k = escape_key(k)
+                    return item_proxy(base, o[k])
+                },
+                set: function set(o, k, v) {
+                    var result = o[escape_key(k)] = v
+                    bus.save(base)
+                    return result
+                },
+                has: function has(o, k) {
+                    return escape_key(k) in o
+                },
+                deleteProperty: function del (o, k) {
+                    delete o[escape_key(k)]
+                },
+                apply: function apply (o, This, args) {
+                    return o
+                }
+            })}
+
+        return new Proxy(bus.cache, {
+            get: function get(o, k) {
+                if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
+                    return undefined
+                var raw = bus.fetch(k),
+                    obj = raw
+                while (typeof obj == 'object' && '_' in obj) obj = obj._
+                return item_proxy(raw, obj)
+            },
+            set: function set(o, k, v) {
+                if (typeof v === 'number'
+                    || typeof v === 'string'
+                    || v === undefined
+                    || v === null
+                    || typeof v === 'function'
+                    || Array.isArray(v))
+                    v = {_:v}
+                else
+                    v = bus.clone(v)
+                v.key = k
+                bus.save(v)
+            },
+            // In future, this might check if there's a .to_fetch function OR
+            // something in the cache:
+            // 
+            // has: function has(o, k) {
+            //     return k in o
+            // },
+            // ... but I haven't had a need yet.
+            deleteProperty: function del (o, k) {
+                bus.delete(escape_key(k))
+            }
+        })
+    }
+
+    if ((nodejs?global:window).Proxy)
+        Object.defineProperty(bus, 'sb', { get: sb })
+    else
+        bus.sb = "Your javascript doesn't support ES6 Proxy"
 
     // ******************
     // Utility funcs
@@ -1197,13 +1406,13 @@
         var pubbers = bindings(key, 'on_save')
         if (pubbers.length === 0) result += ' nothing'
         for (var i=0; i<pubbers.length; i++)
-            result += '\n  ' + funk_name(pubbers[i])
+            result += '\n  ' + funk_name(pubbers[i].func)
         return result
     }
 
     function log () {
         if (bus.honk !== true) return
-        if (typeof window === 'undefined') {
+        if (nodejs) {
             var indent = ''
             for (var i=0; i<statelog_indent; i++) indent += '   '
             console.log(indent+require('util').format.apply(null,arguments).replace(/\n/g,'\n'+indent))
@@ -1234,6 +1443,7 @@
                'funk_key funk_name funks key_id key_name id kp',
                'pending_fetches fetches_in loading_keys loading',
                'global_funk busses rerunnable_funks',
+               'escape_key unescape_key',
                'Set One_To_Many clone extend deep_map deep_equals validate sorta_diff log deps'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)
