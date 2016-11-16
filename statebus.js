@@ -1002,6 +1002,26 @@
         return object
     }
 
+    function translate_keys (obj, f) {
+        // Recurse through each element in arrays
+        if (Array.isArray(obj))
+            for (var i=0; i < obj.length; i++)
+                translate_keys(obj[i], f)
+
+        // Recurse through each property on objects
+        else if (typeof obj === 'object')
+            for (var k in obj) {
+                if (k === 'key' || /.+_key$/.test(k))
+                    obj[k] = f(obj[k])
+                else if (/.+_keys$/.test(k))
+                    for (var i=0; i < obj[k].length; i++) {
+                        if (typeof obj[k][i] === 'string')
+                            obj[k][i] = f(obj[k][i])
+                    }
+                translate_keys(obj[k], f)
+            }
+        return obj
+    }
     function escape_key(k) {
         return k.replace(/(_(keys?|time)?$|^key$)/, '$1_')
     }
@@ -1035,12 +1055,14 @@
         // Each proxy has a target object -- the raw data on cache
         // If we're proxying a {_: ...} singleton then ...
 
+        // function empty_obj (o) {
+        //     if (typeof o !== 'object' || o === null) return false
+        //     for (k in o)
+        //         if (k !== 'key') return false
+        //     return true
+        // }
         function item_proxy (base, o) {
-            if (typeof o === 'number'
-                || typeof o === 'string'
-                || o === undefined
-                || o === null
-                || typeof o === 'function') return o
+            if (typeof o !== 'object' && o !== null) return o
 
             return new Proxy(o, {
                 get: function get(o, k) {
@@ -1438,12 +1460,12 @@
 
     // Make these private methods accessible
     var api = ['cache backup_cache fetch save forget del fire dirty',
-               'subspace handlers wildcard_handlers bindings',
-               'run_handler bind unbind reactive versions new_version',
+               'subspace bindings run_handler bind unbind reactive',
+               'versions new_version',
                'funk_key funk_name funks key_id key_name id kp',
                'pending_fetches fetches_in loading_keys loading',
                'global_funk busses rerunnable_funks',
-               'escape_key unescape_key',
+               'escape_key unescape_key translate_keys',
                'Set One_To_Many clone extend deep_map deep_equals validate sorta_diff log deps'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)

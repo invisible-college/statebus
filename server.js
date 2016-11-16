@@ -123,7 +123,7 @@ function make_server_bus (options)
                 }).listen(80, on_listen)
             }
         } else
-            var port = 3004
+            var port = 3005
 
         function c (client, conn) {
             client.honk = 'statelog'
@@ -348,7 +348,7 @@ function make_server_bus (options)
 
     ws_client: function ws_client (prefix, url, account) {
         var WebSocket = require('websocket').w3cwebsocket
-        url = url || 'wss://stateb.us:3004'
+        url = url || 'wss://stateb.us:3005'
         var sock
         var attempts = 0
         var outbox = []
@@ -369,18 +369,27 @@ function make_server_bus (options)
             else
                 setTimeout(flush_outbox, 400)
         }
+        var preprefix = prefix.slice(0, -1)
+        function add_prefix (key) { return preprefix + key }
+        function add_prefixes (obj) { return bus.translate_keys(bus.clone(obj), add_prefix) }
+        function rem_prefix (key) { return key.substr(preprefix.length) }
+        function rem_prefixes (obj) { return bus.translate_keys(bus.clone(obj), rem_prefix) }
         bus(prefix).to_save
-            = function ws_save   (obj) { send({method: 'save', obj: obj})
-                                         bus.save.fire(obj)
+            = function ws_save   (obj) { bus.save.fire(obj)
+                                         obj = rem_prefixes(obj)
+                                         send({method: 'save', obj: obj})
                                        }
         bus(prefix).to_fetch
-            = function ws_fetch  (key) { send({method: 'fetch', key: key}),
+            = function ws_fetch  (key) { key = rem_prefix(key)
+                                         send({method: 'fetch', key: key}),
                                          fetched_keys.add(key) }
         bus(prefix).to_forget
-            = function ws_forget (key) { send({method: 'forget', key: key}),
+            = function ws_forget (key) { key = rem_prefix(key)
+                                         send({method: 'forget', key: key}),
                                          fetched_keys.delete(key) }
         bus(prefix).to_delete
-            = function ws_delete (key) { send({method: 'delete', key: key}) }
+            = function ws_delete (key) { key = rem_prefix(key)
+                                         send({method: 'delete', key: key}) }
 
         function connect () {
             console.log('[ ] trying to open')
@@ -438,7 +447,7 @@ function make_server_bus (options)
                     // We only take saves from the server for now
                     if (message.method.toLowerCase() !== 'save') throw 'barf'
                     bus.log('ws_client received', message.obj)
-                    bus.save.fire(message.obj)
+                    bus.save.fire(add_prefixes(message.obj))
                 } catch (err) {
                     console.error('Received bad ws message from '
                                   +url+': ', event.data, err)
@@ -1150,7 +1159,7 @@ function make_server_bus (options)
 
     // Options
     var default_options = {
-        port: 3004,
+        port: 3005,
         backdoor: null,
         client: null,
         file_store: true,

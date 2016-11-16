@@ -72,8 +72,14 @@
             else
                 setTimeout(flush_outbox, 400)
         }
-        bus(prefix).to_save   = function (obj) { send({method: 'save', obj: obj})
-                                                 bus.save.fire(obj)
+        var preprefix = prefix.slice(0,-1)
+        function add_prefix (key) { return preprefix + key }
+        function add_prefixes (obj) { return bus.translate_keys(bus.clone(obj), add_prefix) }
+        function rem_prefix (key) { return key.substr(preprefix.length) }
+        function rem_prefixes (obj) { return bus.translate_keys(bus.clone(obj), rem_prefix) }
+        bus(prefix).to_save   = function (obj) { bus.save.fire(obj)
+                                                 obj = rem_prefixes(obj)
+                                                 send({method: 'save', obj: obj})
                                                  if (window.ignore_flashbacks)
                                                      recent_saves.push(JSON.stringify(obj))
                                                  if (recent_saves.length > 100) {
@@ -81,11 +87,14 @@
                                                      recent_saves.splice(0, extra)
                                                  }
                                                }
-        bus(prefix).to_fetch  = function (key) { send({method: 'fetch', key: key}),
+        bus(prefix).to_fetch  = function (key) { key = rem_prefix(key)
+                                                 send({method: 'fetch', key: key}),
                                                  fetched_keys.add(key) }
-        bus(prefix).to_forget = function (key) { send({method: 'forget', key: key}),
+        bus(prefix).to_forget = function (key) { key = rem_prefix(key)
+                                                 send({method: 'forget', key: key}),
                                                  fetched_keys.delete(key) }
-        bus(prefix).to_delete = function (key) { send({method: 'delete', key: key}) }
+        bus(prefix).to_delete = function (key) { key = rem_prefix(key)
+                                                 send({method: 'delete', key: key}) }
 
         function connect () {
             console.log('%c[ ] trying to open ' + url, 'color: blue')
@@ -164,7 +173,7 @@
                     }
 
                     if (!is_recent_save)
-                        bus.save.fire(message.obj)
+                        bus.save.fire(add_prefixes(message.obj))
                         //setTimeout(function () {bus.announce(message.obj)}, 1000)
                 } catch (err) {
                     console.error('Received bad sockjs message from '
@@ -494,7 +503,7 @@
         return document.querySelector('script[src*="client"][src$=".js"]')
     }
     window.statebus_server = window.statebus_server ||
-        script_elem().getAttribute('server') || 'https://stateb.us:3004'
+        script_elem().getAttribute('server') || 'https://stateb.us:3005'
     window.statebus_backdoor = window.statebus_backdoor ||
         script_elem().getAttribute('backdoor')
     function scripts_ready () {
@@ -658,9 +667,9 @@
 
                     // Base64 encode it
                     var js = compiled.js + '\n'
-                    js += '//@ sourceMappingURL=data:application/json;base64,'
+                    js += '//# sourceMappingURL=data:application/json;base64,'
                     js += btoa(v3SourceMap) + '\n'
-                    js += '//@ sourceURL=' + filename
+                    js += '//# sourceURL=' + filename
                     compiled = js
                 } catch (error) {
                     if (error.location)
