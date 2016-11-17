@@ -14,7 +14,7 @@ var tests = [
 
     // Equality tests
     function equality (next) {
-        equality_tests = [
+        var equality_tests = [
             [1, 1, true],
             [1, 3, false],
             [NaN, NaN, true],
@@ -132,6 +132,27 @@ var tests = [
         for (var i=0; i<4; i++)
             n.save({key: 'a/foo', i:i})
 
+        next()
+    },
+
+    function url_translation (next) {
+        var tests = [
+            ['foo', 'foo'],
+            [['a', 'b'], ['a', 'b']],
+            [{key: 'a'}, {key: '/a'}],
+            [{key: 'a', f: '3'}, {key: '/a', f: '3'}],
+            [{a: {b: {key: 'a'}}}, {a: {b: {key: '/a'}}}],
+            [{a: {b: {_keys: ['a', 'b']}}}, {a: {b: {_keys: ['/a', '/b']}}}],
+            [{a: {b: {bombs_keys: ['a', 1]}}}, {a: {b: {bombs_keys: ['/a', 1]}}}],
+            [{a: {b: {_keys: ['a', {_key: 'b'}]}}}, {a: {b: {_keys: ['/a', {_key: '/b'}]}}}],
+            [{a: ['a', {_key: 'b'}]}, {a: ['a', {_key: '/b'}]}],
+            ]
+        for (var i=0; i<tests.length; i++) {
+            log('Testing', i, JSON.stringify(tests[i][0]))
+            var trans = bus.translate_keys(tests[i][0], function (k) {return '/' + k})
+            assert(bus.deep_equals(trans, tests[i][1]),
+                   'Bad translation: ' + JSON.stringify(trans))
+        }
         next()
     },
 

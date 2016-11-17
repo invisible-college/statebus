@@ -1011,9 +1011,9 @@
         // Recurse through each property on objects
         else if (typeof obj === 'object')
             for (var k in obj) {
-                if (k === 'key' || /.+_key$/.test(k))
+                if (k === 'key' || /.*_key$/.test(k))
                     obj[k] = f(obj[k])
-                else if (/.+_keys$/.test(k))
+                else if (/.*_keys$/.test(k))
                     for (var i=0; i < obj[k].length; i++) {
                         if (typeof obj[k][i] === 'string')
                             obj[k][i] = f(obj[k][i])
