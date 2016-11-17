@@ -110,7 +110,7 @@
                                  + Math.random().toString(36).substring(2))
                     save(me)
                 }
-                send({method: 'save', obj: {key: '/current_user', client: me.client}},
+                send({method: 'save', obj: {key: 'current_user', client: me.client}},
                      'unshift')
 
                 if (attempts > 0) {

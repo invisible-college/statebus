@@ -122,6 +122,11 @@ var tests = [
 
         n('a/*').to_save = function (t, k, obj) {
             log('k:', k, 't:', t, 'o:', obj)
+            assert(k === 'a/foo')
+            assert(typeof obj === 'object')
+            assert(obj.i >= 0 && obj.i <= 4)
+            assert(Object.keys(obj).length === 2)
+            assert(t.version)
             n.save.fire(obj)
         }
         for (var i=0; i<4; i++)
@@ -595,7 +600,7 @@ var tests = [
         s.label = 's'
         //s.honk = true
         log('Saving /far on server')
-        s.save({key: '/far', away:'is this'})
+        s.save({key: 'far', away:'is this'})
         s.serve({port: 3948, client_definition: User, file_store: false})
 
         c = require('../server.js')()
@@ -627,20 +632,20 @@ var tests = [
     },
 
     function login (next) {
-        s.save({key: '/users',
-                all: [ {  key: '/user/1',
+        s.save({key: 'users',
+                all: [ {  key: 'user/1',
                           name: 'mike',
                           email: 'toomim@gmail.com',
                           admin: true,
                           pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y' }
 
-                       ,{ key: '/user/2',
+                       ,{ key: 'user/2',
                           name: 'j',
                           email: 'jtoomim@gmail.com',
                           admin: true,
                           pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y' }
 
-                       ,{ key: '/user/3',
+                       ,{ key: 'user/3',
                           name: 'boo',
                           email: 'boo@gmail.com',
                           admin: false,

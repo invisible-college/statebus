@@ -403,12 +403,12 @@ function make_server_bus (options)
                                         + Math.random().toString(36).substring(2)))
 
                 var introduction = [JSON.stringify(
-                    {method: 'save', obj: {key: '/current_user', client: account.clientid}}
+                    {method: 'save', obj: {key: 'current_user', client: account.clientid}}
                 )]
                 if (account.name && account.pass)
                     introduction.push(JSON.stringify(
                         {method: 'save',
-                         obj: {key: '/current_user',
+                         obj: {key: 'current_user',
                                login_as: {name: account.name, pass: account.pass}}}))
                 outbox = introduction.concat(outbox)
                 flush_outbox()
@@ -629,13 +629,13 @@ function make_server_bus (options)
 
     sqlite_query_server: function sqlite_query_server (db) {
         var fetch = bus.fetch
-        bus('/table_columns/*').to_fetch =
-            function fetch_table_columns (key) {
+        bus('table_columns/*').to_fetch =
+            function fetch_table_columns (key, rest) {
                 if (typeof key !== 'string')
                     console.log(handlers.hash)
-                var table_name = key.split('/')[2]
-                var columns = fetch('/sql/PRAGMA table_info(' + table_name + ')').rows.slice()
-                var foreign_keys = fetch('/table_foreign_keys/' + table_name)
+                var table_name = rest
+                var columns = fetch('sql/PRAGMA table_info(' + table_name + ')').rows.slice()
+                var foreign_keys = fetch('table_foreign_keys/' + table_name)
                 var column_info = {}
                 for (var i=0;i< columns .length;i++) {
                     var col = columns[i].name
@@ -652,10 +652,10 @@ function make_server_bus (options)
             }
 
 
-        bus('/table_foreign_keys/*').to_fetch =
-            function table_foreign_keys (key) {
-                var table_name = key.split('/')[2]
-                var foreign_keys = fetch('/sql/PRAGMA foreign_key_list(' + table_name + ')').rows
+        bus('table_foreign_keys/*').to_fetch =
+            function table_foreign_keys (key, rest) {
+                var table_name = rest
+                var foreign_keys = fetch('sql/PRAGMA foreign_key_list(' + table_name + ')').rows
                 var result = {}
                 for (var i=0;i< foreign_keys .length;i++)
                     result[foreign_keys[i].from] = foreign_keys[i]
@@ -664,10 +664,10 @@ function make_server_bus (options)
                 return result
             }
 
-        bus('/sql/*').to_fetch =
-            function sql (key) {
+        bus('sql/*').to_fetch =
+            function sql (key, rest) {
                 fetch('timer/60000')
-                var query = key.substr('/sql/'.length)
+                var query = rest
                 try { query = JSON.parse(query) }
                 catch (e) { query = {stmt: query, args: []} }
                 
@@ -681,13 +681,13 @@ function make_server_bus (options)
 
     sqlite_table_server: function sqlite_table_server(db, table_name) {
         var save = bus.save, fetch = bus.fetch
-        var table_columns = fetch('/table_columns/'+table_name) // This will fail if used too soon
-        var foreign_keys  = fetch('/table_foreign_keys/'+table_name)
-        var remapped_keys = fetch('/remapped_keys')
+        var table_columns = fetch('table_columns/'+table_name) // This will fail if used too soon
+        var foreign_keys  = fetch('table_foreign_keys/'+table_name)
+        var remapped_keys = fetch('remapped_keys')
         remapped_keys.keys = remapped_keys.keys || {}
         remapped_keys.revs = remapped_keys.revs || {}
         function row_json (row) {
-            var result = {key: '/' + table_name + '/' + row.id}
+            var result = {key: table_name + '/' + row.id}
             for (var k in row)
                 if (row.hasOwnProperty(k))
                     result[k] = (foreign_keys[k] && row[k]
@@ -724,7 +724,7 @@ function make_server_bus (options)
                 if (err) console.error('Problem with table!', table_name, err)
                 for (var i=0; i<rows.length; i++)
                     result[i] = row_json(rows[i])
-                bus.save.fire({key: '/'+table_name, rows: result})
+                bus.save.fire({key: table_name, rows: result})
             })
         }
         function render_row(obj) {
@@ -741,14 +741,15 @@ function make_server_bus (options)
         // ************************
 
         // Fetching the whole table, or a single row
-        bus('/' + table_name + '*').to_fetch = function (key) {
-            if (key.split('/').length < 3)
+        bus(table_name + '*').to_fetch = function (key, rest) {
+            if (rest === '')
                 // Return the whole table
                 return render_table()
 
+            if (rest[0] !== '/') return {error: 'bad key: ' + key}
             key = remapped_keys.keys[key] || key
 
-            var id = key.split('/')[2]
+            var id = key.split('/')[1]
             db.get('select * from '+table_name+' where rowid = ?',
                    [id],
                    function (err, row) {
@@ -760,13 +761,13 @@ function make_server_bus (options)
         }
 
         // Saving a row
-        bus('/'+ table_name + '/*').to_save = function (obj) {
+        bus(table_name + '/*').to_save = function (obj, rest) {
             var columns = table_columns.columns
             var key = remapped_keys.keys[obj.key] || obj.key
 
             // Compose the query statement
             var stmt = 'update ' + table_name + ' set '
-            var rowid = key.split('/')[2]
+            var rowid = rest
             var vals = json_values(obj)
             for (var i=0; i<columns.length; i++) {
                 stmt += columns[i] + ' = ?'
@@ -786,7 +787,7 @@ function make_server_bus (options)
         }
 
         // Inserting a new row
-        bus('/new/' + table_name + '/*').to_save = function (obj) {
+        bus('new/' + table_name + '/*').to_save = function (obj) {
             var columns = table_columns.columns
             var stmt = ('insert into ' + table_name + ' (' + columns.join(',')
                         + ') values (' + new Array(columns.length).join('?,') + '?)')
@@ -797,7 +798,7 @@ function make_server_bus (options)
             db.run(stmt, values, function (error) {
                 if (error) console.log('INSERT error!', error)
                 console.log('insert complete, got id', this.lastID)
-                remapped_keys.keys[obj.key] = '/' + table_name + '/' + this.lastID
+                remapped_keys.keys[obj.key] = table_name + '/' + this.lastID
                 remapped_keys.revs[remapped_keys.keys[obj.key]] = obj.key
                 save(remapped_keys)
                 render_table()
@@ -805,7 +806,7 @@ function make_server_bus (options)
         }
 
         // Deleting a row
-        bus('/'+ table_name + '/*').to_delete = function (key) {
+        bus(table_name + '/*').to_delete = function (key, rest) {
             if (remapped_keys.keys[key]) {
                 var old_key = key
                 var new_key = remapped_keys.keys[key]
@@ -815,7 +816,7 @@ function make_server_bus (options)
             }
 
             var stmt = 'delete from ' + table_name + ' where rowid = ?'
-            var rowid = key.split('/')[2]
+            var rowid = rest
             console.log('DELETE', stmt)
             db.run(stmt, [rowid],
                    function (err) {
@@ -832,7 +833,7 @@ function make_server_bus (options)
         if (master('users/passwords').to_fetch.length === 0) {
             master('users/passwords').to_fetch = function (k) {
                 var result = {key: 'users/passwords'}
-                var users = master.fetch('/users')
+                var users = master.fetch('users')
                 users.all = users.all || []
                 for (var i=0; i<users.all.length; i++) {
                     var u = master.fetch(users.all[i])
@@ -844,7 +845,7 @@ function make_server_bus (options)
                 return result
             }
 
-            if (false) master('/online_users').to_fetch = function () {
+            if (false) master('online_users').to_fetch = function () {
                 var result = []
                 var conns = master.fetch('connections')
                 log('online: conns', conns)
@@ -852,7 +853,7 @@ function make_server_bus (options)
                 return {all: result}
             }
         }
-        if (false) user('/online_users').to_fetch = function (k) {
+        if (false) user('online_users').to_fetch = function (k) {
             var result = master.fetch(k)
             for (var i=0; i<result.all.length; i++) {
                 log(result.all[i].key)
@@ -888,9 +889,9 @@ function make_server_bus (options)
             params.pass = require('bcrypt-nodejs').hashSync(params.pass)
 
             // Choose account key
-            var key = '/user/' + params.name
+            var key = 'user/' + params.name
             if (key in master.cache)
-                key = '/user/' + Math.random().toString(36).substring(7)
+                key = 'user/' + Math.random().toString(36).substring(7)
 
             // Make account object
             var new_account = {key: key,
@@ -899,7 +900,7 @@ function make_server_bus (options)
                                email: params.email,
                                admin: false }
 
-            var users = master.fetch('/users')
+            var users = master.fetch('users')
             users.all.push(new_account)
             passes[params.name] = {user: new_account.key,
                                    pass: new_account.pass}
@@ -908,18 +909,18 @@ function make_server_bus (options)
             return true
         }
 
-        user('/current_user').to_fetch = function () {
-            user.log('* /current_user fetching')
+        user('current_user').to_fetch = function () {
+            user.log('* current_user fetching')
             if (!conn.client) return
             var u = master.fetch('logged_in_clients')[conn.client]
             u = u && user_obj(u.key, true)
             return {user: u || null, logged_in: !!u}
         }
 
-        user('/current_user').to_save = function (o) {
+        user('current_user').to_save = function (o) {
             function error (msg) {
                 user.save.abort(o)
-                var c = user.fetch('/current_user')
+                var c = user.fetch('current_user')
                 c.error = msg
                 user.save(c)
             }
@@ -988,7 +989,7 @@ function make_server_bus (options)
                 }
             }
 
-            user.dirty('/current_user')
+            user.dirty('current_user')
         }
 
         // setTimeout(function () {
@@ -997,8 +998,8 @@ function make_server_bus (options)
         //     log('DIRTIED!!!!!')
         // }, 4000)
 
-        user('/user/*').to_save = function (o) {
-            var c = user.fetch('/current_user')
+        user('user/*').to_save = function (o) {
+            var c = user.fetch('current_user')
             user.log(o.key + '.to_save:', o, c.logged_in, c.user)
             if (c.logged_in && c.user.key === o.key) {
                 var u = master.fetch(o.key)
@@ -1024,17 +1025,17 @@ function make_server_bus (options)
             else
                 return {key: k, name: o.name}
         }
-        user('/user/*').to_fetch = function filtered_user (k) {
-            var c = user.fetch('/current_user')
+        user('user/*').to_fetch = function filtered_user (k) {
+            var c = user.fetch('current_user')
             return user_obj(k, c.logged_in && c.user.key === k)
         }
-        user('/users').to_fetch = function () {}
-        user('/users').to_save = function () {}
+        user('users').to_fetch = function () {}
+        user('users').to_save = function () {}
     },
 
      code_restarts: function () {
          var got = {}
-         bus('/code/*').on_save = function (o) {
+         bus('code/*').on_save = function (o) {
              bus.log('Ok restart, we\'ll quit if ' + (got[o.key]||false))
              if (got[o.key])
                  process.exit(1)
@@ -1048,14 +1049,14 @@ function make_server_bus (options)
         var was_logged_in = false
 
         function client_prefix (current_user) {
-            return '/client/' + (current_user.logged_in
-                                 ? current_user.user.key.substr('/user/'.length)
+            return 'client/' + (current_user.logged_in
+                                 ? current_user.user.key.substr('user/'.length)
                                  : client.client_id)
         }
 
         function copy_client_to_user(client, user) {
-            var old_prefix = '/client/' + client.client_id
-            var new_prefix = '/client/' + user.key.substr('/user/'.length)
+            var old_prefix = 'client/' + client.client_id
+            var new_prefix = 'client/' + user.key.substr('user/'.length)
             var cache = client.master.cache
 
             var keys = Object.keys(cache)         // Make a copy
@@ -1078,7 +1079,7 @@ function make_server_bus (options)
         }
 
         client(prefix_to_sync).to_fetch = function (key) {
-            var c = client.fetch('/current_user')
+            var c = client.fetch('current_user')
             if (client.loading()) return
             var prefix = client_prefix(c)
 
@@ -1123,7 +1124,7 @@ function make_server_bus (options)
         }
 
         client(prefix_to_sync).to_delete = function (k) {
-            client.master.delete(client_prefix(client.fetch('/current_user')) + k)
+            client.master.delete(client_prefix(client.fetch('current_user')) + k)
         }
     },
 
