@@ -142,9 +142,9 @@ var tests = [
             [{key: 'a'}, {key: '/a'}],
             [{key: 'a', f: '3'}, {key: '/a', f: '3'}],
             [{a: {b: {key: 'a'}}}, {a: {b: {key: '/a'}}}],
-            [{a: {b: {_keys: ['a', 'b']}}}, {a: {b: {_keys: ['/a', '/b']}}}],
-            [{a: {b: {bombs_keys: ['a', 1]}}}, {a: {b: {bombs_keys: ['/a', 1]}}}],
-            [{a: {b: {_keys: ['a', {_key: 'b'}]}}}, {a: {b: {_keys: ['/a', {_key: '/b'}]}}}],
+            [{a: {b: {_key: ['a', 'b']}}}, {a: {b: {_key: ['/a', '/b']}}}],
+            [{a: {b: {bombs_key: ['a', 1]}}}, {a: {b: {bombs_key: ['/a', 1]}}}],
+            [{a: {b: {_key: ['a', {_key: 'b'}]}}}, {a: {b: {_key: ['/a', {_key: '/b'}]}}}],
             [{a: ['a', {_key: 'b'}]}, {a: ['a', {_key: '/b'}]}],
             ]
         for (var i=0; i<tests.length; i++) {
