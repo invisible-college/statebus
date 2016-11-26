@@ -346,25 +346,6 @@ function make_server_bus (options)
         s.installHandlers(httpserver, {prefix:'/statebus'})
     },
 
-    unix_socket_repl: function (port) {
-        var repl = require('repl')
-        var net = require('net')
-
-        net.createServer(function (socket) {
-            var r = repl.start({
-                prompt: '> '
-                , input: socket
-                , output: socket
-                , terminal: true
-                , useGlobal: false
-            })
-            r.on('exit', function () {
-                socket.end()
-            })
-            r.context.socket = socket
-        }).listen('.repl_socket')
-    },
-
     ws_client: function ws_client (prefix, url, account) {
         var WebSocket = require('websocket').w3cwebsocket
         url = url || 'wss://stateb.us:3005'
@@ -1157,6 +1138,27 @@ function make_server_bus (options)
             return count
         }
     },
+
+    unix_socket_repl: function (filename) {
+        var repl = require('repl')
+        var net = require('net')
+        var fs = require('fs')
+        if (fs.existsSync && fs.existsSync(filename))
+            fs.unlinkSync(filename)
+        net.createServer(function (socket) {
+            var r = repl.start({
+                //prompt: '> '
+                input: socket
+                , output: socket
+                , terminal: true
+                //, useGlobal: false
+            })
+            r.on('exit', function () {
+                socket.end()
+            })
+            r.context.socket = socket
+        }).listen(filename)
+    },
 }
 
     var bus = require('./statebus')()
@@ -1188,9 +1190,12 @@ function make_server_bus (options)
         bus.serve(options)
     return bus
 }
-make_server_bus.repl = function () {
+module.exports = make_server_bus
+
+// Handy repl. Invoke with node -e 'require("statebus/server").repl("/tmp/foo")'
+make_server_bus.repl = function (filename) {
     var net = require('net')
-    var sock = net.connect('.repl_socket')
+    var sock = net.connect(filename)
 
     process.stdin.pipe(sock)
     sock.pipe(process.stdout)
@@ -1217,4 +1222,3 @@ make_server_bus.repl = function () {
         }
     })
 }
-module.exports = make_server_bus
