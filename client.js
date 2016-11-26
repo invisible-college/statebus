@@ -48,6 +48,9 @@
         })
     }
 
+    function set_cookie (key, val) {
+        document.cookie = key + '=' + val + '; Expires=21 Oct 2025 00:0:00 GMT;'
+    }
     function sockjs_client(prefix, url) {
         var bus = this
         var recent_saves = []
@@ -110,6 +113,8 @@
                                  + Math.random().toString(36).substring(2))
                     save(me)
                 }
+
+                set_cookie('client', me.client)
                 send({method: 'save', obj: {key: 'current_user', client: me.client}},
                      'unshift')
 
@@ -363,7 +368,7 @@
                 if (this.render.called_directly) {
                     delete dirty_components[this.key]
 
-                    // Register on any keys passed in objects in props.
+                    // Add reactivity to any keys passed inside objects in props.
                     for (k in this.props)
                         if (this.props.hasOwnProperty(k)
                             && this.props[k] !== null
