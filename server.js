@@ -346,6 +346,25 @@ function make_server_bus (options)
         s.installHandlers(httpserver, {prefix:'/statebus'})
     },
 
+    unix_socket_repl: function (port) {
+        var repl = require('repl')
+        var net = require('net')
+
+        net.createServer(function (socket) {
+            var r = repl.start({
+                prompt: '> '
+                , input: socket
+                , output: socket
+                , terminal: true
+                , useGlobal: false
+            })
+            r.on('exit', function () {
+                socket.end()
+            })
+            r.context.socket = socket
+        }).listen('.repl_socket')
+    },
+
     ws_client: function ws_client (prefix, url, account) {
         var WebSocket = require('websocket').w3cwebsocket
         url = url || 'wss://stateb.us:3005'
@@ -845,21 +864,6 @@ function make_server_bus (options)
                 return result
             }
 
-            if (false) master('online_users').to_fetch = function () {
-                var result = []
-                var conns = master.fetch('connections')
-                log('online: conns', conns)
-                for (var conn in conns) if (conn !== 'key') result.push(conns[conn].user)
-                return {all: result}
-            }
-        }
-        if (false) user('online_users').to_fetch = function (k) {
-            var result = master.fetch(k)
-            for (var i=0; i<result.all.length; i++) {
-                log(result.all[i].key)
-                result.all[i] = user.fetch(result.all[i])
-            }
-            return result
         }
         function authenticate (name, pass) {
             if (name === 'key') return false
@@ -1183,5 +1187,34 @@ function make_server_bus (options)
     else if (options && (options.client || options.port || options.backdoor))
         bus.serve(options)
     return bus
+}
+make_server_bus.repl = function () {
+    var net = require('net')
+    var sock = net.connect('.repl_socket')
+
+    process.stdin.pipe(sock)
+    sock.pipe(process.stdout)
+
+    sock.on('connect', function () {
+        process.stdin.resume();
+        process.stdin.setRawMode(true)
+    })
+
+    sock.on('close', function done () {
+        process.stdin.setRawMode(false)
+        process.stdin.pause()
+        sock.removeListener('close', done)
+    })
+
+    process.stdin.on('end', function () {
+        sock.destroy()
+        console.log()
+    })
+
+    process.stdin.on('data', function (b) {
+        if (b.length === 1 && b[0] === 4) {
+            process.stdin.emit('end')
+        }
+    })
 }
 module.exports = make_server_bus
