@@ -1143,6 +1143,25 @@ function make_server_bus (options)
             return count
         }
     },
+
+    unix_socket_repl: function (filename) {
+        var repl = require('repl')
+        var net = require('net')
+        require('fs').unlinkSync(filename)
+        net.createServer(function (socket) {
+            var r = repl.start({
+                prompt: '> '
+                , input: socket
+                , output: socket
+                , terminal: true
+                , useGlobal: false
+            })
+            r.on('exit', function () {
+                socket.end()
+            })
+            r.context.socket = socket
+        }).listen(filename)
+    },
 }
 
     var bus = require('./statebus')()
@@ -1175,3 +1194,34 @@ function make_server_bus (options)
     return bus
 }
 module.exports = make_server_bus
+
+// Handy repl. Invoke with node -e 'require("statebus/server").repl("/tmp/foo")'
+make_server_bus.repl = function (filename) {
+    var net = require('net')
+    var sock = net.connect(filename)
+
+    process.stdin.pipe(sock)
+    sock.pipe(process.stdout)
+
+    sock.on('connect', function () {
+        process.stdin.resume();
+        process.stdin.setRawMode(true)
+    })
+
+    sock.on('close', function done () {
+        process.stdin.setRawMode(false)
+        process.stdin.pause()
+        sock.removeListener('close', done)
+    })
+
+    process.stdin.on('end', function () {
+        sock.destroy()
+        console.log()
+    })
+
+    process.stdin.on('data', function (b) {
+        if (b.length === 1 && b[0] === 4) {
+            process.stdin.emit('end')
+        }
+    })
+}
