@@ -82,27 +82,6 @@ var tests = [
         next()
     },
 
-    function basics (next) {
-        bus('basic wait').to_fetch = function () {
-            setTimeout(function () {save.fire({key:'basic wait', a:1})},
-                       30)
-        }
-
-        var count = 0
-        bus(function () {
-            var v = fetch('basic wait')
-            log('On round', count, 'we see', v)
-            if (count == 0)
-                assert(!v.a)
-            if (count == 1) {
-                assert(v.a)
-                bus.forget()
-                next()
-            }
-            count++
-        })
-    },
-
     function auto_vars (next) {
         n = require('../server')()
         n('r/*').to_fetch = function (rest, o) {return {rest: rest, o: o}}
@@ -154,6 +133,27 @@ var tests = [
                    'Bad translation: ' + JSON.stringify(trans))
         }
         next()
+    },
+
+    function basics (next) {
+        bus('basic wait').to_fetch = function () {
+            setTimeout(function () {save.fire({key:'basic wait', a:1})},
+                       30)
+        }
+
+        var count = 0
+        bus(function () {
+            var v = fetch('basic wait')
+            log('On round', count, 'we see', v)
+            if (count == 0)
+                assert(!v.a)
+            if (count == 1) {
+                assert(v.a)
+                bus.forget()
+                next()
+            }
+            count++
+        })
     },
 
     // Callbacks are reactive
@@ -208,7 +208,7 @@ var tests = [
     },
 
     // If there's an on_fetch handler, the callback doesn't return
-    // until the handler pubs a value
+    // until the handler fires a value
     function fetch_remote (next) {
         var count = 0
 
@@ -233,8 +233,8 @@ var tests = [
         }, 50)
     },
 
-    // Multiple batched pubs might trigger duplicate reactions
-    function duplicate_pub (next) {
+    // Multiple batched fires might trigger duplicate reactions
+    function duplicate_fires (next) {
         var calls = new Set()
         var count = 0
         var dupes = []
@@ -249,9 +249,9 @@ var tests = [
         fetch('foo', cb)                   // Call 1
         assert(count === 1, '1!=' + count)
 
-        // Pub a foo
+        // Fire a foo
         setTimeout(function () {
-            log('pubbing a few new foos')
+            log('Firing a few new foos')
             bus.save.fire({key: 'foo', n:0})     // Skipped
             bus.save.fire({key: 'foo', n:1})     // Skipped
             bus.save.fire({key: 'foo', n:2})     // Skipped
@@ -270,7 +270,7 @@ var tests = [
         }, 60)
     },
 
-    // Identity pubs shouldn't infinite loop
+    // Identity fires shouldn't infinite loop
     function identity (next) {
         var key = 'kooder'
         var count = 0
@@ -321,7 +321,7 @@ var tests = [
 
         // Next
         setTimeout(function () {
-            //assert(count === 2, "Count should be 2 but is", count)
+            assert(count === 2, "Count should be 2 but is", count)
             bus(key).to_fetch.delete(fire)
             next()
         }, 100)
