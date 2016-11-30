@@ -1,3 +1,8 @@
+# What's new in Statebus v5
+- Proxies: `sb["/foo"]` instead of `bus.fetch("/foo")`
+- New JSON encoding
+- URL rewriting: `"/foo"` on client translates to `"foo"` on server
+
 # What's new in Statebus v4
 
 The big news is that you can now
