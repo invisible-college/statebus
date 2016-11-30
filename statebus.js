@@ -1062,6 +1062,7 @@
         //         if (k !== 'key') return false
         //     return true
         // }
+        var strict_mode = (function () {return !this})()
         function item_proxy (base, o) {
             if (typeof o !== 'object' && o !== null) return o
 
@@ -1075,7 +1076,7 @@
                 set: function set(o, k, v) {
                     var result = o[escape_key(k)] = v
                     bus.save(base)
-                    return result
+                    return strict_mode ? true : result  // Strict mode forces us to return true
                 },
                 has: function has(o, k) {
                     return escape_key(k) in o
@@ -1109,6 +1110,7 @@
                     v = bus.clone(v)
                 v.key = k
                 bus.save(v)
+                return strict_mode ? true : v  // Strict mode forces us to return true
             },
             // In future, this might check if there's a .to_fetch function OR
             // something in the cache:
