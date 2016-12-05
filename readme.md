@@ -7,14 +7,12 @@ mechanisms for writing reactive code: (c) Proxies and (d) Uncallbacks.
 - New JSON encoding
 - Proxies: `sb["/foo"]` instead of `bus.fetch("/foo")`
 - URL rewriting: `"/foo"` on client translates to `"foo"` on server
-- Eliminate old callback code with Reify
+- Eliminate old callback code with `uncallback()`
 - Combine state from multiple servers using absolute URLs as keys
 
 Warning: we're still changing the API.
 
-## Eliminate callback code with `reify()`
-
-(Should we call this `uncallback()` instead?)
+## Eliminate callback code with `uncallback()`
 
 Now you can transform nested callbacks:
 
@@ -44,9 +42,9 @@ bus(() => {
 ```
 Isn't that much nicer?
 
-To transform callbacky functions into reactive functions, use the `bus.reify()` command:
+To transform callbacky functions into reactive functions, use the `bus.uncallback()` command:
 ```javascript
-var readFile = bus.reify(fs.readFile)  // Overly simplified
+var readFile = bus.uncallback(fs.readFile)  // Overly simplified
 ```
 
 The catch is that callbacky function's inputs and outputs must be serializable
@@ -55,12 +53,12 @@ JSON.  Since `fs.readFile()` returns a `Buffer`, we should serialize the result 
 
 ```javascript
 // Wrap fs.readFile() in a function that returns a string:
-readFile = bus.reify(function (path, cb) {
+readFile = bus.uncallback(function (path, cb) {
     fs.readFile(path, (err, result) => cb(err, result.toString()))
 })
 ```
 
-You can reify any function where:
+You can uncallback any function where:
   - The inputs and outputs are serializable in JSON
   - Except the last argument, which is a callback that takes args `(error, result)`
 
