@@ -39,7 +39,7 @@ You transform callbacky functions into reactive functions with the `bus.reify()`
 var readFile = bus.reify(fs.readFile)  // Overly simplified
 ```
 
-The catch is that function's inputs and outputs must be serializable
+The catch is that callbacky function's inputs and outputs must be serializable
 JSON.  Since `fs.readFile()` returns a `Buffer`, we should just call
 `.toString()` on its result:
 
