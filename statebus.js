@@ -1067,16 +1067,15 @@
     // ******************
     // Fancy Stuff
 
-    var reify_counter = 0
-    function reify (f, options) {
-        name = (options && options.name) || f.name || (reify_counter+'')
-        if (!name) throw 'Refied function needs a name'
-        var prefix = 'reify/' + name
+    var uncallback_counter = 0
+    function uncallback (f, options) {
+        name = (options && options.name) || f.name || (uncallback_counter+'')
+        if (!name) throw 'Uncallback function needs a name'
+        var prefix = 'uncallback/' + name
         var watching = {}
         bus(prefix + '/*').to_fetch = function (key, json) {
             var args = json
             function cb (err, result) {
-                console.log('reify result is', result, Object.keys(result))
                 if (err) {
                     console.trace('have err:', err, 'and result is', JSON.stringify(result))
                     throw err
@@ -1108,6 +1107,9 @@
         //         if (k !== 'key') return false
         //     return true
         // }
+
+        // NOTE: Does this work with arrays?  Does array.push, splice, etc. do
+        // the right thing?
         var strict_mode = (function () {return !this})()
         function item_proxy (base, o) {
             if (typeof o !== 'object' && o !== null) return o
@@ -1509,7 +1511,7 @@
 
     // Make these private methods accessible
     var api = ['cache backup_cache fetch save forget del fire dirty',
-               'subspace bindings run_handler bind unbind reactive reify',
+               'subspace bindings run_handler bind unbind reactive uncallback',
                'versions new_version',
                'funk_key funk_name funks key_id key_name id kp',
                'pending_fetches fetches_in loading_keys loading',

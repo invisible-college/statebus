@@ -1144,7 +1144,7 @@ function make_server_bus (options)
         var watchers = {}
         var fs = require('fs')
 
-        bus.read_file = bus.reify(
+        bus.read_file = bus.uncallback(
             function (filename, cb) {
                 fs.readFile(filename, (err, result) => {
                     cb(null, result.toString())

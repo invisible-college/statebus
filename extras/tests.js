@@ -428,7 +428,7 @@ var tests = [
         next()
     },
 
-    function reify (next) {
+    function uncallback (next) {
         var chokidar = require('chokidar')
         var watchers = {}
         fs = require('fs')
@@ -443,7 +443,7 @@ var tests = [
             }
         }
 
-        read_file = bus.reify(read_file, {stop_watching: (json) => {
+        read_file = bus.uncallback(read_file, {stop_watching: (json) => {
             filename = json[0]
             log('unwatching', filename)
             //watchers[filename].unwatch(filename)
@@ -509,6 +509,32 @@ var tests = [
         delay(() => {log('* MODIFY 2'); fs.writeFileSync('/tmp/blah', '2')}, 300)
         delay(() => {log('* MODIFY 3'); fs.writeFileSync('/tmp/blah', '3')}, 300)
         delay(() => {next()}, 200)
+    },
+
+    function proxies (next) {
+        var bus = require('../server')()
+        db = bus.sb
+        db.foo.a = 3
+        assert(db.foo.a == 3)
+        db.foo.a = [1,3,5, 'hello']
+        db.foo.a.push({key: 'bar', 4:4})
+
+        // Todo: make sure that push() and splice() etc. trigger updates to
+        // state properly.  They should trigger save() when they modify the
+        // array, and not when they don't.
+
+        log('Now foo is', db.foo)
+        log('And bar is', db.bar)
+
+        db.f = 3
+        assert(bus.validate(bus.cache['f'], {key: 'f', _: 3}),
+               bus.cache['f'], 'should be', {key: 'f', _: 3})
+        assert(db.f === 3)
+
+        db.g = [1,2,4,5]
+        assert(bus.cache['g']._.length = 4)
+
+        next()
     },
 
     function only_one (next) {
