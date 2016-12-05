@@ -34,7 +34,7 @@ bus(() => {
 ```
 Isn't that much nicer?
 
-You transform callbacky functions with the `bus.reify()` command:
+You transform callbacky functions into reactive functions with the `bus.reify()` command:
 ```javascript
 var readFile = bus.reify(fs.readFile)  // Overly simplified
 ```
