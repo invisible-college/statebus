@@ -1067,9 +1067,9 @@
     // ******************
     // Fancy Stuff
 
-    function statify (f, options) {
+    function reify (f, options) {
         name = (options && options.name) || f.name
-        if (!name) throw 'Statified function needs a name'
+        if (!name) throw 'Refied function needs a name'
         var prefix = 'funcall/' + name
         var open_calls = {}
         bus(prefix + '/*').to_fetch = function (key, json) {
@@ -1505,7 +1505,7 @@
 
     // Make these private methods accessible
     var api = ['cache backup_cache fetch save forget del fire dirty',
-               'subspace bindings run_handler bind unbind reactive statify',
+               'subspace bindings run_handler bind unbind reactive reify',
                'versions new_version',
                'funk_key funk_name funks key_id key_name id kp',
                'pending_fetches fetches_in loading_keys loading',

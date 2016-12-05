@@ -1144,7 +1144,7 @@ function make_server_bus (options)
         var watchers = {}
         var fs = require('fs')
 
-        bus.read_file = bus.statify(
+        bus.read_file = bus.reify(
             function read_file (filename, cb) {
                 fs.readFile(filename, function (err, result) {
                     if (err) throw err

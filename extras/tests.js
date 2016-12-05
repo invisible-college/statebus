@@ -443,7 +443,7 @@ var tests = [
             }
         }
 
-        read_file = bus.statify(read_file, {to_forget: (json) => {
+        read_file = bus.reify(read_file, {to_forget: (json) => {
             filename = json[0]
             log('unwatching', filename)
             //watchers[filename].unwatch(filename)
