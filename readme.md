@@ -1,12 +1,20 @@
 # What's coming in Statebus v5
-- Proxies: `sb["/foo"]` instead of `bus.fetch("/foo")`
+
+We're formalizing its JSON encoding. This lets us (a) mix state from multiple
+nodes or servers, (b) translate URLs between them, and gives us two handy new
+mechanisms for writing reactive code: (c) Proxies and (d) Uncallbacks.
+
 - New JSON encoding
+- Proxies: `sb["/foo"]` instead of `bus.fetch("/foo")`
 - URL rewriting: `"/foo"` on client translates to `"foo"` on server
 - Eliminate old callback code with Reify
+- Combine state from multiple servers using absolute URLs as keys
 
 Warning: we're still changing the API.
 
 ## Eliminate callback code with `reify()`
+
+(Should we call this `uncallback()` instead?)
 
 Now you can transform nested callbacks:
 
