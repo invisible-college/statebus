@@ -40,8 +40,8 @@ var readFile = bus.reify(fs.readFile)  // Overly simplified
 ```
 
 The catch is that callbacky function's inputs and outputs must be serializable
-JSON.  Since `fs.readFile()` returns a `Buffer`, we should just call
-`.toString()` on its result:
+JSON.  Since `fs.readFile()` returns a `Buffer`, we should serialize the result with
+`.toString()`:
 
 ```javascript
 // Wrap fs.readFile() in a function that returns a string:
