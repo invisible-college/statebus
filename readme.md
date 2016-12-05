@@ -14,7 +14,7 @@ Warning: we're still changing the API.
 
 ## Eliminate callback code with `uncallback()`
 
-Now you can transform nested callbacks:
+Now you can transform APIs that use callbacks:
 
 ```javascript
 fs.readFile('hello.txt', (err, first_file) => {
@@ -31,7 +31,7 @@ fs.readFile('hello.txt', (err, first_file) => {
 
 ```
 
-...into reactive code:
+...into reactions:
 
 ```javascript
 bus(() => {
