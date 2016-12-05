@@ -2,7 +2,7 @@
 - Proxies: `sb["/foo"]` instead of `bus.fetch("/foo")`
 - New JSON encoding
 - URL rewriting: `"/foo"` on client translates to `"foo"` on server
-- Eliminate old callback code with Reify 
+- Eliminate old callback code with Reify
 
 ## Eliminate old callback code with `reify()`
 
@@ -29,7 +29,7 @@ fs.readFile('hello.txt', (err, first_result) => {
 bus(() => {
     var first_file = readFile('hello.txt')
     var second_file = readFile('world.txt')
-    console.log(first_file + second_file)
+    fs.writeFile(first_file + second_file)
 })
 ```
 Isn't that much nicer?
