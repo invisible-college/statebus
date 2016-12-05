@@ -1,10 +1,12 @@
-# What's new in Statebus v5
+# What's coming in Statebus v5
 - Proxies: `sb["/foo"]` instead of `bus.fetch("/foo")`
 - New JSON encoding
 - URL rewriting: `"/foo"` on client translates to `"foo"` on server
 - Eliminate old callback code with Reify
 
-## Eliminate old callback code with `reify()`
+Warning: we're still changing the API.
+
+## Eliminate callback code with `reify()`
 
 Now you can transform nested callbacks:
 
@@ -34,7 +36,7 @@ bus(() => {
 ```
 Isn't that much nicer?
 
-You transform callbacky functions into reactive functions with the `bus.reify()` command:
+To transform callbacky functions into reactive functions, use the `bus.reify()` command:
 ```javascript
 var readFile = bus.reify(fs.readFile)  // Overly simplified
 ```
@@ -52,7 +54,57 @@ readFile = bus.reify(function (path, cb) {
 
 You can reify any function where:
   - The inputs and outputs are serializable in JSON
-  - The last argument is a callback, which takes args `(error, result)`
+  - Except the last argument, which is a callback that takes args `(error, result)`
+
+## Proxy
+This wraps `fetch()` and `save()`. Makes all state look like a big global variable.
+
+```javascript
+sb = bus.sb      // sb might become the new 'bus'
+
+sb.foo           // fetch("foo")
+sb.foo = 3       // save({key: "foo", _: 3})
+sb.foo = sb.bar  // save({key: "foo", _: fetch("bar")})
+sb.bar.fi = 3    // save({key: "bar", fi: 3})
+
+sb["/foo"]       // fetch from server
+sb["/foo"].posts[5].title   // access an array
+
+sb.foo()         // access the underlying raw JSON: {key: "foo", _: {key: "bar", fi: 3}}
+sb.foo().key     // => "foo"
+```
+
+Behind the scenes, all data is stored in a JSON encoding.  You can get the
+underlying JSON with `sb.blah()`.
+
+
+
+#### JSON encoding
+
+The encoding hides keys, dereferences pointers, and unwraps singleton objects
+when viewed through the `sb` proxy interface.
+
+```javascript
+  // Basics
+  {_: 3}             -> 3                           // Underscore is unwrapped
+  {key: 3}           -> {}                          // Keys are hidden
+  {bar_key: '/bar'}  -> {bar: {..this is bar..}}    // *_key is a pointer to other state
+  {key_: 3}          -> {key: 3}                    // Trailing underscore escapes
+  {__: 3}            -> {_: 3}                      // Trailing underscore escapes
+
+  // Now let's try some combinations
+  {_key: '/bar'}     -> {..this is bar..}           // _key means "unwrap this pointer"
+
+  // Marking an array with "_key" means each element is a pointer
+  {bars_key: ['/bar/1', '/bar/2']}               -> {bars: [{..bar1..}, {..bar2..}]}
+
+  // You can get the same result by wrapping each element with {_key: ..}
+  {bars: [{_key: '/bar/1'}, {_key: '/bar/2'}]}   -> {bars: [{..bar1..}, {..bar2..}]}
+
+  // In either case, you can escape an exceptional element in an array by wrapping it
+  {bars_key: ['/bar/1', {_: 'hi!'}]}             -> {bars: [{..bar1..}, 'hi!']}
+```
+
 
 # What's new in Statebus v4
 
