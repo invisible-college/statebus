@@ -398,6 +398,13 @@
                 // Todo: deactivate any reactive .on_fetch handler, or
                 // .on_save handler.
             }, 200)
+
+            // BUG: The delay on forgetting means that reactive functions that
+            // call forget() will still get re-run for a while.  For now, they
+            // cannot depend on forget() making them not re-run
+            // immediately... we could fix this by adding a check when
+            // re-running for a key to see if the key is in to_be_forgotten,
+            // and not run anything that is supposed to be forgotten.
         }
     }
     function del (key) {
@@ -484,6 +491,10 @@
 
         //log(bus+' Cleaning up!', keys, 'keys, and', fetchers.length, 'fetchers')
         for (var i=0; i<keys.length; i++) {          // Collect all keys
+            // if (to_be_forgotten[keys[i]])
+            //     // Ignore changes to keys that have been forgotten, but not
+            //     // processed yet
+            //     continue
             var fs = bindings(keys[i], 'on_save')
             for (var j=0; j<fs.length; j++) {
                 var f = fs[j].func
@@ -562,6 +573,7 @@
             case 'key':
             case 'k':
                 handler.args['key'] = i; break
+            case 'json':
             case 'vars':
                 handler.args['vars'] = i; break
             case 'star':
@@ -730,7 +742,7 @@
         // Fresh fetch/save/forget/delete handlers will just be regular
         // functions.  We'll store their arg and let them re-run until they
         // are done re-running.
-        function key_arg () { return ((typeof arg.key) == 'string') ? arg.key : key }
+        function key_arg () { return ((typeof arg.key) == 'string') ? arg.key : arg }
         function rest_arg () { return (key_arg()).substr(binding.length-1) }
         function vars_arg () {
             var r = rest_arg()
@@ -746,7 +758,7 @@
             args[0] = arg
             args[1] = t
             //console.log('This funcs args are', func.args)
-            for (var k in func.args) {
+            for (var k in (func.args||{})) {
                 switch (k) {
                 case 'key':
                     args[func.args[k]] = key_arg(); break
@@ -1051,6 +1063,36 @@
     //     }
     // }
 
+
+    // ******************
+    // Fancy Stuff
+
+    function statify (f, options) {
+        name = (options && options.name) || f.name
+        if (!name) throw 'Statified function needs a name'
+        var prefix = 'funcall/' + name
+        var open_calls = {}
+        bus(prefix + '/*').to_fetch = function (key, json) {
+            var args = json
+            function cb (err, result) {
+                if (err) {
+                    console.trace('have err:', err, 'and result is', JSON.stringify(result))
+                    throw err
+                } else
+                    bus.save.fire({key: key, _: result})
+            }
+            args.push(cb)
+            f.apply({key:key}, args)
+        }
+        if (options.to_forget)
+            bus(prefix + '/*').to_forget = options.to_forget
+        return function () {
+            var args = [].slice.call(arguments)
+            return bus.fetch(prefix + '/' + JSON.stringify(args))._
+        }
+    }
+
+    // Proxy
     function sb () {
         // I have the cache behind the scenes
         // Each proxy has a target object -- the raw data on cache
@@ -1463,7 +1505,7 @@
 
     // Make these private methods accessible
     var api = ['cache backup_cache fetch save forget del fire dirty',
-               'subspace bindings run_handler bind unbind reactive',
+               'subspace bindings run_handler bind unbind reactive statify',
                'versions new_version',
                'funk_key funk_name funks key_id key_name id kp',
                'pending_fetches fetches_in loading_keys loading',

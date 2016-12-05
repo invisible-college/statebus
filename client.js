@@ -518,7 +518,7 @@
         window.sb = bus.sb
 
         improve_react()
-        window.dom = {}
+        window.dom = window.dom || {}
         window.ignore_flashbacks = false
         bus.localstorage_client('ls/*')
         bus.sockjs_client ('/*', statebus_server)
@@ -539,6 +539,7 @@
             bus.save(o)
         }
         load_coffee()
+
         if (dom.Body || dom.body || dom.BODY)
             React.render((window.Body || window.body || window.BODY)(), document.body)
     }
@@ -666,16 +667,15 @@
                                                     {bare: true,
                                                      sourceMap: true,
                                                      filename: filename})
-                    var v3SourceMap = JSON.parse(compiled.v3SourceMap)
-                    v3SourceMap.sourcesContent = scripts[i].text
-                    v3SourceMap = JSON.stringify(v3SourceMap)
+                    var source_map = JSON.parse(compiled.v3SourceMap)
+                    source_map.sourcesContent = scripts[i].text
+                    compiled = compiled.js
 
                     // Base64 encode it
-                    var js = compiled.js + '\n'
-                    js += '//# sourceMappingURL=data:application/json;base64,'
-                    js += btoa(v3SourceMap) + '\n'
-                    js += '//# sourceURL=' + filename
-                    compiled = js
+                    compiled += '\n'
+                    compiled += '//# sourceMappingURL=data:application/json;base64,'
+                    compiled += btoa(JSON.stringify(source_map)) + '\n'
+                    compiled += '//# sourceURL=' + filename
                 } catch (error) {
                     if (error.location)
                         console.error('Syntax error in '+ filename + ' on line',
@@ -687,9 +687,10 @@
 
                 if (compiled) {
                     eval(compiled)
-                    window.dom = dom
-                    for (var view in dom)
+                    for (var view in dom) {
+                        window.dom[view] = dom[view]
                         make_component(view)
+                    }
                 }
             }
     }

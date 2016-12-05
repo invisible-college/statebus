@@ -1139,6 +1139,85 @@ function make_server_bus (options)
         }
     },
 
+    read_file: function init (filename) {
+        var chokidar = require('chokidar')
+        var watchers = {}
+        var fs = require('fs')
+
+        bus.read_file = bus.statify(
+            function read_file (filename, cb) {
+                fs.readFile(filename, function (err, result) {
+                    if (err) throw err
+                    else cb(null, result.toString())
+                })
+                if (!(filename in watchers)) {
+                    watchers[filename] = chokidar.watch(filename)
+                    watchers[filename].on('change', () => { bus.dirty(this.key) })
+                }
+            },
+            {to_forget: (json) => {
+                filename = json[0]
+                // log('unwatching', filename)
+                watchers[filename].close()
+                delete watchers[filename]
+            }})
+        return bus.read_file(filename)
+    },
+
+    http_serve: function http_serve (route, fetcher) {
+        var textbus = make_server_bus()
+        textbus.label = 'textbus'
+        var watched = new Set()
+        textbus('*').to_fetch = (filename, old) => {
+            return {etag: Math.random() + '',
+                    _: fetcher(filename)}
+        }
+        bus.http.get(route, (req, res) => {
+            var path = req.path
+            var etag = textbus.cache[path] && textbus.cache[path].etag
+            if (etag && req.get('If-None-Match') === etag) {
+                res.status(304).end()
+                return
+            }
+
+            textbus.fetch(req.path) // So that textbus never clears the cache
+            textbus.fetch(req.path, function cb (o) {
+                res.setHeader('Cache-Control', 'public')
+                // res.setHeader('Cache-Control', 'public, max-age='
+                //               + (60 * 60 * 24 * 30))  // 1 month
+                res.setHeader('ETag', o.etag)
+                res.setHeader('content-type', 'application/javascript')
+                res.send(o._)
+                textbus.forget(o.key, cb)  // But we do want to forget the cb
+            })
+        })
+    },
+
+    serve_client_coffee: function serve_client_coffee () {
+        bus.http_serve('/cjs/:filename', (filename) => {
+            console.log('##########')
+            filename = /\/cjs\/(.*)/.exec(filename)[0]
+            var source_filename = filename.substr(1).replace(/\.cjs$/, '.coffee')
+            var source = bus.read_file(source_filename)
+            var compiled = require('coffee-script').compile(source, {filename,
+                                                                     bare: true,
+                                                                     sourceMap: true})
+
+            var source_map = JSON.parse(compiled.v3SourceMap)
+            source_map.sourcesContent = source
+            compiled = 'window.dom = window.dom || {}\n' + compiled.js
+
+            function btoa(s) { return new Buffer(s.toString(),'binary').toString('base64') }
+
+            // Base64 encode it
+            compiled += '\n'
+            compiled += '//# sourceMappingURL=data:application/json;base64,'
+            compiled += btoa(JSON.stringify(source_map)) + '\n'
+            compiled += '//# sourceURL=' + source_filename
+            return compiled
+        })
+    },
+
     unix_socket_repl: function (filename) {
         var repl = require('repl')
         var net = require('net')

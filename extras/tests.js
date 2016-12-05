@@ -8,6 +8,11 @@ function log () {
     console.log(pre+util.format.apply(null,arguments).replace('\n','\n'+pre))
 }
 function assert () { console.assert.apply(console, arguments) }
+function delay (f, time) {
+    delay_so_far = delay_so_far + time
+    return setTimeout(f, delay_so_far)
+}   var delay_so_far = 0
+delay.init = () => {delay_so_far = 0}
 
 // Each test is a function in this array
 var tests = [
@@ -83,7 +88,7 @@ var tests = [
     },
 
     function auto_vars (next) {
-        n = require('../server')()
+        var n = require('../server')()
         n('r/*').to_fetch = function (rest, o) {return {rest: rest, o: o}}
         log(n.fetch('r/3'))
         assert(n.fetch('r/3').rest === '3')
@@ -110,6 +115,11 @@ var tests = [
         }
         for (var i=0; i<4; i++)
             n.save({key: 'a/foo', i:i})
+
+        log('Forgetting things now')
+        n('v/*').to_forget = function (vars, star) {log('forgot v/' + star)}
+        n.forget('v/[3,9 4]')
+        n.forget('v/[3,4]')
 
         next()
     },
@@ -205,6 +215,20 @@ var tests = [
             //bus.forget('bar', cb)
             next()
         }, 100)
+    },
+
+    function fetch_once (next) {
+        var calls = 0
+        bus.fetch('fetch_once', function cb (o) {
+            calls++
+            log('Fetch_once called', calls)
+            assert(calls < 2, 'Fetch-once called twice')
+            bus.forget('fetch_once', cb)
+        })
+        bus.save.fire({key: 'fetch_once', _: 0})
+        setTimeout(()=> { bus.save.fire({key: 'fetch_once', _: 1}) }, 10)
+        setTimeout(()=> { bus.save.fire({key: 'fetch_once', _: 2}) }, 20)
+        setTimeout(()=> { next() }, 30 )
     },
 
     // If there's an on_fetch handler, the callback doesn't return
@@ -402,6 +426,89 @@ var tests = [
 
         // XXX todo
         next()
+    },
+
+    function statify (next) {
+        var chokidar = require('chokidar')
+        var watchers = {}
+        fs = require('fs')
+        function read_file (filename, cb) {
+            fs.readFile(filename, function (err, result) {
+                if (err) throw err
+                else cb(null, result + '')
+            })
+            if (!(filename in watchers)) {
+                watchers[filename] = chokidar.watch(filename)
+                watchers[filename].on('change', () => { bus.dirty(this.key) })
+            }
+        }
+
+        read_file = bus.statify(read_file, {to_forget: (json) => {
+            filename = json[0]
+            log('unwatching', filename)
+            //watchers[filename].unwatch(filename)
+            watchers[filename].close()
+            delete watchers[filename]
+        }})
+
+        fs.writeFileSync('/tmp/blah', 'foo')
+
+        bus.honk = 3
+        var runs = 0
+        bus(() => {
+            runs++
+            var result = read_file('/tmp/blah')
+            log('read file as', JSON.stringify(result && result.substr(0,50)))
+            //bus.forget(); return;
+            if (bus.loading())
+                log('Still loading!')
+            else
+                if (result == '1' || result == '2' || result == '3') {
+                    log('done. forgetting')
+                    bus.forget()
+                }
+
+            switch(runs) {
+            case 1:
+                console.assert(result == undefined); break
+            case 2:
+                console.assert(result == 'foo'); break
+            case 3:
+            case 4:
+                console.assert(result == '1' || result == '2' || result == '3'); break;
+            }
+        })
+
+        delay.init()
+        delay(() => {log('* MODIFY 1'); fs.writeFileSync('/tmp/blah', '1')}, 10)
+        delay(() => {log('* MODIFY 2'); fs.writeFileSync('/tmp/blah', '2')}, 200)
+        delay(() => {log('* MODIFY 3'); fs.writeFileSync('/tmp/blah', '3')}, 200)
+
+        delay(() => {console.assert(runs < 4, 'There were', runs, 'runs'); next()}, 200)
+    },
+
+    function readfile (next) {
+        var b = require('../server')(),
+            count = 0
+        fs.writeFileSync('/tmp/blah', '1')
+        b(() => {
+            var r = b.read_file('/tmp/blah')
+            log('Got', r)
+            switch(count++) {
+            case 0:
+                console.assert(r == undefined); break
+            case 1:
+                console.assert(r == '1'); break
+            case 2:
+                console.assert(r == '2'); b.forget(); break
+            case 3:
+                console.assert(false); break
+            }
+        })
+
+        delay(() => {log('* MODIFY 2'); fs.writeFileSync('/tmp/blah', '2')}, 300)
+        delay(() => {log('* MODIFY 3'); fs.writeFileSync('/tmp/blah', '3')}, 300)
+        delay(() => {next()}, 200)
     },
 
     function only_one (next) {
