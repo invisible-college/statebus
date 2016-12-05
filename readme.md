@@ -95,14 +95,15 @@ when viewed through the `sb` proxy interface.
   // Now let's try some combinations
   {_key: '/bar'}     -> {..this is bar..}           // _key means "unwrap this pointer"
 
-  // Marking an array with "_key" means each element is a pointer
+  // On an array, appending "_key" means each element is a pointer
   {bars_key: ['/bar/1', '/bar/2']}               -> {bars: [{..bar1..}, {..bar2..}]}
 
   // You can get the same result by wrapping each element with {_key: ..}
   {bars: [{_key: '/bar/1'}, {_key: '/bar/2'}]}   -> {bars: [{..bar1..}, {..bar2..}]}
 
   // In either case, you can escape an exceptional element in an array by wrapping it
-  {bars_key: ['/bar/1', {_: 'hi!'}]}             -> {bars: [{..bar1..}, 'hi!']}
+  {bars_key: ['/bar/1', {_: 'hi!'}   ]}          -> {bars: [{..bar1..}, 'hi!']}
+  {bars:     [{_key: '/bar/1'}, 'hi!']}          -> {bars: [{..bar1..}, 'hi!']}
 ```
 
 
