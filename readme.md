@@ -66,9 +66,9 @@ sb.foo           // fetch("foo")
 sb["/foo"]       // fetch from server
 sb["/foo"].posts[5].title   // access an array
 
+sb.bar.fi = 3    // save({key: "bar", fi: 3})
 sb.foo = 3       // save({key: "foo", _: 3})
 sb.foo = sb.bar  // save({key: "foo", _: fetch("bar")})
-sb.bar.fi = 3    // save({key: "bar", fi: 3})
 
 sb.foo()         // access the underlying raw JSON: {key: "foo", _: {key: "bar", fi: 3}}
 sb.foo().key     // => "foo"
