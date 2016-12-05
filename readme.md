@@ -63,12 +63,12 @@ This wraps `fetch()` and `save()`. Makes all state look like a big global variab
 sb = bus.sb      // sb might become the new 'bus'
 
 sb.foo           // fetch("foo")
+sb["/foo"]       // fetch from server
+sb["/foo"].posts[5].title   // access an array
+
 sb.foo = 3       // save({key: "foo", _: 3})
 sb.foo = sb.bar  // save({key: "foo", _: fetch("bar")})
 sb.bar.fi = 3    // save({key: "bar", fi: 3})
-
-sb["/foo"]       // fetch from server
-sb["/foo"].posts[5].title   // access an array
 
 sb.foo()         // access the underlying raw JSON: {key: "foo", _: {key: "bar", fi: 3}}
 sb.foo().key     // => "foo"
