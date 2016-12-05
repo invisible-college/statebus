@@ -2,6 +2,57 @@
 - Proxies: `sb["/foo"]` instead of `bus.fetch("/foo")`
 - New JSON encoding
 - URL rewriting: `"/foo"` on client translates to `"foo"` on server
+- Eliminate old callback code with Reify 
+
+## Eliminate old callback code with `reify()`
+
+Now you can transform nested callbacks:
+
+```javascript
+fs.readFile('hello.txt', (err, first_result) => {
+    if (err)
+        console.error('Error', err)
+    else
+        fs.readFile('world.txt', (err, second_result) => {
+            if (err)
+                console.error('Error', err)
+            else
+                fs.writeFile(first_result + second_result)
+        })
+})
+
+```
+
+...into reactive code:
+
+```javascript
+bus(() => {
+    var first_file = readFile('hello.txt')
+    var second_file = readFile('world.txt')
+    console.log(first_file + second_file)
+})
+```
+Isn't that much nicer?
+
+You transform callbacky functions with the `bus.reify()` command:
+```javascript
+var readFile = bus.reify(fs.readFile)  // Overly simplified
+```
+
+The catch is that reified function inputs and outputs must be serializable
+JSON—and `fs.readFile()` returns a `Buffer`.  So let's call `.toString()` on
+the result:
+
+```javascript
+// Wrap fs.readFile() in a function that returns a string:
+readFile = bus.reify(function (path, cb) {
+    fs.readFile(path, (err, result) => cb(err, result.toString()))
+})
+```
+
+You can reify any function where:
+  - The inputs and outputs are serializable in JSON
+  - The last argument is a callback, which takes args `(error, result)`
 
 # What's new in Statebus v4
 

@@ -1067,14 +1067,16 @@
     // ******************
     // Fancy Stuff
 
+    var reify_counter = 0
     function reify (f, options) {
-        name = (options && options.name) || f.name
+        name = (options && options.name) || f.name || (reify_counter+'')
         if (!name) throw 'Refied function needs a name'
-        var prefix = 'funcall/' + name
-        var open_calls = {}
+        var prefix = 'reify/' + name
+        var watching = {}
         bus(prefix + '/*').to_fetch = function (key, json) {
             var args = json
             function cb (err, result) {
+                console.log('reify result is', result, Object.keys(result))
                 if (err) {
                     console.trace('have err:', err, 'and result is', JSON.stringify(result))
                     throw err
@@ -1083,9 +1085,11 @@
             }
             args.push(cb)
             f.apply({key:key}, args)
+            if (options.start_watching && !(key in watching))
+                options.start_watching(args, function () {bus.dirty(key)})
         }
-        if (options.to_forget)
-            bus(prefix + '/*').to_forget = options.to_forget
+        if (options.stop_watching)
+            bus(prefix + '/*').to_forget = options.stop_watching
         return function () {
             var args = [].slice.call(arguments)
             return bus.fetch(prefix + '/' + JSON.stringify(args))._

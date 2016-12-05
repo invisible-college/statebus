@@ -428,7 +428,7 @@ var tests = [
         next()
     },
 
-    function statify (next) {
+    function reify (next) {
         var chokidar = require('chokidar')
         var watchers = {}
         fs = require('fs')
@@ -443,7 +443,7 @@ var tests = [
             }
         }
 
-        read_file = bus.reify(read_file, {to_forget: (json) => {
+        read_file = bus.reify(read_file, {stop_watching: (json) => {
             filename = json[0]
             log('unwatching', filename)
             //watchers[filename].unwatch(filename)

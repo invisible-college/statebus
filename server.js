@@ -1145,22 +1145,23 @@ function make_server_bus (options)
         var fs = require('fs')
 
         bus.read_file = bus.reify(
-            function read_file (filename, cb) {
-                fs.readFile(filename, function (err, result) {
-                    if (err) throw err
-                    else cb(null, result.toString())
+            function (filename, cb) {
+                fs.readFile(filename, (err, result) => {
+                    cb(null, result.toString())
                 })
-                if (!(filename in watchers)) {
+            },
+            {
+                start_watching: (args, dirty) => {
                     watchers[filename] = chokidar.watch(filename)
                     watchers[filename].on('change', () => { bus.dirty(this.key) })
+                },
+                stop_watching: (json) => {
+                    filename = json[0]
+                    // log('unwatching', filename)
+                    watchers[filename].close()
+                    delete watchers[filename]
                 }
-            },
-            {to_forget: (json) => {
-                filename = json[0]
-                // log('unwatching', filename)
-                watchers[filename].close()
-                delete watchers[filename]
-            }})
+            })
         return bus.read_file(filename)
     },
 
