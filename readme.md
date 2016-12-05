@@ -17,7 +17,7 @@ fs.readFile('hello.txt', (err, first_result) => {
             if (err)
                 console.error('Error', err)
             else
-                fs.writeFile(first_result + second_result)
+                fs.writeFile('hello world.txt', first_result + second_result)
         })
 })
 
@@ -29,7 +29,7 @@ fs.readFile('hello.txt', (err, first_result) => {
 bus(() => {
     var first_file = readFile('hello.txt')
     var second_file = readFile('world.txt')
-    fs.writeFile(first_file + second_file)
+    fs.writeFile('hello world.txt', first_file + second_file)
 })
 ```
 Isn't that much nicer?
