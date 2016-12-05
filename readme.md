@@ -40,7 +40,7 @@ var readFile = bus.reify(fs.readFile)  // Overly simplified
 ```
 
 The catch is that reified function inputs and outputs must be serializable
-JSON—and `fs.readFile()` returns a `Buffer`.  So let's call `.toString()` on
+JSON.  And `fs.readFile()` returns a `Buffer`.  So let's call `.toString()` on
 the result:
 
 ```javascript
