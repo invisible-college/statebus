@@ -9,15 +9,15 @@
 Now you can transform nested callbacks:
 
 ```javascript
-fs.readFile('hello.txt', (err, first_result) => {
+fs.readFile('hello.txt', (err, first_file) => {
     if (err)
         console.error('Error', err)
     else
-        fs.readFile('world.txt', (err, second_result) => {
+        fs.readFile('world.txt', (err, second_file) => {
             if (err)
                 console.error('Error', err)
             else
-                fs.writeFile('hello world.txt', first_result + second_result)
+                fs.writeFile('hello world.txt', first_file + second_file)
         })
 })
 
