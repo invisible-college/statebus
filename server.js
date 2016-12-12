@@ -139,6 +139,7 @@ function make_server_bus (options)
         bus.sockjs_server(this.http_server, c) // Serve via sockjs on it
         bus.http = require('express')()
         bus.install_express(bus.http)
+        bus.serve_client_coffee()
         bus.label = bus.label || 'server'
 
         // Custom route
@@ -1148,6 +1149,7 @@ function make_server_bus (options)
         bus.read_file = bus.uncallback(
             function (filename, cb) {
                 fs.readFile(filename, (err, result) => {
+                    if (err) console.error('Error in read_file:', err)
                     cb(null, result.toString())
                 })
             },
@@ -1196,10 +1198,10 @@ function make_server_bus (options)
     },
 
     serve_client_coffee: function serve_client_coffee () {
-        bus.http_serve('/cjs/:filename', (filename) => {
+        bus.http_serve('/client/:filename', (filename) => {
             console.log('##########')
-            filename = /\/cjs\/(.*)/.exec(filename)[0]
-            var source_filename = filename.substr(1).replace(/\.cjs$/, '.coffee')
+            filename = /\/client\/(.*)/.exec(filename)[0]
+            var source_filename = filename.substr(1)
             var source = bus.read_file(source_filename)
             var compiled = require('coffee-script').compile(source, {filename,
                                                                      bare: true,
