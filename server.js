@@ -317,18 +317,18 @@ function make_server_bus (options)
                 }
             })
             if (user_bus_func && !master.options.__secure) {
-                user('/connection').to_fetch = function () {
+                user('connection').to_fetch = function () {
                     var c = user.clone(connections[conn.id])
                     if (c.user) c.user = user.fetch(c.user.key)
                     return c
                 }
-                user('/connection').to_save = function (o) {
+                user('connection').to_save = function (o) {
                     delete o.key
                     connections[conn.id] = o
                     master.save(connections)
                 }
-                user('/connections').to_save = function noop () {}
-                user('/connections').to_fetch = function () {
+                user('connections').to_save = function noop () {}
+                user('connections').to_fetch = function () {
                     var result = []
                     var conns = master.fetch('connections')
                     for (connid in conns)
@@ -691,7 +691,7 @@ function make_server_bus (options)
             for (var k in row)
                 if (row.hasOwnProperty(k))
                     result[k] = (foreign_keys[k] && row[k]
-                                 ? '/' + foreign_keys[k].table + '/' + row[k]
+                                 ? foreign_keys[k].table + '/' + row[k]
                                  : result[k] = row[k])
             if ('other' in result) result.other = JSON.parse(result.other || '{}')
             delete result.id
@@ -711,7 +711,7 @@ function make_server_bus (options)
                 // Convert foreign keys from /customer/3 to 3
                 else if (foreign_keys[col] && typeof val === 'string') {
                     val = remapped_keys.keys[val] || val
-                    val = json[columns[i]].split('/')[2]
+                    val = json[columns[i]].split('/')[1]
                 }
 
                 result.push(val)
@@ -980,7 +980,7 @@ function make_server_bus (options)
 
         // setTimeout(function () {
         //     log('DIRTYING!!!!!')
-        //     user.dirty('/current_user')
+        //     user.dirty('current_user')
         //     log('DIRTIED!!!!!')
         // }, 4000)
 
@@ -1093,7 +1093,7 @@ function make_server_bus (options)
                 return
             }
 
-            var c = client.fetch('/current_user')
+            var c = client.fetch('current_user')
             if (client.loading()) return
             var prefix = client_prefix(c)
 
@@ -1248,7 +1248,7 @@ function make_server_bus (options)
             // {server: {thing: [obj1, obj2], shing: [obj1, obj2], ...}
             //  client: {dong: [obj1, ...]}}
             //
-            // And objects without a number, like '/shong' will go on:
+            // And objects without a number, like 'shong' will go on:
             //  key_tree.server.shong[null]
             var tree = {server: {}, client: {}}
             for (key in cache) {
