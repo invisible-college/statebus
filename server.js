@@ -847,6 +847,7 @@ function make_server_bus (options)
 
         }
         function authenticate (name, pass) {
+            if (!(typeof name === 'string' && typeof pass === 'string')) return false
             if (name === 'key') return false
             var userpass = master.fetch('users/passwords')[name]
             if (!userpass) return null
@@ -1239,6 +1240,48 @@ function make_server_bus (options)
             r.context.socket = socket
         }).listen(filename)
     },
+
+    schema: function schema () {
+        function url_tree (cache) {
+            // The key tree looks like:
+            //
+            // {server: {thing: [obj1, obj2], shing: [obj1, obj2], ...}
+            //  client: {dong: [obj1, ...]}}
+            //
+            // And objects without a number, like '/shong' will go on:
+            //  key_tree.server.shong[null]
+            var tree = {server: {}, client: {}}
+            for (key in cache) {
+                var p = parse_key(key)
+                if (!p) {
+                    console.log('The state dash can\'t deal with key', key)
+                    return null
+                }
+                tree[p.owner][p.name] || (tree[p.owner][p.name] = {})
+                tree[p.owner][p.name][p.number || null] = cache[key]
+            }
+            return tree
+        }
+
+        function parse_key (key) {
+            var word = "([^/]+)"
+            // Matching things like: "/new/name/number"
+            // or:                   "/name/number"
+            // or:                   "/name"
+            // or:                   "name/number"
+            // or:                   "name"
+            // ... and you can optionally include a final slash.
+            var regexp = new RegExp("(/)?(new/)?" +word+ "(/" +word+ ")?(/)?")
+            var m = key.match(regexp)
+            if (!m) return null
+            // indices = [0: has_match, 1: server_owned, 2: is_new, 3: name, 5: number]
+            var owner = m[1] ? 'server' : 'client'
+            return m[0] && {owner:owner, 'new': m[2], name: m[3], number: m[5]}
+        }
+        schema.parse_key = parse_key
+        schema.url_tree = url_tree
+        return url_tree(bus.cache)
+    }
 }
 
     var bus = require('./statebus')()
