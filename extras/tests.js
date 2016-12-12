@@ -8,7 +8,7 @@ function log () {
     console.log(pre+util.format.apply(null,arguments).replace('\n','\n'+pre))
 }
 function assert () { console.assert.apply(console, arguments) }
-function delay (f, time) {
+function delay (time, f) {
     delay_so_far = delay_so_far + time
     return setTimeout(f, delay_so_far)
 }   var delay_so_far = 0
@@ -480,11 +480,11 @@ var tests = [
         })
 
         delay.init()
-        delay(() => {log('* MODIFY 1'); fs.writeFileSync('/tmp/blah', '1')}, 10)
-        delay(() => {log('* MODIFY 2'); fs.writeFileSync('/tmp/blah', '2')}, 200)
-        delay(() => {log('* MODIFY 3'); fs.writeFileSync('/tmp/blah', '3')}, 200)
+        delay(10,  () => {log('* MODIFY 1'); fs.writeFileSync('/tmp/blah', '1')})
+        delay(200, () => {log('* MODIFY 2'); fs.writeFileSync('/tmp/blah', '2')})
+        delay(200, () => {log('* MODIFY 3'); fs.writeFileSync('/tmp/blah', '3')})
 
-        delay(() => {console.assert(runs < 4, 'There were', runs, 'runs'); next()}, 200)
+        delay(200, () => {console.assert(runs < 4, 'There were', runs, 'runs'); next()})
     },
 
     function readfile (next) {
@@ -506,9 +506,9 @@ var tests = [
             }
         })
 
-        delay(() => {log('* MODIFY 2'); fs.writeFileSync('/tmp/blah', '2')}, 300)
-        delay(() => {log('* MODIFY 3'); fs.writeFileSync('/tmp/blah', '3')}, 300)
-        delay(() => {next()}, 200)
+        delay(300, () => {log('* MODIFY 2'); fs.writeFileSync('/tmp/blah', '2')})
+        delay(300, () => {log('* MODIFY 3'); fs.writeFileSync('/tmp/blah', '3')})
+        delay(200, () => {next()})
     },
 
     function proxies (next) {
@@ -571,6 +571,34 @@ var tests = [
             assert( bus.fetch('only_one/3').selected)
             next()
         }, 30)
+    },
+
+    function save_can_trigger_tofetch (next) {
+        // bus.honk = true
+        bus('save_trigger_tofetch').to_fetch =
+            function (k, old) {
+                old.yes = Math.random()
+                return old
+            }
+
+        var obj
+        var triggered = 0
+        bus(() => {
+            log('Aight! Fetching save_trigger_fetch')
+            obj = bus.fetch('save_trigger_tofetch')
+            if (bus.loading()) return
+            triggered++
+            log('Triggered', triggered, 'times', obj)
+
+            // XXX todo: because of a bug in how to_fetch is handled, this triggers 4 times instead of 3
+            assert(triggered <= 4)
+            log('GGGGGGGGGGGG')
+        })
+
+        delay.init()
+        delay(30, () => { log('savin 1!'); obj.a = 1; bus.save(obj) })
+        delay(30, () => { log('savin 2!'); obj.a = 2; bus.save(obj) })
+        delay(30, next)
     },
 
     function rollback_savefire (next) {

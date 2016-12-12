@@ -773,7 +773,9 @@
                 case 'obj':
                     args[func.args[k]] = arg.key ? arg : bus.cache[arg]; break
                 case 'old':
-                    args[func.args[k]] = bus.cache[key_arg()]; break
+                    var key = key_arg()
+                    args[func.args[k]] = bus.cache[key] || (bus.cache[key] = {key:key})
+                    break
                 }
                 //console.log('processed', k, 'at slot', func.args[k], 'to make', args[func.args[k]])
             }
