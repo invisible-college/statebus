@@ -847,15 +847,15 @@ function make_server_bus (options)
 
         }
         function authenticate (name, pass) {
-            if (!(typeof name === 'string' && typeof pass === 'string')) return false
-            if (name === 'key') return false
             var userpass = master.fetch('users/passwords')[name]
-            if (!userpass) return null
-
             master.log('authenticate: we see',
                 master.fetch('users/passwords'),
-                userpass.pass,
+                userpass && userpass.pass,
                 pass)
+
+            if (!(typeof name === 'string' && typeof pass === 'string')) return false
+            if (name === 'key') return false
+            if (!userpass) return null
 
             //console.log('comparing passwords', pass, userpass.pass)
             if (require('bcrypt-nodejs').compareSync(pass, userpass.pass))
