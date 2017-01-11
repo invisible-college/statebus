@@ -721,6 +721,22 @@ var master = require('statebus/server')({              // Define the master bus
     // Anything not matched to the handlers above will automatically pass
     // through to the master bus.
 })
+
+// Now we can define how state on the master bus behaves.
+
+// We want '/blog'.posts to index every post in the system.  So whenever a
+// post is saved to master, let's make sure that '/blog' knows about it.
+master('/post/*').to_save = function (o) {
+    var blog = master.fetch('/blog')       // Get the master list of posts
+    blog.posts = blog.posts || []          // Initialize it if empty
+
+                                           // If this post isn't indexed yet...
+    if (!blog.posts.find(function (p) {return p.key === o.key})) {
+        blog.posts.push(o)                 // Then add it to the blog
+        master.save(blog)                  // And save our change
+    }
+    master.save.fire(o)                    // Now the save is complete.
+}
 ```
 
 # What's missing
