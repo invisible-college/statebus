@@ -232,7 +232,7 @@ bus('one_plus/*').to_fetch = function (key) {
    return {result: 1 + num}
 }
 
-fetch('one_plus/2').num   // result: 3
+fetch('one_plus/2').result   // ==>: 3
 ```
 
 The general form of a `to_fetch` handler is:
@@ -487,8 +487,9 @@ fetch('/user/mike')
 
 ### The `/connections` state
 
-This is the list of all clients connected to the server—whether logged, in or not.  For example, this
-server has 3 connected clients, and two of them are the same user (me):
+This is the list of all clients connected to the server—whether logged in or
+not.  For example, this server has 3 connected clients, and two of them are
+the same user (me):
 
 ```javascript
 {
@@ -838,11 +839,7 @@ Each bus implements the four methods of the statebus protocol: `fetch`, `save`, 
 
 
 ### `bus(func)`
-- Equivalent to:
-```javascript
-bus.reactive(func)
-func()
-```
+- This is the shorthand equivalent of `bus.reactive(func); func()`
 
 ### `bus.loading(key=null)`
   - If given a `key`, returns true if `bus` has pending fetches waiting for data to key from other busses.
