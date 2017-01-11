@@ -232,7 +232,7 @@ bus('one_plus/*').to_fetch = function (key) {
    return {result: 1 + num}
 }
 
-fetch('one_plus/2').num   // result: 3
+fetch('one_plus/2').result   // ==> 3
 ```
 
 The general form of a `to_fetch` handler is:
@@ -487,7 +487,7 @@ fetch('/user/mike')
 
 ### The `/connections` state
 
-This is the list of all clients connected to the server—whether logged, in or not.  For example, this
+This is the list of all clients connected to the server—whether logged in or not.  For example, this
 server has 3 connected clients, and two of them are the same user (me):
 
 ```javascript
