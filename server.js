@@ -137,8 +137,19 @@ function make_server_bus (options)
         // Create our own http server
         bus.make_http_server({port: port, on_listen: on_listen})
         bus.sockjs_server(this.http_server, c) // Serve via sockjs on it
-        bus.http = require('express')()
-        bus.install_express(bus.http)
+        var express = require('express')
+        bus.express = express()
+        bus.http = express.Router()
+        bus.install_express(bus.express)
+
+        // User will put their routes in here
+        bus.express.use('/', bus.http)
+
+        // Add a fallback that goes to state
+        // bus.express.get('*', function (req, res) {
+        //     bus.fetch(  // Unfinished
+        // })
+
         bus.serve_client_coffee()
         bus.label = bus.label || 'server'
 
@@ -347,168 +358,21 @@ function make_server_bus (options)
         s.installHandlers(httpserver, {prefix:'/statebus'})
     },
 
-    ws_client: function ws_client (prefix, url, account) {
-        var WebSocket = require('websocket').w3cwebsocket
-        url = url || 'wss://stateb.us:3005'
-        var sock
-        var attempts = 0
-        var outbox = []
-        var fetched_keys = new bus.Set()
-        var heartbeat
-        account = account || bus.account || {}
-        if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
-        function send (o) {
-            bus.log('sockjs.send:', JSON.stringify(o))
-            outbox.push(JSON.stringify(o))
-            flush_outbox()
+    ws_client: function (prefix, url, account) {
+        function make_sock (url) {
+            WebSocket = require('websocket').w3cwebsocket
+            return new WebSocket(url + '/statebus/websocket')
         }
-        bus.ws_send = send
-        function flush_outbox() {
-            if (sock.readyState === 1)
-                while (outbox.length > 0)
-                    sock.send(outbox.shift())
-            else
-                setTimeout(flush_outbox, 400)
+        function login (send_login_info) {
+            account = account || bus.account || {}
+            account.clientid = (account.clientid
+                                || (Math.random().toString(36).substring(2)
+                                    + Math.random().toString(36).substring(2)
+                                    + Math.random().toString(36).substring(2)))
+
+            send_login_info(account.clientid, account.name, account.pass)
         }
-        var preprefix = prefix.slice(0, -1)
-        function add_prefix (key) { return preprefix + key }
-        function add_prefixes (obj) { return bus.translate_keys(bus.clone(obj), add_prefix) }
-        function rem_prefix (key) { return key.substr(preprefix.length) }
-        function rem_prefixes (obj) { return bus.translate_keys(bus.clone(obj), rem_prefix) }
-        bus(prefix).to_save
-            = function ws_save   (obj) { bus.save.fire(obj)
-                                         obj = rem_prefixes(obj)
-                                         send({method: 'save', obj: obj})
-                                       }
-        bus(prefix).to_fetch
-            = function ws_fetch  (key) { key = rem_prefix(key)
-                                         send({method: 'fetch', key: key}),
-                                         fetched_keys.add(key) }
-        bus(prefix).to_forget
-            = function ws_forget (key) { key = rem_prefix(key)
-                                         send({method: 'forget', key: key}),
-                                         fetched_keys.delete(key) }
-        bus(prefix).to_delete
-            = function ws_delete (key) { key = rem_prefix(key)
-                                         send({method: 'delete', key: key}) }
-
-        function connect () {
-            console.log('[ ] trying to open')
-            sock = new WebSocket(url + '/statebus/websocket')
-            sock.onopen = function()  {
-                console.log('[*] open')
-
-                account.clientid = (account.clientid
-                                    || (Math.random().toString(36).substring(2)
-                                        + Math.random().toString(36).substring(2)
-                                        + Math.random().toString(36).substring(2)))
-
-                var introduction = [JSON.stringify(
-                    {method: 'save', obj: {key: 'current_user', client: account.clientid}}
-                )]
-                if (account.name && account.pass)
-                    introduction.push(JSON.stringify(
-                        {method: 'save',
-                         obj: {key: 'current_user',
-                               login_as: {name: account.name, pass: account.pass}}}))
-                outbox = introduction.concat(outbox)
-                flush_outbox()
-
-                if (attempts > 0) {
-                    // Then we need to refetch everything, cause it
-                    // might have changed
-                    recent_saves = []
-                    var keys = fetched_keys.all()
-                    for (var i=0; i<keys.length; i++)
-                        send({method: 'fetch', key: keys[i]})
-                }
-
-                attempts = 0
-                //heartbeat = setInterval(function () {send({method: 'ping'})}, 5000)
-            }
-            sock.onclose   = function()  {
-                console.log('[*] close')
-                clearInterval(heartbeat); heartbeat = null
-                setTimeout(connect, attempts++ < 3 ? 1500 : 5000)
-            }
-
-            sock.onmessage = function(event) {
-                // Todo: Perhaps optimize processing of many messages
-                // in batch by putting new messages into a queue, and
-                // waiting a little bit for more messages to show up
-                // before we try to re-render.  That way we don't
-                // re-render 100 times for a function that depends on
-                // 100 items from server while they come in.  This
-                // probably won't make things render any sooner, but
-                // will probably save energy.
-
-                try {
-                    var message = JSON.parse(event.data)
-
-                    // We only take saves from the server for now
-                    if (message.method.toLowerCase() !== 'save') throw 'barf'
-                    bus.log('ws_client received', message.obj)
-                    bus.save.fire(add_prefixes(message.obj))
-                } catch (err) {
-                    console.error('Received bad ws message from '
-                                  +url+': ', event.data, err)
-                }
-            }
-
-        }
-        connect()
-    },
-
-    socketio_server: function socketio_server (http_server, socket_io_module) {
-        var io = socket_io_module.listen(http_server)
-        
-        var fetches_in = {}  // Every key that every client has fetched.
-        io.on('connection', function(client){
-            bus.log('New connection from', client.id)
-
-            function save_cb (obj) {
-                // Error check
-                if (!io.sockets.connected[client.id]) {
-                    console.error("DAMN got a stale socket_id", client.id,
-                                  '(the keys are', Object.keys(io.sockets.connected))
-                    disconnect_everything()
-                    return
-                }
-
-                // Do the save
-                bus.log('Sending', obj.key, 'to', client.id)
-                client.emit('save', obj)
-            }
-
-            function disconnect_everything() {
-                bus.log(client.id, 'just disconnected')
-                for (var key in fetches_in)
-                    forget(key, save_cb)
-            }
-            client.on('disconnect', disconnect_everything)
-
-            client.on('fetch', function (key) {
-                bus.log('socketio_server: fetching', key, 'for', client.id)
-                fetch(key, save_cb)
-                fetches_in[key] = true
-            })
-            client.on('save', function (obj) {
-                bus.log('Saving', obj, 'for', client.id)
-                save(obj, save_cb)
-            })
-            client.on('forget', function (key) {
-                bus.log('Forgetting', key, 'for', client.id)
-                forget(key, save_cb)
-                delete fetches_in[key]
-            })
-            client.on('delete', function (key) {
-                bus.log('Deleting', key)
-                del(key)
-                // del(key) doesn't need a second arg, because all
-                // that does is skip any .on_del listeners, and we
-                // don't have any here.
-            })
-        })
+        bus.net_client(prefix, url, make_sock, login)
     },
 
     file_store: (function () {
@@ -1199,7 +1063,6 @@ function make_server_bus (options)
 
     serve_client_coffee: function serve_client_coffee () {
         bus.http_serve('/client/:filename', (filename) => {
-            console.log('##########')
             filename = /\/client\/(.*)/.exec(filename)[0]
             var source_filename = filename.substr(1)
             var source = bus.read_file(source_filename)

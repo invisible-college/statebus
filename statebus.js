@@ -139,7 +139,7 @@
             var was_saving = currently_saving
             currently_saving = obj.key
 
-            // Call the to_save() handler!
+            // Call the to_save() handlers!
             var num_handlers = bus.route(obj.key, 'to_save', obj, t)
             if (num_handlers === 0)
                 // And fire if there weren't any!
@@ -441,7 +441,8 @@
         // Marks a fetcher as dirty, meaning the .to_fetch will re-run
         statelog(brown, '*', bus + ".dirty('"+key+"')")
         if (key in fetches_out)
-            dirty_fetchers.add(funk_key(fetches_out[key]))
+            for (var i=0; i<fetches_out[key].length; i++)
+                dirty_fetchers.add(funk_key(fetches_out[key][i]))
         clean_timer = clean_timer || setTimeout(clean)
     }
 
@@ -809,7 +810,7 @@
         f.proxies_for = func
         f.arg = arg
 
-        // on_fetch handlers stop re-running when the key is forgotten
+        // to_fetch handlers stop re-running when the key is forgotten
         if (method === 'to_fetch') {
             var key = arg
             function handler_done () {
@@ -818,12 +819,13 @@
             }
             bind(key, 'to_forget', handler_done)
 
-            // Check if it's doubled-up
-            if (fetches_out[key])
-                console.error('Two .to_fetch functions are running on the same key',
-                              key+'!', funk_name(funck), funk_name(fetches_out[key]))
+            // // Check if it's doubled-up
+            // if (fetches_out[key])
+            //     console.error('Two .to_fetch functions are running on the same key',
+            //                   key+'!', funk_name(funck), funk_name(fetches_out[key]))
             
-            fetches_out[arg] = f       // Record active to_fetch handler
+            fetches_out[arg] = fetches_out[arg] || []
+            fetches_out[arg].push(f)   // Record active to_fetch handler
             pending_fetches[arg] = f   // Record that the fetch is pending
         }
 
@@ -843,10 +845,10 @@
         for (var i=0; i<handlers.length; i++)
             bus.run_handler(handlers[i].func, method, arg, {t: t, binding: handlers[i].key})
 
-        if (method === 'to_fetch')
-            console.assert(handlers.length<2,
-                           'Two to_fetch functions are registered for the same key '+key,
-                           handlers)
+        // if (method === 'to_fetch')
+        //     console.assert(handlers.length<2,
+        //                    'Two to_fetch functions are registered for the same key '+key,
+        //                    handlers)
         return handlers.length
     }
 
@@ -1000,72 +1002,6 @@
         })
     }
 
-    function deep_map (object, func) {
-        object = func(object)
-
-        // Recurse through each element in arrays
-        if (Array.isArray(object))
-            for (var i=0; i < object.length; i++)
-                object[i] = deep_map(object[i], func)
-
-        // Recurse through each property on objects
-        else if (typeof object === 'object')
-            for (var k in object)
-                object[k] = deep_map(object[k], func)
-
-        return object
-    }
-
-    function translate_keys (obj, f) {
-        // Recurse through each element in arrays
-        if (Array.isArray(obj))
-            for (var i=0; i < obj.length; i++)
-                translate_keys(obj[i], f)
-
-        // Recurse through each property on objects
-        else if (typeof obj === 'object')
-            for (var k in obj) {
-                if (k === 'key' || /.*_key$/.test(k))
-                    if (typeof obj[k] == 'string')
-                        obj[k] = f(obj[k])
-                    else if (Array.isArray(obj[k]))
-                        for (var i=0; i < obj[k].length; i++) {
-                            if (typeof obj[k][i] === 'string')
-                                obj[k][i] = f(obj[k][i])
-                        }
-                translate_keys(obj[k], f)
-            }
-        return obj
-    }
-    function escape_key(k) {
-        return k.replace(/(_(keys?|time)?$|^key$)/, '$1_')
-    }
-    function unescape_key (k) {
-        return k.replace(/(_$)/, '')
-    }
-    // function escape_obj (o) {
-    //     var result = {}
-    //     for (k in o)
-    //         result[escape_key(k)] = escape_obj(o[k])
-    //     return result
-    // }
-    // function unescape_obj (o) {
-    // }
-    // // Assumes there are no pointers
-    // function hash (o) {
-    //     var data = escape_obj(o)
-
-    //     return {
-    //         get: function (k) {
-    //             return unescape_obj(data[k])
-    //         },
-    //         set: function (k, v) {
-    //             data[escape_key(k)] = v
-    //         }
-    //     }
-    // }
-
-
     // ******************
     // Fancy Stuff
 
@@ -1116,25 +1052,31 @@
         function item_proxy (base, o) {
             if (typeof o !== 'object' && o !== null) return o
 
-            return new Proxy(o, {
-                get: function get(o, k) {
-                    if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
-                        return undefined
+            var f = function () {}
+            return new Proxy(f, {
+                get: function get(f, k) {
+                    if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol') {
+                        console.log('got', k, '!! type of is', typeof k)
+                    //     if (typeof k !== 'symbol') return undefined
+                    //     return function () {return o}
+                    }
+                    if (typeof k === 'symbol')
+                        return function () {return JSON.stringify(o)}
                     k = escape_key(k)
                     return item_proxy(base, o[k])
                 },
-                set: function set(o, k, v) {
+                set: function set(f, k, v) {
                     var result = o[escape_key(k)] = v
                     bus.save(base)
                     return strict_mode ? true : result  // Strict mode forces us to return true
                 },
-                has: function has(o, k) {
+                has: function has(f, k) {
                     return escape_key(k) in o
                 },
-                deleteProperty: function del (o, k) {
+                deleteProperty: function del (f, k) {
                     delete o[escape_key(k)]
                 },
-                apply: function apply (o, This, args) {
+                apply: function apply (f, This, args) {
                     return o
                 }
             })}
@@ -1179,6 +1121,199 @@
         Object.defineProperty(bus, 'sb', { get: sb })
     else
         bus.sb = "Your javascript doesn't support ES6 Proxy"
+
+
+    // ******************
+    // Network client
+    function net_client(prefix, url, socket_api, login) {
+        var preprefix = prefix.slice(0,-1)
+        var is_absolute = /^statei?:\/\//
+        var has_prefix = new RegExp('^' + preprefix)
+        var bus = this
+        var recent_saves = []
+        var sock
+        var attempts = 0
+        var outbox = []
+        var fetched_keys = new bus.Set()
+        var heartbeat
+        if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
+        function nlog (s) {
+            if (nodejs) {console.log(s)} else console.log('%c' + s, 'color: blue')
+        }
+        function send (o, pushpop) {
+            pushpop = pushpop || 'push'
+            bus.log('sockjs.send:', JSON.stringify(o))
+            outbox[pushpop](JSON.stringify(o))
+            flush_outbox()
+        }
+        function flush_outbox() {
+            if (sock.readyState === 1)
+                while (outbox.length > 0)
+                    sock.send(outbox.shift())
+            else
+                setTimeout(flush_outbox, 400)
+        }
+        function add_prefix (key) {
+            return is_absolute.test(key) ? key : preprefix + key
+        }
+        function rem_prefix (key) {
+            return has_prefix.test(key) ? key.substr(preprefix.length) : key
+        }
+        function add_prefixes (obj) { return bus.translate_keys(bus.clone(obj), add_prefix) }
+        function rem_prefixes (obj) { return bus.translate_keys(bus.clone(obj), rem_prefix) }
+
+        // Todo: I think I'd like to change this protocol to:
+        //   {save: obj}
+        //   {fetch: key}
+        //   {forget: key}
+        //   {delete: key}
+        // instead of
+        //   {method: 'save', obj: obj}
+        //   {method: 'fetch', key: key}
+        //   {method: 'forget', key: key}
+        //   {method: 'delete', key: key}
+        // When we add more parameters, they can still appear like:
+        //   {save: obj, version: v, parents: [...]}
+        bus(prefix).to_save   = function (obj) { bus.save.fire(obj)
+                                                 obj = rem_prefixes(obj)
+                                                 send({method: 'save', obj: obj})
+                                               }
+        bus(prefix).to_fetch  = function (key) { key = rem_prefix(key)
+                                                 send({method: 'fetch', key: key}),
+                                                 fetched_keys.add(key) }
+        bus(prefix).to_forget = function (key) { key = rem_prefix(key)
+                                                 send({method: 'forget', key: key}),
+                                                 fetched_keys.delete(key) }
+        bus(prefix).to_delete = function (key) { key = rem_prefix(key)
+                                                 send({method: 'delete', key: key}) }
+
+        function connect () {
+            nlog('[ ] trying to open ' + url)
+            sock = socket_api(url)
+            sock.onopen = function()  {
+                nlog('[*] opened ' + url)
+
+                // Login
+                login(function (clientid, name, pass) {
+                    var i = []
+                    function intro (o) {i.push(JSON.stringify({method: 'save', obj: o}))}
+                    if (clientid)
+                        intro({key: 'current_user', client: clientid})
+                    if (name && pass)
+                        intro({key: 'current_user', login_as: {name: name, pass: pass}})
+                    outbox = i.concat(outbox); flush_outbox()
+                })
+
+                // Reconnect
+                if (attempts > 0) {
+                    // Then we need to refetch everything, cause it
+                    // might have changed
+                    recent_saves = []
+                    var keys = fetched_keys.values()
+                    for (var i=0; i<keys.length; i++)
+                        send({method: 'fetch', key: keys[i]})
+                }
+
+                attempts = 0
+                //heartbeat = setInterval(function () {send({method: 'ping'})}, 5000)
+            }
+            sock.onclose   = function()  {
+                nlog('[*] closed ' + url)
+                heartbeat && clearInterval(heartbeat); heartbeat = null
+                setTimeout(connect, attempts++ < 3 ? 1500 : 5000)
+
+                // Remove all fetches and forgets from queue
+                var new_outbox = []
+                var bad = {'fetch':1, 'forget':1}
+                for (var i=0; i<outbox.length; i++)
+                    if (!bad[JSON.parse(outbox[i]).method])
+                        new_outbox.push(outbox[i])
+                outbox = new_outbox
+            }
+
+            sock.onmessage = function(event) {
+                // Todo: Perhaps optimize processing of many messages
+                // in batch by putting new messages into a queue, and
+                // waiting a little bit for more messages to show up
+                // before we try to re-render.  That way we don't
+                // re-render 100 times for a function that depends on
+                // 100 items from server while they come in.  This
+                // probably won't make things render any sooner, but
+                // will probably save energy.
+
+                //console.log('[.] message')
+                try {
+                    var message = JSON.parse(event.data)
+                    var method = message.method.toLowerCase()
+
+                    // Convert v3 pubs to v4 saves for compatibility
+                    if (method == 'pub') method = 'save'
+                    // We only take saves from the server for now
+                    if (method !== 'save' && method !== 'pong') throw 'barf'
+                    bus.log('sockjs_client received', message.obj)
+                    bus.save.fire(add_prefixes(message.obj))
+                } catch (err) {
+                    console.error('Received bad sockjs message from '
+                                  +url+': ', event.data, err)
+                    return
+                }
+            }
+
+        }
+        connect()
+    }
+
+    function go_net (socket_api, login) {
+        var connections = {}
+        function get_domain(key) { // Returns e.g. "state://foo.com"
+            var m = key.match(/^statei?\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
+            // if (!m) throw Error('Bad url: ', key)
+            return m && m[0]
+        }
+
+        function rfetch (k) {
+            var d = get_domain(k)
+            if (d && !connections[d]) {
+                bus.net_client(d + '/*', d, socket_api, login)
+                connections[d] = true
+            }
+        }
+        bus('state://*').to_fetch = rfetch
+        bus('statei://*').to_fetch = rfetch
+    }
+
+    // ******************
+    // Key translation
+    function translate_keys (obj, f) {
+        // Recurse through each element in arrays
+        if (Array.isArray(obj))
+            for (var i=0; i < obj.length; i++)
+                translate_keys(obj[i], f)
+
+        // Recurse through each property on objects
+        else if (typeof obj === 'object')
+            for (var k in obj) {
+                if (k === 'key' || /.*_key$/.test(k))
+                    if (typeof obj[k] == 'string')
+                        obj[k] = f(obj[k])
+                    else if (Array.isArray(obj[k]))
+                        for (var i=0; i < obj[k].length; i++) {
+                            if (typeof obj[k][i] === 'string')
+                                obj[k][i] = f(obj[k][i])
+                        }
+                translate_keys(obj[k], f)
+            }
+        return obj
+    }
+    function escape_key(k) {
+        return k.replace(/(_(keys?|time)?$|^key$)/, '$1_')
+    }
+    function unescape_key (k) {
+        return k.replace(/(_$)/, '')
+    }
+
+    function key_id(string) { return string.match(/\/?[^\/]+\/(\d+)/)[1] }
+    function key_name(string) { return string.match(/\/?([^\/]+).*/)[1] }
 
     // ******************
     // Utility funcs
@@ -1402,8 +1537,6 @@
         throw "You hit a Statebus bug!"
     }
 
-    function key_id(string) { return string.match(/\/?[^\/]+\/(\d+)/)[1] }
-    function key_name(string) { return string.match(/\/?([^\/]+).*/)[1] }
     function funk_key (funk) {
         if (!funk.statebus_id) {
             funk.statebus_id = Math.random().toString(36).substring(7)
@@ -1519,6 +1652,7 @@
                'pending_fetches fetches_in loading_keys loading',
                'global_funk busses rerunnable_funks',
                'escape_key unescape_key translate_keys',
+               'net_client go_net',
                'Set One_To_Many clone extend deep_map deep_equals validate sorta_diff log deps'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)

@@ -51,144 +51,27 @@
     function set_cookie (key, val) {
         document.cookie = key + '=' + val + '; Expires=21 Oct 2025 00:0:00 GMT;'
     }
-    function sockjs_client(prefix, url) {
-        var bus = this
-        var recent_saves = []
-        var sock
-        var attempts = 0
-        var outbox = []
-        var fetched_keys = new bus.Set()
-        var heartbeat
-        url = url.replace(/^state:\/\//, 'https://')
-        url = url.replace(/^statei:\/\//, 'http://')
-        if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
-        function send (o, pushpop) {
-            pushpop = pushpop || 'push'
-            bus.log('sockjs.send:', JSON.stringify(o))
-            outbox[pushpop](JSON.stringify(o))
-            flush_outbox()
+    function sockjs_client (prefix, url) {
+        function socket_api (url) {
+            url = url.replace(/^state:\/\//, 'https://')
+            url = url.replace(/^statei:\/\//, 'http://')
+            return new SockJS(url + '/statebus')
         }
-        function flush_outbox() {
-            if (sock.readyState === 1)
-                while (outbox.length > 0)
-                    sock.send(outbox.shift())
-            else
-                setTimeout(flush_outbox, 400)
-        }
-        var preprefix = prefix.slice(0,-1)
-        function add_prefix (key) { return preprefix + key }
-        function add_prefixes (obj) { return bus.translate_keys(bus.clone(obj), add_prefix) }
-        function rem_prefix (key) { return key.substr(preprefix.length) }
-        function rem_prefixes (obj) { return bus.translate_keys(bus.clone(obj), rem_prefix) }
-        bus(prefix).to_save   = function (obj) { bus.save.fire(obj)
-                                                 obj = rem_prefixes(obj)
-                                                 send({method: 'save', obj: obj})
-                                                 if (window.ignore_flashbacks)
-                                                     recent_saves.push(JSON.stringify(obj))
-                                                 if (recent_saves.length > 100) {
-                                                     var extra = recent_saves.length - 100
-                                                     recent_saves.splice(0, extra)
-                                                 }
-                                               }
-        bus(prefix).to_fetch  = function (key) { key = rem_prefix(key)
-                                                 send({method: 'fetch', key: key}),
-                                                 fetched_keys.add(key) }
-        bus(prefix).to_forget = function (key) { key = rem_prefix(key)
-                                                 send({method: 'forget', key: key}),
-                                                 fetched_keys.delete(key) }
-        bus(prefix).to_delete = function (key) { key = rem_prefix(key)
-                                                 send({method: 'delete', key: key}) }
-
-        function connect () {
-            console.log('%c[ ] trying to open ' + url, 'color: blue')
-            sock = sock = new SockJS(url + '/statebus')
-            sock.onopen = function()  {
-                console.log('%c[*] opened ' + url, 'color: blue')
-
-                var me = fetch('ls/me')
-                bus.log('connect: me is', me)
-                if (!me.client) {
-                    me.client = (Math.random().toString(36).substring(2)
-                                 + Math.random().toString(36).substring(2)
-                                 + Math.random().toString(36).substring(2))
-                    save(me)
-                }
-
-                set_cookie('client', me.client)
-                send({method: 'save', obj: {key: 'current_user', client: me.client}},
-                     'unshift')
-
-                if (attempts > 0) {
-                    // Then we need to refetch everything, cause it
-                    // might have changed
-                    recent_saves = []
-                    var keys = fetched_keys.values()
-                    for (var i=0; i<keys.length; i++)
-                        send({method: 'fetch', key: keys[i]})
-                }
-
-                attempts = 0
-                //heartbeat = setInterval(function () {send({method: 'ping'})}, 5000)
-            }
-            sock.onclose   = function()  {
-                console.log('%c[*] closed ' + url, 'color: blue')
-                heartbeat && clearInterval(heartbeat); heartbeat = null
-                setTimeout(connect, attempts++ < 3 ? 1500 : 5000)
-
-                // Remove all fetches and forgets from queue
-                var new_outbox = []
-                var bad = {'fetch':1, 'forget':1}
-                for (var i=0; i<outbox.length; i++)
-                    if (!bad[JSON.parse(outbox[i]).method])
-                        new_outbox.push(outbox[i])
-                outbox = new_outbox
+        function login (send_login_info) {
+            var me = fetch('ls/me')
+            bus.log('connect: me is', me)
+            if (!me.client) {
+                me.client = (Math.random().toString(36).substring(2)
+                             + Math.random().toString(36).substring(2)
+                             + Math.random().toString(36).substring(2))
+                save(me)
             }
 
-            sock.onmessage = function(event) {
-                // Todo: Perhaps optimize processing of many messages
-                // in batch by putting new messages into a queue, and
-                // waiting a little bit for more messages to show up
-                // before we try to re-render.  That way we don't
-                // re-render 100 times for a function that depends on
-                // 100 items from server while they come in.  This
-                // probably won't make things render any sooner, but
-                // will probably save energy.
-
-                //console.log('[.] message')
-                try {
-                    var message = JSON.parse(event.data)
-                    var method = message.method.toLowerCase()
-
-                    // Convert v3 pubs to v4 saves for compatibility
-                    if (method == 'pub') method = 'save'
-                    // We only take saves from the server for now
-                    if (method !== 'save' && method !== 'pong') throw 'barf'
-                    bus.log('sockjs_client received', message.obj)
-
-                    var is_recent_save = false
-                    if (window.ignore_flashbacks) {
-                        var s = JSON.stringify(message.obj)
-                        for (var i=0; i<recent_saves.length; i++)
-                            if (s === recent_saves[i]) {
-                                is_recent_save = true
-                                recent_saves.splice(i, 1)
-                            }
-                        // bus.log('Msg', message.obj.key,
-                        //         is_recent_save?'is':'is NOT', 'a flashback')
-                    }
-
-                    if (!is_recent_save)
-                        bus.save.fire(add_prefixes(message.obj))
-                        //setTimeout(function () {bus.announce(message.obj)}, 1000)
-                } catch (err) {
-                    console.error('Received bad sockjs message from '
-                                  +url+': ', event.data, err)
-                    return
-                }
-            }
-
+            set_cookie('client', me.client)
+            send_login_info(me.client)
         }
-        connect()
+        bus.net_client(prefix, url, socket_api, login)
+        bus.go_net(socket_api, login)
     }
 
     function localstorage_client (prefix) {

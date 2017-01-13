@@ -117,7 +117,7 @@ var tests = [
             n.save({key: 'a/foo', i:i})
 
         log('Forgetting things now')
-        n('v/*').to_forget = function (vars, star) {log('forgot v/' + star)}
+        n('v/*').to_forget = function (vars, star) {log('(from auto_vars) forgot v/' + star)}
         n.forget('v/[3,9 4]')
         n.forget('v/[3,4]')
 
@@ -164,6 +164,30 @@ var tests = [
             }
             count++
         })
+    },
+
+    // Multi-handlers
+    function multiple_handlers1 (next) {
+        var cuss = require('../server')()
+        cuss('foo').to_fetch = () => {log('do nothing 1')}
+        cuss('foo').to_fetch = () => {log('do nothing 2')}
+        cuss('foo').to_fetch = () => (log('doing something'),{b: 3})
+        cuss.fetch('foo', (o) => {
+            log('Multi-handle got', o)
+            cuss.forget()
+            setTimeout(()=>{next()})
+        })
+    },
+
+    function multiple_handlers2 (next) {
+        var cuss = require('../server')()
+        cuss('foo').to_save = (o) => {log('do nothing 1')}
+        cuss('foo').to_save = (o) => {log('do nothing 2')}
+        cuss('foo').to_save = (o) => {log('doin something'); cuss.save.fire(o)}
+        //cuss('foo').to_save = (o) => {log('doin abortion'); cuss.save.abort(o)}
+        cuss.save({key: 'foo', b: 55})
+        log('over and out')
+        setTimeout(()=>{next()})
     },
 
     // Callbacks are reactive
@@ -780,7 +804,6 @@ var tests = [
 
         s = require('../server.js')()
         s.label = 's'
-        //s.honk = true
         log('Saving /far on server')
         s.save({key: 'far', away:'is this'})
         s.serve({port: 3948, client_definition: User, file_store: false})
@@ -788,18 +811,22 @@ var tests = [
         c = require('../server.js')()
         c.label = 'c'
         c.ws_client('/*', 'state://localhost:3948')
+
+        // s.honk = true
+        // c.honk = true
+
         setTimeout(function () {
             log('Fetching /far on client')
-            var done = false   // This shouldn't be necessary
+            var count = 0
             c.fetch('/far', function (o) {
+                log('cb !!!!!!!!! --- ^_^')
                 c.fetch('/far')
                 if (o.away === 'is this') {
                     log('We got '+o.key+' from the server!')
-                    // log('Because handlers is\n', c.handlers.hash,
-                    //     '\n....and wildcards is\n', c.wildcard_handlers)
-                    c.forget()        // This forget isn't working
-                    if (done) return  // So I'm explicitly quitting instead
-                    done = true       // But we should fix forget() soon
+
+                    c.forget()
+                    console.assert(count++ === 0, "Forget didn't work.")
+
                     setTimeout(function () {next()})
                 }
             })
@@ -807,7 +834,7 @@ var tests = [
 
         var matches = new Set()
         for (var k in s.busses) {
-            log("::::", k, s.busses[k].toString())
+            log("Checking unique bus id", k, 'with name', s.busses[k].toString())
             console.assert(!matches.has(k), 'duplicate bus id', k)
             matches.add(k)
         }
