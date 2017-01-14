@@ -1130,7 +1130,6 @@
         var is_absolute = /^statei?:\/\//
         var has_prefix = new RegExp('^' + preprefix)
         var bus = this
-        var recent_saves = []
         var sock
         var attempts = 0
         var outbox = []
@@ -1142,6 +1141,7 @@
         }
         function send (o, pushpop) {
             pushpop = pushpop || 'push'
+            o = rem_prefixes(o)
             bus.log('sockjs.send:', JSON.stringify(o))
             outbox[pushpop](JSON.stringify(o))
             flush_outbox()
@@ -1175,17 +1175,12 @@
         // When we add more parameters, they can still appear like:
         //   {save: obj, version: v, parents: [...]}
         bus(prefix).to_save   = function (obj) { bus.save.fire(obj)
-                                                 obj = rem_prefixes(obj)
-                                                 send({method: 'save', obj: obj})
-                                               }
-        bus(prefix).to_fetch  = function (key) { key = rem_prefix(key)
-                                                 send({method: 'fetch', key: key}),
+                                                 send({method: 'save', obj: obj}) }
+        bus(prefix).to_fetch  = function (key) { send({method: 'fetch', key: key}),
                                                  fetched_keys.add(key) }
-        bus(prefix).to_forget = function (key) { key = rem_prefix(key)
-                                                 send({method: 'forget', key: key}),
+        bus(prefix).to_forget = function (key) { send({method: 'forget', key: key}),
                                                  fetched_keys.delete(key) }
-        bus(prefix).to_delete = function (key) { key = rem_prefix(key)
-                                                 send({method: 'delete', key: key}) }
+        bus(prefix).to_delete = function (key) { send({method: 'delete', key: key}) }
 
         function connect () {
             nlog('[ ] trying to open ' + url)
@@ -1208,7 +1203,6 @@
                 if (attempts > 0) {
                     // Then we need to refetch everything, cause it
                     // might have changed
-                    recent_saves = []
                     var keys = fetched_keys.values()
                     for (var i=0; i<keys.length; i++)
                         send({method: 'fetch', key: keys[i]})
@@ -1218,6 +1212,10 @@
                 //heartbeat = setInterval(function () {send({method: 'ping'})}, 5000)
             }
             sock.onclose   = function()  {
+                if (done) {
+                    nlog('[*] closed ' + url + '. Goodbye!')
+                    return
+                }
                 nlog('[*] closed ' + url)
                 heartbeat && clearInterval(heartbeat); heartbeat = null
                 setTimeout(connect, attempts++ < 3 ? 1500 : 5000)
@@ -1261,6 +1259,9 @@
 
         }
         connect()
+
+        var done = false
+        return {send: send, sock: sock, close: function () {done = true; sock.close()}}
     }
 
     function go_net (socket_api, login) {
@@ -1271,15 +1272,47 @@
             return m && m[0]
         }
 
-        function rfetch (k) {
+        function make_connection (k) {
             var d = get_domain(k)
             if (d && !connections[d]) {
-                bus.net_client(d + '/*', d, socket_api, login)
-                connections[d] = true
+                connections[d] = bus.net_client(d + '/*', d, socket_api, login)
+                connections[d].domain = d
+                connections[d].fetches_out = {}
+                connections[d].fetches_out_count = 0
+                return connections[d]
             }
         }
-        bus('state://*').to_fetch = rfetch
-        bus('statei://*').to_fetch = rfetch
+
+        for (prefix in {'state://*':0, 'statei://*':0}) {
+            bus(prefix).to_fetch = function (k) {
+                var c = make_connection(k)
+                if (c) c.send({method:'fetch', key: k})
+                else c = connections[get_domain(k)]
+                if (!c.fetches_out[k]) {
+                    c.fetches_out[k] = true
+                    c.fetches_out_count++
+                }
+            }
+            bus(prefix).to_save = function (o) {
+                var c = make_connection(o.key)
+                if (c) c.send({method:'save', obj: o})
+            }
+            bus(prefix).to_delete = function (k) {
+                var c = make_connection(k)
+                if (c) c.send({method:'delete', key: k})
+            }
+            bus(prefix).to_forget = function (k) {
+                var d = get_domain(k)
+                if (!d in connections || !k in connections[d].fetches_out)
+                    console.error('Trying to forget', k, "that hasn't been fetched")
+                delete connections[d].fetches_out[k]
+                connections[d].fetches_out_count--
+                if (connections[d].fetches_out_count == 0) {
+                    connections[d].close()
+                    delete connections[d]
+                }
+            }
+        }
     }
 
     // ******************
