@@ -1125,6 +1125,12 @@
 
     // ******************
     // Network client
+    function message_method (m) {
+        return ((m.fetch && 'fetch')
+                || (m.save && 'save')
+                || (m['delete'] && 'delete')
+                || (m.forget && 'forget'))
+    }
     function net_client(prefix, url, socket_api, login) {
         var preprefix = prefix.slice(0,-1)
         var is_absolute = /^statei?:\/\//
@@ -1142,6 +1148,9 @@
         function send (o, pushpop) {
             pushpop = pushpop || 'push'
             o = rem_prefixes(o)
+            var m = message_method(o)
+            if (m == 'fetch' || m == 'delete' || m == 'forget')
+                o[m] = rem_prefix(o[m])
             bus.log('sockjs.send:', JSON.stringify(o))
             outbox[pushpop](JSON.stringify(o))
             flush_outbox()
@@ -1162,25 +1171,13 @@
         function add_prefixes (obj) { return bus.translate_keys(bus.clone(obj), add_prefix) }
         function rem_prefixes (obj) { return bus.translate_keys(bus.clone(obj), rem_prefix) }
 
-        // Todo: I think I'd like to change this protocol to:
-        //   {save: obj}
-        //   {fetch: key}
-        //   {forget: key}
-        //   {delete: key}
-        // instead of
-        //   {method: 'save', obj: obj}
-        //   {method: 'fetch', key: key}
-        //   {method: 'forget', key: key}
-        //   {method: 'delete', key: key}
-        // When we add more parameters, they can still appear like:
-        //   {save: obj, version: v, parents: [...]}
         bus(prefix).to_save   = function (obj) { bus.save.fire(obj)
-                                                 send({method: 'save', obj: obj}) }
-        bus(prefix).to_fetch  = function (key) { send({method: 'fetch', key: key}),
+                                                 send({save: obj}) }
+        bus(prefix).to_fetch  = function (key) { send({fetch: key}),
                                                  fetched_keys.add(key) }
-        bus(prefix).to_forget = function (key) { send({method: 'forget', key: key}),
+        bus(prefix).to_forget = function (key) { send({forget: key}),
                                                  fetched_keys.delete(key) }
-        bus(prefix).to_delete = function (key) { send({method: 'delete', key: key}) }
+        bus(prefix).to_delete = function (key) { send({'delete': key}) }
 
         function connect () {
             nlog('[ ] trying to open ' + url)
@@ -1191,7 +1188,7 @@
                 // Login
                 login(function (clientid, name, pass) {
                     var i = []
-                    function intro (o) {i.push(JSON.stringify({method: 'save', obj: o}))}
+                    function intro (o) {i.push(JSON.stringify({save: o}))}
                     if (clientid)
                         intro({key: 'current_user', client: clientid})
                     if (name && pass)
@@ -1205,11 +1202,11 @@
                     // might have changed
                     var keys = fetched_keys.values()
                     for (var i=0; i<keys.length; i++)
-                        send({method: 'fetch', key: keys[i]})
+                        send({fetch: keys[i]})
                 }
 
                 attempts = 0
-                //heartbeat = setInterval(function () {send({method: 'ping'})}, 5000)
+                //heartbeat = setInterval(function () {send({ping:true})}, 5000)
             }
             sock.onclose   = function()  {
                 if (done) {
@@ -1242,14 +1239,12 @@
                 //console.log('[.] message')
                 try {
                     var message = JSON.parse(event.data)
-                    var method = message.method.toLowerCase()
+                    var method = message_method(message)
 
-                    // Convert v3 pubs to v4 saves for compatibility
-                    if (method == 'pub') method = 'save'
                     // We only take saves from the server for now
                     if (method !== 'save' && method !== 'pong') throw 'barf'
-                    bus.log('sockjs_client received', message.obj)
-                    bus.save.fire(add_prefixes(message.obj))
+                    bus.log('sockjs_client received', message.save)
+                    bus.save.fire(add_prefixes(message.save))
                 } catch (err) {
                     console.error('Received bad sockjs message from '
                                   +url+': ', event.data, err)
@@ -1286,7 +1281,7 @@
         for (prefix in {'state://*':0, 'statei://*':0}) {
             bus(prefix).to_fetch = function (k) {
                 var c = make_connection(k)
-                if (c) c.send({method:'fetch', key: k})
+                if (c) c.send({fetch: k})
                 else c = connections[get_domain(k)]
                 if (!c.fetches_out[k]) {
                     c.fetches_out[k] = true
@@ -1295,11 +1290,11 @@
             }
             bus(prefix).to_save = function (o) {
                 var c = make_connection(o.key)
-                if (c) c.send({method:'save', obj: o})
+                if (c) c.send({save: o})
             }
             bus(prefix).to_delete = function (k) {
                 var c = make_connection(k)
-                if (c) c.send({method:'delete', key: k})
+                if (c) c.send({'delete': k})
             }
             bus(prefix).to_forget = function (k) {
                 var d = get_domain(k)
@@ -1685,7 +1680,7 @@
                'pending_fetches fetches_in loading_keys loading',
                'global_funk busses rerunnable_funks',
                'escape_key unescape_key translate_keys',
-               'net_client go_net',
+               'net_client go_net message_method',
                'Set One_To_Many clone extend deep_map deep_equals validate sorta_diff log deps'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)

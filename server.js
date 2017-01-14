@@ -250,30 +250,30 @@ function make_server_bus (options)
             var our_fetches_in = {}  // Every key that every client has fetched.
             log('sockjs_s: New connection from', conn.remoteAddress)
             function sockjs_pubber (obj) {
-                conn.write(JSON.stringify({method: 'save', obj: obj}))
+                conn.write(JSON.stringify({save: obj}))
                 log('sockjs_s: SENT a', obj, 'to client')
             }
             conn.on('data', function(message) {
                 log('sockjs_s:', message)
                 try {
                     message = JSON.parse(message)
-                    var method = message.method.toLowerCase()
+                    var method = bus.message_method(message)
 
                     // Validate the message
                     if (!((method === 'fetch'
-                           && master.validate(message, {method: 'string', key: 'string',
+                           && master.validate(message, {fetch: 'string',
                                                         '?parent': 'string', '?version': 'string'}))
                           ||
                           (method === 'save'
-                           && master.validate(message, {method: 'string', obj: 'object',
+                           && master.validate(message, {save: 'object',
                                                         '?parents': 'array', '?version': 'string'})
-                           && typeof(message.obj.key === 'string'))
+                           && typeof(message.save.key === 'string'))
                           ||
                           (method === 'forget'
-                           && master.validate(message, {method: 'string', key: 'string'}))
+                           && master.validate(message, {forget: 'string'}))
                           ||
                           (method === 'delete'
-                           && master.validate(message, {method: 'string', key: 'string'}))))
+                           && master.validate(message, {'delete': 'string'}))))
                         throw 'validation error'
 
                 } catch (e) {
@@ -283,40 +283,38 @@ function make_server_bus (options)
                     return
                 }
 
-                switch (message.method.toLowerCase()) {
+                switch (method) {
                 case 'fetch':
-                    our_fetches_in[message.key] = true
-                    user.fetch(message.key, sockjs_pubber)
+                    our_fetches_in[message.fetch] = true
+                    user.fetch(message.fetch, sockjs_pubber)
                     break
                 case 'forget':
-                    delete our_fetches_in[message.key]
-                    user.forget(message.key, sockjs_pubber)
+                    delete our_fetches_in[message.forget]
+                    user.forget(message.forget, sockjs_pubber)
                     break
                 case 'delete':
-                    user.delete(message.key)
+                    user.delete(message['delete'])
                     break
                 case 'save':
                     message.version = message.version || user.new_version()
-                    user.save(message.obj,
+                    user.save(message.save,
                               {version: message.version,
                                parents: message.parents,
                                peer: sockjs_pubber})
-                    if (our_fetches_in[message.obj.key]) {  // Store what we've seen if we
-                                                            // might have to publish it later
-                        user.log('Adding', message.obj.key+'#'+message.version,
+                    if (our_fetches_in[message.save.key]) {  // Store what we've seen if we
+                                                             // might have to publish it later
+                        user.log('Adding', message.save.key+'#'+message.version,
                                  'to pubber!')
-                        sockjs_pubber.has_seen(user, message.obj.key, message.version)
+                        sockjs_pubber.has_seen(user, message.save.key, message.version)
                     }
                     break
                 }
-
-                //user[message.method](arg, sockjs_pubber)
 
                 // validate that our fetches_in are all in the bus
                 for (var key in our_fetches_in)
                     if (!user.fetches_in.has(key, master.funk_key(sockjs_pubber)))
                         console.trace("***\n****\nFound errant key", key,
-                                      'when receiving a sockjs', message.method, 'on', message.key || message.obj)
+                                      'when receiving a sockjs', method, 'of', message)
                 //log('sockjs_s: done with message')
             })
             conn.on('close', function() {
