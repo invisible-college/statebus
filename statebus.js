@@ -1133,7 +1133,7 @@
     }
     function net_client(prefix, url, socket_api, login) {
         var preprefix = prefix.slice(0,-1)
-        var is_absolute = /^statei?:\/\//
+        var is_absolute = /^i?state:\/\//
         var has_prefix = new RegExp('^' + preprefix)
         var bus = this
         var sock
@@ -1262,7 +1262,7 @@
     function go_net (socket_api, login) {
         var connections = {}
         function get_domain(key) { // Returns e.g. "state://foo.com"
-            var m = key.match(/^statei?\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
+            var m = key.match(/^i?state\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
             // if (!m) throw Error('Bad url: ', key)
             return m && m[0]
         }
@@ -1278,7 +1278,7 @@
             }
         }
 
-        for (prefix in {'state://*':0, 'statei://*':0}) {
+        for (prefix in {'state://*':0, 'istate://*':0}) {
             bus(prefix).to_fetch = function (k) {
                 var c = make_connection(k)
                 if (c) c.send({fetch: k})

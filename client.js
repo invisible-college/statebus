@@ -54,7 +54,7 @@
     function sockjs_client (prefix, url) {
         function socket_api (url) {
             url = url.replace(/^state:\/\//, 'https://')
-            url = url.replace(/^statei:\/\//, 'http://')
+            url = url.replace(/^istate:\/\//, 'http://')
             return new SockJS(url + '/statebus')
         }
         function login (send_login_info) {
@@ -134,7 +134,7 @@
             return old_route(key, method, arg, opts)
         }
         function get_domain(key) {
-            var m = key.match(/^state\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
+            var m = key.match(/^i?state\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
             // if (!m) throw Error('Bad url: ', key)
             return m && m[0]
         }
