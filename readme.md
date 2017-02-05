@@ -7,6 +7,7 @@ mechanisms for writing reactive code: (c) Proxies and (d) Uncallbacks.
 - New JSON encoding
 - Proxies: `sb["/foo"]` instead of `bus.fetch("/foo")`
 - URL rewriting: `"/foo"` on client translates to `"foo"` on server
+  - WARNING: You have to rewrite server code, and migrate your db file
 - Eliminate old callback code with `uncallback()`
 - Combine state from multiple servers using absolute URLs as keys
 
