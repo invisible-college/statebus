@@ -1018,10 +1018,13 @@ function make_server_bus (options)
     },
 
     read_file: function init (filename) {
+        // The first time this is run, we initialize it by loading some
+        // libraries
         var chokidar = require('chokidar')
         var watchers = {}
         var fs = require('fs')
 
+        // Now we redefine the function
         bus.read_file = bus.uncallback(
             function (filename, cb) {
                 fs.readFile(filename, (err, result) => {
@@ -1032,7 +1035,7 @@ function make_server_bus (options)
             {
                 start_watching: (args, dirty) => {
                     watchers[filename] = chokidar.watch(filename)
-                    watchers[filename].on('change', () => { bus.dirty(this.key) })
+                    watchers[filename].on('change', () => { dirty() })
                 },
                 stop_watching: (json) => {
                     filename = json[0]
