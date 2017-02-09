@@ -123,7 +123,7 @@ function make_server_bus (options)
                 }).listen(80, on_listen)
             }
         } else
-            var port = 3005
+            var port = bus.options.port
 
         function c (client, conn) {
             client.honk = 'statelog'
@@ -229,6 +229,7 @@ function make_server_bus (options)
     sockjs_server: function sockjs_server(httpserver, user_bus_func) {
         var master = this
         var client_num = 0
+        // var client_busses = {}  // XXX work in progress
         var log = master.log
         if (user_bus_func) {
             master.save({key: 'connections'}) // Clean out old sessions
@@ -238,6 +239,13 @@ function make_server_bus (options)
             sockjs_url: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js' })
         s.on('connection', function(conn) {
             if (user_bus_func) {
+                // To do for pooling client busses:
+                //  - What do I do with connections?  Do they pool at all?
+                //  - Before creating a new bus here, check to see if there's
+                //    an existing one in the pool, and re-use it if so.
+                //  - Count the number of connections using a client.
+                //  - When disconnecting, decrement the number, and if it gets
+                //    to zero, delete the client bus.
                 connections[conn.id] = {}; master.save(connections)
                 var user = make_server_bus()
                 user.label = 'client' + client_num++
@@ -329,6 +337,12 @@ function make_server_bus (options)
             if (user_bus_func && !master.options.__secure) {
                 user('connection').to_fetch = function () {
                     var c = user.clone(connections[conn.id])
+                /// XXX work in progress with client busses
+                //     return {_: user.fetch('connection/' + conn.id)}
+                // }
+                // user('connection/*').to_fetch = function (star) {
+                //     master.fetch('logged_in_clients')
+                //     var c = user.clone(connections[star])
                     if (c.user) c.user = user.fetch(c.user.key)
                     return c
                 }
