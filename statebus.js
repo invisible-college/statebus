@@ -415,24 +415,30 @@
             return
         }
 
+        log('del:', key)
+        bus.route(key, 'to_delete', key)
+        //forget(key /*, bus??*/)
+
         delete cache[key]
 
         console.warn("Deleting " + key + "-- Statebus doesn't yet re-run functions subscribed to it, or update versions")
 
         // Todos:
         //
-        // Right now we fire the to_delete handlers right here.
+        //  - Add transactions, so you can check permissions, abort a delete,
+        //    etc.
+        //    - Generalize the code across save and del with a "mutate"
+        //      operation
         //
-        //  - Do we want to batch them up and fire them later?
-        //    e.g. we could make a mark_deleted(key) like mark_changed(key)
+        //  - Right now we fire the to_delete handlers right here.
         //
-        //  - We might also record a new version of the state to show that
-        //    it's been deleted, which we can use to cancel echoes from the
-        //    sending bus.
+        //    - Do we want to batch them up and fire them later?
+        //      e.g. we could make a mark_deleted(key) like mark_changed(key)
+        //
+        //    - We might also record a new version of the state to show that
+        //      it's been deleted, which we can use to cancel echoes from the
+        //      sending bus.
 
-        log('del:', key)
-        bus.route(key, 'to_delete', key)
-        //forget(key /*, bus??*/)
     }
 
     var changed_keys = new Set()
