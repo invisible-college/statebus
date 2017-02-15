@@ -961,7 +961,6 @@ The URL for a `key` can be an arbitrary string.
 # Statebus Version 3
 
 Statebus is a protocol for synchronizing state.
-This readme explains how to make web clients with Statebus. 
 
 ## Making a client
 
