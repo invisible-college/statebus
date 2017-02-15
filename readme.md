@@ -960,9 +960,8 @@ The URL for a `key` can be an arbitrary string.
 
 # Statebus Version 3
 
-Statebus is a protocol and library for distributing state.
-
-This readme explains how to use Statebus to prototype web applications. You only need a single .html file, and you can easily share that file with other people, or fork it if you want to explore different ways your idea might be brought into the world.
+Statebus is a protocol for synchronizing state.
+This readme explains how to make web clients with Statebus. 
 
 ## Making a client
 
