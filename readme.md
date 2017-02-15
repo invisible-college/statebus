@@ -973,7 +973,7 @@ Just make a .html file on your filesystem containing this:
 dom.BODY = ->                                                      # Your code here
   DIV 'Hello, World!'    # Return a div
 
-#</script><script src="https://stateb.us/client.js?v3"></script>   # Loads statebus
+#</script><script src="https://stateb.us/client5.js"></script>     # Loads statebus
 ```
 
 Now you have a working statebus app, in a single html file!
@@ -983,7 +983,7 @@ Want to turn this into a simple blog?  Replace the body with this:
 
 ```coffeescript
 dom.BODY = ->
-  blog = fetch('state://stateb.us/your/blog')
+  blog = fetch('state://stateb.us:3005/your/blog')
   DIV {},
     for post in blog.posts
       DIV {},
@@ -996,10 +996,17 @@ javascript console and run:
 
 ```javascript
 save({
-  key: 'state://stateb.us/your/blog',
+  key: 'state://stateb.us:3005/your/blog',
   posts: [{title: 'hello', body: 'world'}]
 })
 ```
+
+Now try reloading the page.  It's still there!  You saved your blog on the
+*server* `state://stateb.us:3005`.
+
+Try opening a new browser window.  If you change the blog in one, it will
+immediately update the other.  Statebus keeps the state between both browsers
+syncronized.
 
 ## Writing code
 
