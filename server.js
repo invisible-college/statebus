@@ -1,3 +1,5 @@
+fs = require('fs')
+
 var util = require('util')
 function make_server_bus (options)
 {   var extra_methods = {
@@ -873,6 +875,26 @@ function make_server_bus (options)
                 o.pass = o.pass && require('bcrypt-nodejs').hashSync(o.pass)
                 u.pass = o.pass || u.pass
 
+                // user's avatar
+                if(o.pic) {
+                    var img_type = o.pic.match(/^data:image\/(\w+);base64,/)[1]
+                    var b64 = o.pic.replace(/^data:image\/\w+;base64,/, '')
+                    var upload_dir = 'uploads/'
+                    // ensure that the uploads directory exists
+                    if (!fs.existsSync(upload_dir)){
+                        fs.mkdirSync(upload_dir)
+                    }
+
+                    // bug: users with the same name can overwrite each other's files
+                    var filename = upload_dir + u.name + '.' + img_type
+
+                    fs.writeFile(filename, b64, {encoding: 'base64'}, function(err){
+                        
+                    })
+                    u.pic = filename
+                }
+
+
                 master.save(u)
                 o = user.clone(u)
                 user.log(o.key + '.to_save: saved user to master')
@@ -884,9 +906,9 @@ function make_server_bus (options)
         function user_obj (k, logged_in) {
             var o = master.fetch(k)
             if (logged_in)
-                return {key: k, name: o.name, email: o.email}
+                return {key: k, name: o.name, pic: o.pic, email: o.email}
             else
-                return {key: k, name: o.name}
+                return {key: k, name: o.name, pic: o.pic}
         }
         user('user/*').to_fetch = function filtered_user (k) {
             var c = user.fetch('current_user')
