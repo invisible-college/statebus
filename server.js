@@ -879,19 +879,15 @@ function make_server_bus (options)
                 if(o.pic) {
                     var img_type = o.pic.match(/^data:image\/(\w+);base64,/)[1]
                     var b64 = o.pic.replace(/^data:image\/\w+;base64,/, '')
-                    var upload_dir = 'uploads/'
+                    var upload_dir = 'static/'
                     // ensure that the uploads directory exists
                     if (!fs.existsSync(upload_dir)){
                         fs.mkdirSync(upload_dir)
                     }
 
                     // bug: users with the same name can overwrite each other's files
-                    var filename = upload_dir + u.name + '.' + img_type
-
-                    fs.writeFile(filename, b64, {encoding: 'base64'}, function(err){
-                        
-                    })
-                    u.pic = filename
+                    u.pic = u.name + '.' + img_type
+                    fs.writeFile(upload_dir + u.pic, b64, {encoding: 'base64'})
                 }
 
 
