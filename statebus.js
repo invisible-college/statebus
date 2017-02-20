@@ -1038,6 +1038,7 @@
         function item_proxy (base, o) {
             if (typeof o === 'number'
                 || typeof o === 'string'
+                || typeof o === 'boolean'
                 || o === undefined
                 || o === null
                 || typeof o === 'function') return o
@@ -1077,6 +1078,7 @@
             set: function set(o, k, v) {
                 if (typeof v === 'number'
                     || typeof v === 'string'
+                    || typeof v === 'boolean'
                     || v === undefined
                     || v === null
                     || typeof v === 'function'
