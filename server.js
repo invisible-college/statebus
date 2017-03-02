@@ -1014,8 +1014,8 @@ function make_server_bus (options)
     route_defaults_to: function route_defaults_to (master_bus) {
         // Custom route
         var OG_route = bus.route
-        bus.route = function(key, method, arg, opts) {
-            var count = OG_route(key, method, arg, opts)
+        bus.route = function(key, method, arg, t) {
+            var count = OG_route(key, method, arg, t)
 
             // This forwards anything we don't have a specific handler for
             // to the global cache
@@ -1029,9 +1029,10 @@ function make_server_bus (options)
                         bus.save.fire(r, {version: master_bus.versions[r.key]})
                         }, method, arg)
                 else if (method === 'to_save')
-                    bus.run_handler(function save_to_master (o, opts) {
-                        // console.log('DEFAULT ROUTE', opts)
-                        master_bus.save(bus.clone(o), opts) }, method, arg, opts)
+                    bus.run_handler(function save_to_master (o, t) {
+                        // console.log('DEFAULT ROUTE', t)
+                        master_bus.save(bus.clone(o), t)
+                    }, method, arg, {t: t})
             }
             return count
         }
