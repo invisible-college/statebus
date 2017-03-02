@@ -1090,7 +1090,7 @@ In react, each component has its own "state" and "props" objects. When these cha
 Instead, statebus simplifies the idea by providing distributed access to state using a url-like syntax. Specifically you can use `fetch` and `save` commands like this:
 
 ```coffeescript
-example = ->
+dom.EXAMPLE = ->
   state = fetch('/morgan/example')   # fetch this key from the server
                                      # because of the leading '/'
   if state.width == undefined

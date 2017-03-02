@@ -40,7 +40,7 @@
         // ** Subscribe the calling funk **
 
         if (called_from_reactive_funk)
-            funk.has_seen(bus, key, versions[key])
+            funk.has_seen(bus, key, versions[key])  // Maybe this line should go below, in the existing "if (called_from_reactive_funk) {" ??
         fetches_in.add(key, funk_key(funk))
         if (to_be_forgotten[key]) {
             clearTimeout(to_be_forgotten[key])
@@ -1611,37 +1611,6 @@
         }
     }
 
-    function funk_name2 (f, char_limit) {
-        char_limit = char_limit || 30
-
-        var arg = f.react ? (f.args && f.args[0]) : ''
-        arg = f.react ? (JSON.stringify(f.arg)||'').substring(0,30) : ''
-        f = f.proxies_for || f
-        var f_string = 'function ' + (f.name||'') + '(' + (arg||'') + ') {..}'
-        // Or: f.toString().substr(0,char_limit) + '...'
-
-        if (!f.defined) return f_string
-
-        var result = ''
-        if (f.defined.length > 1) result += '['
-        for (var i=0; i<f.defined.length; i++) {
-            var def = f.defined[i]
-            switch (def.as) {
-            case 'handler':
-                result += def.bus+"('"+def.key+"')."+def.method+' = '+f_string; break
-            case 'fetch callback':
-                result += 'fetch('+def.key+', '+f_string+')'; break
-                result += "the callback for fetch('"+def.key+"', "+f_string+')'; break
-            case 'reactive':
-                result += "reactive('"+f_string+"')"; break
-            default:
-                result += 'UNKNOWN Funky Definition!!!... ???'; break
-            }
-            if (i+1 < f.defined.length) result += ', '
-        }
-        if (f.defined.length > 1) result += ']'
-        return result
-    }
     function deps (key) {
         // First print out everything waiting for it to pub
         var result = 'Deps: ('+key+') fires into:'
@@ -1670,10 +1639,6 @@
         bus.honk = old_honk
     }
 
-    function kp () {
-        log('changed_keys:', changed_keys.values())
-    }
-
     // #######################################
     // ########### Browser Code ##############
     // #######################################
@@ -1682,7 +1647,7 @@
     var api = ['cache backup_cache fetch save forget del fire dirty',
                'subspace bindings run_handler bind unbind reactive uncallback',
                'versions new_version',
-               'funk_key funk_name funks key_id key_name id kp',
+               'funk_key funk_name funks key_id key_name id',
                'pending_fetches fetches_in loading_keys loading',
                'global_funk busses rerunnable_funks',
                'escape_key unescape_key translate_keys',

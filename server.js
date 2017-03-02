@@ -307,9 +307,11 @@ function make_server_bus (options)
                     break
                 case 'save':
                     message.version = message.version || user.new_version()
+                    // sockjs_pubber.has_seen(user, message.save.key, message.version)
                     user.save(message.save,
                               {version: message.version,
                                parents: message.parents,
+                               // Remove the peer thing, cause we'll use has_seen instead
                                peer: sockjs_pubber})
                     if (our_fetches_in[message.save.key]) {  // Store what we've seen if we
                                                              // might have to publish it later
