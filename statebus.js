@@ -28,15 +28,6 @@
             }
         }
 
-        //log('fetch:', key, {called_from_reactive_funk: called_from_reactive_funk})
-
-        // Remove this limitation at some point.  One reason for it is that
-        // bind() doesn't check if a wildcard handler already exists... it
-        // just pushes a new one.  That'll grow unbounded.  I can later use
-        // regexps for wildcard handlers, and start escaping the patterns
-        // between fetch() and bind() and solve these issues robustly.
-        console.assert(key[key.length-1] !== '*')
-
         // ** Subscribe the calling funk **
 
         if (called_from_reactive_funk)
@@ -552,12 +543,12 @@
                         func.defined = func.defined || []
                         func.defined.push(
                             {as:'handler', bus:bus, method:method, key:key})
-                        bind(key, method, func)
+                        bind(key, method, func, 'allow_wildcards')
                     },
                     get: function () {
                         var result = bindings(key, method)
                         for (var i=0; i<result.length; i++) result[i] = result[i].func
-                        result.delete = function (func) { unbind (key, method, func) }
+                        result.delete = function (func) { unbind (key, method, func, 'allow_wildcards') }
                         return result
                     }
                 })
@@ -604,22 +595,19 @@
 
     // A set of timers, for keys to send forgets on
     var to_be_forgotten = {}
-    function bind (key, method, func) {
-        if (key[key.length-1] !== '*')
-            handlers.add(method + ' ' + key, funk_key(func))
-        else
+    function bind (key, method, func, allow_wildcards) {
+        if (allow_wildcards && key[key.length-1] === '*')
             wildcard_handlers.push({prefix: key,
                                     method: method,
                                     funk: func})
+        else
+            handlers.add(method + ' ' + key, funk_key(func))
 
         // Now check if the method is a fetch and there's a fetched
         // key in this space, and if so call the handler.
     }
-    function unbind (key, method, funk) {
-        if (key[key.length-1] !== '*')
-            // Delete direct connection
-            handlers.delete(method + ' ' + key, funk_key(funk))
-        else
+    function unbind (key, method, funk, allow_wildcards) {
+        if (allow_wildcards && key[key.length-1] === '*')
             // Delete wildcard connection
             for (var i=0; i<wildcard_handlers.length; i++) {
                 var handler = wildcard_handlers[i]
@@ -631,6 +619,9 @@
                     i--                            // And decrement the counter while we're looping
                 }
             }
+        else
+            // Delete direct connection
+            handlers.delete(method + ' ' + key, funk_key(funk))
     }
 
     function bindings(key, method) {
