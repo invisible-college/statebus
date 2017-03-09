@@ -415,6 +415,9 @@ function make_server_bus (options)
         function file_store (prefix, options) {
             filename = (options && options.filename) || filename
             backup_dir = (options && options.backup_dir) || backup_dir
+            save_delay = ((options && options.save_delay)
+                          || (bus.options.file_store && bus.options.file_store.save_delay)
+                          || 250)
 
             // Loading db
             try {
@@ -455,7 +458,7 @@ function make_server_bus (options)
             }
 
             function save_later() {
-                pending_save = pending_save || setTimeout(save_db, 10000)
+                pending_save = pending_save || setTimeout(save_db, save_delay)
             }
             active = !options || !options.delay_activate
             function on_save (obj) {
