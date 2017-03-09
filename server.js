@@ -359,6 +359,13 @@ function make_server_bus (options)
                     connections[conn.id] = o
                     master.save(connections)
                 }
+                // To do:
+                //  We want each connection in /connections.all to have a key
+                //  - Make a state for '/connection/<id>',
+                //    ... which will be mirrored in your '/connection'
+                //  - The connections object will have an array or hash of these connections
+                //  - When you save /connection, it will update to your /connection/<id>
+                //  - When you fetch /connection, it will derive from /connection/<id>
                 user('connections').to_save = function noop () {}
                 user('connections').to_fetch = function () {
                     var result = []
