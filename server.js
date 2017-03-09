@@ -448,7 +448,7 @@ function make_server_bus (options)
             }
 
             function save_later() {
-                pending_save = pending_save || setTimeout(save_db, 100)
+                pending_save = pending_save || setTimeout(save_db, 10000)
             }
             active = !options || !options.delay_activate
             function on_save (obj) {
