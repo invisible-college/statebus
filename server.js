@@ -248,7 +248,9 @@ function make_server_bus (options)
                 //  - Count the number of connections using a client.
                 //  - When disconnecting, decrement the number, and if it gets
                 //    to zero, delete the client bus.
-                connections[conn.id] = {}; master.save(connections)
+
+                connections[conn.id] = {client: conn.id}; master.save(connections)
+
                 var user = make_server_bus()
                 user.label = 'client' + client_num++
                 master.label = master.label || 'master'
@@ -352,6 +354,8 @@ function make_server_bus (options)
                 }
                 user('connection').to_save = function (o) {
                     delete o.key
+                    o.client = conn.id // don't let client update the client id or user
+                    o.user = connections[conn.id].user
                     connections[conn.id] = o
                     master.save(connections)
                 }
@@ -423,7 +427,9 @@ function make_server_bus (options)
             // Saving db
             function save_db() {
                 if (!db_is_ok) return
+
                 console.time('saved db')
+
                 fs.writeFile(filename+'.tmp', JSON.stringify(db, null, 1), function(err) {
                     if (err) {
                         console.error('Crap! DB IS DYING!!!!', err)
@@ -734,6 +740,7 @@ function make_server_bus (options)
                 userpass && userpass.pass,
                 pass)
 
+
             if (!(typeof name === 'string' && typeof pass === 'string')) return false
             if (name === 'key') return false
             if (!userpass) return null
@@ -822,6 +829,7 @@ function make_server_bus (options)
                     if (creds.name && creds.pass) {
                         // With a username and password
                         var u = authenticate(creds.name, creds.pass)
+
                         user.log('auth said:', u)
                         if (u) {
                             // Success!
