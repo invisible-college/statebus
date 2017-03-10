@@ -58,6 +58,20 @@
             return new SockJS(url + '/statebus')
         }
         function login (send_login_info) {
+            // Warning:
+            //
+            //  - This is giving every domain we connect to the secret client
+            //    key from the site that *loaded this page*.  If you don't
+            //    trust a site you're connecting to, you're basically letting
+            //    them log in as you into the site you loaded this page from.
+            //
+            //  Let's implement a better distributed auth.  In fact, we'd
+            //  probably prefer to NOT send login info to these third-party
+            //  sites than sending them our secret client id for another site.
+            //  Perhaps our best interim solution is to hold different client
+            //  secrets for every domain we connect to, within each domain's
+            //  localStorage space.
+            
             var me = fetch('ls/me')
             bus.log('connect: me is', me)
             if (!me.client) {
@@ -290,7 +304,7 @@
 
             // TODO:
             //
-            //  - Check children too.  Right now we just slidently fail
+            //  - Check children too.  Right now we just silently fail
             //    on components with children.  WTF?
             //
             //  - A better method might be to mark a comopnent dirty when
