@@ -277,6 +277,17 @@
             delete dirty_components[this.key]
         })
 
+        function shallow_clone(original) {
+            var clone = Object.create(Object.getPrototypeOf(original))
+            var i, keys = Object.getOwnPropertyNames(original)
+            for (i=0; i < keys.length; i++){
+                Object.defineProperty(clone, keys[i],
+                    Object.getOwnPropertyDescriptor(original, keys[i])
+                )
+            }
+            return clone
+        }
+
         component.shouldComponentUpdate = function new_scu (next_props, next_state) {
             // This component definitely needs to update if it is marked as dirty
             if (dirty_components[this.key] !== undefined) return true
@@ -284,8 +295,15 @@
             // Otherwise, we'll check to see if its state or props
             // have changed.  But ignore React's 'children' prop,
             // because it often has a circular reference.
-            next_props = bus.clone(next_props); this_props = bus.clone(this.props)
+            next_props = shallow_clone(next_props)
+            this_props = shallow_clone(this.props)
+
             delete next_props['children']; delete this_props['children']
+
+            next_props = bus.clone(next_props)
+            this_props = bus.clone(this_props)
+            
+
             return !bus.deep_equals([next_state, next_props], [this.state, this_props])
 
             // TODO:
@@ -293,7 +311,7 @@
             //  - Check children too.  Right now we just slidently fail
             //    on components with children.  WTF?
             //
-            //  - A better method might be to mark a comopnent dirty when
+            //  - A better method might be to mark a component dirty when
             //    it receives new props in the
             //    componentWillReceiveProps React method.
         }
@@ -480,7 +498,7 @@
 
         for (var el in React.DOM)
             window[el.toUpperCase()] = better_element(React.DOM[el])
-
+        
         function make_better_input (name, element) {
             window[name] = React.createFactory(React.createClass({
                 getInitialState: function() {
