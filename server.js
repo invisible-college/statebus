@@ -342,6 +342,11 @@ function make_server_bus (options)
             })
             if (user_bus_func && !master.options.__secure) {
                 user('connection').to_fetch = function () {
+                    // subscribe to changes in authentication
+                    // note: it would be better to be subscribed to just this particular user
+                    //       changing auth, rather whenever logged_in_clients changes.  
+                    master.fetch('logged_in_clients')
+                    
                     var c = user.clone(connections[conn.id])
                 /// XXX work in progress with client busses
                 //     return {_: user.fetch('connection/' + conn.id)}
@@ -869,8 +874,13 @@ function make_server_bus (options)
                 else if (o.logout) {
                     user.log('current_user: logging out')
                     var clients = master.fetch('logged_in_clients')
+                    var connections = master.fetch('connections')
+
                     delete clients[conn.client]
+                    connections[conn.id].user = null
+
                     master.save(clients)
+                    master.save(connections)
                 }
             }
 
@@ -896,7 +906,7 @@ function make_server_bus (options)
                 u.pass = o.pass || u.pass
 
                 // user's avatar
-                if(o.pic) {
+                if(o.pic && o.pic.indexOf('data:image') > -1) {
                     var img_type = o.pic.match(/^data:image\/(\w+);base64,/)[1]
                     var b64 = o.pic.replace(/^data:image\/\w+;base64,/, '')
                     var upload_dir = 'static/'
