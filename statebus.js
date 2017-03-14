@@ -1063,6 +1063,9 @@
                     return item_proxy(base, o[k])
                 },
                 set: function set(f, k, v) {
+                    // todo warning XXX: this doesn't yet encode v.  For
+                    // instance, you can do bus.sb.foo.boo = {key: 'bar'}, and
+                    // it won't encode it into {key_: 'bar'} like it should.
                     var result = o[escape_key(k)] = v
                     bus.save(base)
                     return strict_mode ? true : result  // Strict mode forces us to return true
@@ -1088,15 +1091,12 @@
                 return item_proxy(raw, obj)
             },
             set: function set(o, k, v) {
-                if (typeof v === 'number'
-                    || typeof v === 'string'
-                    || v === undefined
-                    || v === null
-                    || typeof v === 'function'
-                    || Array.isArray(v))
-                    v = {_:v}
-                else
-                    v = bus.clone(v)
+                // todo warning XXX: this doesn't yet encode v.  For instance,
+                // you can do bus.sb.foo = {key: 'bar'}, and it won't encode
+                // it into {key_: 'bar'} like it should.
+                v = bus.clone(v)
+                if (typeof v !== 'object' || v === null || Array.isArray(v))
+                    v = {_: v}
                 v.key = k
                 bus.save(v)
                 return strict_mode ? true : v  // Strict mode forces us to return true
