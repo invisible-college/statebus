@@ -801,172 +801,7 @@ master('/post/*').to_save = function (o) {
 ```
 
 
-# What's not new
 
-## Fetch and Save with Rerunnable Functions
-
-The statebus `fetch()` and `save()` methods give you the illusion that all
-state is always available if you use them from within a *rerunnable* function.
-This way, if a piece of state isn't available, statebus will just wait until
-it becomes available, and re-run the function then. And every time the state
-changes, statebus will re-run the function again. This way you can write
-functions that produce state that is always up to date, whithout callbacks,
-promises, async/yield, threads, or fibers.
-
-Statebus automatically makes functions rerunnable that are passed to it:
-  - HTML renderers: `dom.BODY = <rerunnable>`
-  - Handlers: `bus(key).to_*  = <rerunnable>`
-  - Fetch callbacks: `fetch(key, <rerunnable>)`
-
-You can also make your own rerunnable functions with
-`bus.reactive(<rerunnable>)` and `bus(<rerunnable>)` to make a standalone
-reactive process.
-
-### Rerunning and `fetch()`
-
-Each time `fetch(key)` is called during the execution of a rerunnable
-function, the function will subscribe to the `key` and automatically re-run
-when it changes.  For instance, we can re-render the dom `BODY` element each
-time someone's name changes:
-
-```coffeescript
-dom.BODY = ->
-   DIV "Hello, " + fetch('mother').name
-```
-
-Or we can write a standalone function that rings a bell when an angel
-gets her wings:
-
-```coffeescript
-bus(->
-  if fetch('angel').wings
-     bell_sound.play()
-)
-```
-
-## Eliminate callback code with `uncallback()`
-
-Now you can transform APIs that use callbacks:
-
-```javascript
-fs.readFile('hello.txt', (err, first_file) => {
-    if (err)
-        console.error('Error', err)
-    else
-        fs.readFile('world.txt', (err, second_file) => {
-            if (err)
-                console.error('Error', err)
-            else
-                fs.writeFile('hello world.txt', first_file + second_file)
-        })
-})
-
-```
-
-...into reactions:
-
-```javascript
-bus(() => {
-    var first_file = readFile('hello.txt')
-    var second_file = readFile('world.txt')
-    fs.writeFile('hello world.txt', first_file + second_file)
-})
-```
-Isn't that much nicer?
-
-To transform callbacky functions into reactive functions, use the `bus.uncallback()` command:
-```javascript
-var readFile = bus.uncallback(fs.readFile)  // Overly simplified
-```
-
-The catch is that callbacky function's inputs and outputs must be serializable
-JSON.  Since `fs.readFile()` returns a `Buffer`, we should serialize the result with
-`.toString()`:
-
-```javascript
-// Wrap fs.readFile() in a function that returns a string:
-readFile = bus.uncallback(function (path, cb) {
-    fs.readFile(path, (err, result) => cb(err, result.toString()))
-})
-```
-
-You can uncallback any function where:
-  - The inputs and outputs are serializable in JSON
-  - Except the last argument, which is a callback that takes args `(error, result)`
-
-## Proxy
-This wraps `fetch()` and `save()`. Makes all state look like a big global variable.
-
-```javascript
-sb = bus.sb      // sb might become the new 'bus'
-
-sb.foo           // fetch("foo")
-sb["/foo"]       // fetch from server
-sb["/foo"].posts[5].title   // access an array
-
-sb.bar.fi = 3    // save({key: "bar", fi: 3})
-sb.foo = 3       // save({key: "foo", _: 3})
-sb.foo = sb.bar  // save({key: "foo", _: fetch("bar")})
-
-sb.foo()         // access the underlying raw JSON: {key: "foo", _: {key: "bar", fi: 3}}
-sb.foo().key     // => "foo"
-```
-
-Behind the scenes, all data is stored in a JSON encoding.  You can get the
-underlying JSON with `sb.blah()`.
-
-#### JSON encoding
-
-The encoding hides keys, dereferences pointers, and unwraps singleton objects
-when viewed through the `sb` proxy interface.
-
-```javascript
-  // Basics
-  {_: 3}             -> 3                           // Underscore is unwrapped
-  {key: 3}           -> {}                          // Keys are hidden
-  {bar_key: '/bar'}  -> {bar: {..this is bar..}}    // *_key is a pointer to other state
-  {key_: 3}          -> {key: 3}                    // Trailing underscore escapes
-  {__: 3}            -> {_: 3}                      // Trailing underscore escapes
-
-  // Now let's try some combinations
-  {_key: '/bar'}     -> {..this is bar..}           // _key means "unwrap this pointer"
-
-  // On an array, appending "_key" means each element is a pointer
-  {bars_key: ['/bar/1', '/bar/2']}               -> {bars: [{..bar1..}, {..bar2..}]}
-
-  // You can get the same result by wrapping each element with {_key: ..}
-  {bars: [{_key: '/bar/1'}, {_key: '/bar/2'}]}   -> {bars: [{..bar1..}, {..bar2..}]}
-
-  // In either case, you can escape an exceptional element in an array by wrapping it
-  {bars_key: ['/bar/1', {_: 'hi!'}   ]}          -> {bars: [{..bar1..}, 'hi!']}
-  {bars:     [{_key: '/bar/1'}, 'hi!']}          -> {bars: [{..bar1..}, 'hi!']}
-```
-
-
-## Intermediate states, crash recovery, and loading()
-
-If a state `/foo` hasn't loaded yet, `fetch("/foo")` will return an empty
-object `{key: "/foo"}`.  In these intermediate states, your code might return
-an errant `undefined`, or just crash:
-
-```coffeescript
-dom.THING1 = -> DIV fetch('/foo').bar       # <div>undefined</div>
-dom.THING2 = -> DIV fetch('/foo').bar.baz   # Crash: "Cannot read property 'baz' of undefined"
-```
-
- You can check that any particular object is loaded by looking
-for the presence of the expected fields on it, or check whether an entire
-function has loaded with the `loading()` function:
-
-```coffeescript
-dom.BODY = ->
-   mom = fetch('/mom')
-   dad = fetch('/dad')
-   if loading()
-     return DIV 'Loading...'
-
-   DIV "Hello, #{mom.name} and #{dad.name}!'
-```
 
 
 
@@ -1046,6 +881,47 @@ Each bus implements the four methods of the statebus protocol: `fetch`, `save`, 
   - Without a `key`, returns true if the currently-executing reactive function has subscribed to any keys with such pending fetches.
 
 
+### Fetch and Save are Reactive functions
+
+The statebus `fetch()` and `save()` methods give you the illusion that all
+state is always available if you use them from within a *rerunnable* function.
+This way, if a piece of state isn't available, statebus will just wait until
+it becomes available, and re-run the function then. And every time the state
+changes, statebus will re-run the function again. This way you can write
+functions that produce state that is always up to date, whithout callbacks,
+promises, async/yield, threads, or fibers.
+
+Statebus automatically makes functions rerunnable that are passed to it:
+  - HTML renderers: `dom.BODY = <rerunnable>`
+  - Handlers: `bus(key).to_*  = <rerunnable>`
+  - Fetch callbacks: `fetch(key, <rerunnable>)`
+
+You can also make your own rerunnable functions with
+`bus.reactive(<rerunnable>)` and `bus(<rerunnable>)` to make a standalone
+reactive process.
+
+### Rerunning and `fetch()`
+
+Each time `fetch(key)` is called during the execution of a rerunnable
+function, the function will subscribe to the `key` and automatically re-run
+when it changes.  For instance, we can re-render the dom `BODY` element each
+time someone's name changes:
+
+```coffeescript
+dom.BODY = ->
+   DIV "Hello, " + fetch('mother').name
+```
+
+Or we can write a standalone function that rings a bell when an angel
+gets her wings:
+
+```coffeescript
+bus(->
+  if fetch('angel').wings
+     bell_sound.play()
+)
+```
+
 ## Configuring a bus with handlers
 
 You configure a bus by specifying functions to fetch, save, forget, and delete
@@ -1109,6 +985,130 @@ loading().
 ### `bus.cache[key]`
   - Lets you bypass `fetch` to access the cache directly
   - You shouldn't need this, but it can be nice for debugging.
+
+## Eliminate callback code with `uncallback()`
+
+Now you can transform APIs that use callbacks:
+
+```javascript
+fs.readFile('hello.txt', (err, first_file) => {
+    if (err)
+        console.error('Error', err)
+    else
+        fs.readFile('world.txt', (err, second_file) => {
+            if (err)
+                console.error('Error', err)
+            else
+                fs.writeFile('hello world.txt', first_file + second_file)
+        })
+})
+
+```
+
+...into reactions:
+
+```javascript
+bus(() => {
+    var first_file = readFile('hello.txt')
+    var second_file = readFile('world.txt')
+    fs.writeFile('hello world.txt', first_file + second_file)
+})
+```
+Isn't that much nicer?
+
+To transform callbacky functions into reactive functions, use the `bus.uncallback()` command:
+```javascript
+var readFile = bus.uncallback(fs.readFile)  // Overly simplified
+```
+
+The catch is that callbacky function's inputs and outputs must be serializable
+JSON.  Since `fs.readFile()` returns a `Buffer`, we should serialize the result with
+`.toString()`:
+
+```javascript
+// Wrap fs.readFile() in a function that returns a string:
+readFile = bus.uncallback(function (path, cb) {
+    fs.readFile(path, (err, result) => cb(err, result.toString()))
+})
+```
+
+You can uncallback any function where:
+  - The inputs and outputs are serializable in JSON
+  - Except the last argument, which is a callback that takes args `(error, result)`
+
+## Proxy interface
+This wraps `fetch()` and `save()`. Makes all state look like a big global variable.
+
+```javascript
+sb = bus.sb      // sb might become the new 'bus'
+
+sb.foo           // fetch("foo")
+sb["/foo"]       // fetch from server
+sb["/foo"].posts[5].title   // access an array
+
+sb.bar.fi = 3    // save({key: "bar", fi: 3})
+sb.foo = 3       // save({key: "foo", _: 3})
+sb.foo = sb.bar  // save({key: "foo", _: fetch("bar")})
+
+sb.foo()         // access the underlying raw JSON: {key: "foo", _: {key: "bar", fi: 3}}
+sb.foo().key     // => "foo"
+```
+
+Behind the scenes, all data is stored in a JSON encoding.  You can get the
+underlying JSON with `sb.blah()`.
+
+#### JSON encoding
+
+The encoding hides keys, dereferences pointers, and unwraps singleton objects
+when viewed through the `sb` proxy interface.
+
+```javascript
+  // Basics
+  {_: 3}             -> 3                           // Underscore is unwrapped
+  {key: 3}           -> {}                          // Keys are hidden
+  {bar_key: '/bar'}  -> {bar: {..this is bar..}}    // *_key is a pointer to other state
+  {key_: 3}          -> {key: 3}                    // Trailing underscore escapes
+  {__: 3}            -> {_: 3}                      // Trailing underscore escapes
+
+  // Now let's try some combinations
+  {_key: '/bar'}     -> {..this is bar..}           // _key means "unwrap this pointer"
+
+  // On an array, appending "_key" means each element is a pointer
+  {bars_key: ['/bar/1', '/bar/2']}               -> {bars: [{..bar1..}, {..bar2..}]}
+
+  // You can get the same result by wrapping each element with {_key: ..}
+  {bars: [{_key: '/bar/1'}, {_key: '/bar/2'}]}   -> {bars: [{..bar1..}, {..bar2..}]}
+
+  // In either case, you can escape an exceptional element in an array by wrapping it
+  {bars_key: ['/bar/1', {_: 'hi!'}   ]}          -> {bars: [{..bar1..}, 'hi!']}
+  {bars:     [{_key: '/bar/1'}, 'hi!']}          -> {bars: [{..bar1..}, 'hi!']}
+```
+
+
+## Intermediate states, crash recovery, and loading()
+
+If a state `/foo` hasn't loaded yet, `fetch("/foo")` will return an empty
+object `{key: "/foo"}`.  In these intermediate states, your code might return
+an errant `undefined`, or just crash:
+
+```coffeescript
+dom.THING1 = -> DIV fetch('/foo').bar       # <div>undefined</div>
+dom.THING2 = -> DIV fetch('/foo').bar.baz   # Crash: "Cannot read property 'baz' of undefined"
+```
+
+ You can check that any particular object is loaded by looking
+for the presence of the expected fields on it, or check whether an entire
+function has loaded with the `loading()` function:
+
+```coffeescript
+dom.BODY = ->
+   mom = fetch('/mom')
+   dad = fetch('/dad')
+   if loading()
+     return DIV 'Loading...'
+
+   DIV "Hello, #{mom.name} and #{dad.name}!'
+```
 
 
 # What's missing
