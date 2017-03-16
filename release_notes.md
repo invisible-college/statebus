@@ -1,206 +1,138 @@
-Statebus is a protocol for synchronizing state. The protocol is described []. What we describe here is a Javascript implementation of the Statebus protocol. We welcome alternative implementations for Javascript, or any language! Send us a message and we'll link to your implementation.
+# What's coming in Statebus v5
 
-# Getting started
+We're formalizing its JSON encoding. This lets us (a) mix state from multiple
+nodes or servers, (b) translate URLs between them, and gives us two handy new
+mechanisms for writing reactive code: (c) Proxies and (d) Uncallbacks.
 
-## Make a client
+- New JSON encoding
+- Proxies: `sb["/foo"]` instead of `bus.fetch("/foo")`
+- URL rewriting: `"/foo"` on client translates to `"foo"` on server
+  - WARNING: You have to rewrite server code, and migrate your db file
+- Eliminate old callback code with `uncallback()`
+- Combine state from multiple servers using absolute URLs as keys
 
-You don't need a server yet.  You don't need to download anything.
-Just make a .html file on your filesystem containing this:
+Warning: we're still changing the API.
 
-```coffeescript
-<script type="statebus">                                           # Initial line
+## Eliminate callback code with `uncallback()`
 
-dom.BODY = ->                                                      # Your code here
-  DIV 'Hello, World!'    # Return a div
-
-#</script><script src="https://stateb.us/client5.js"></script>     # Loads statebus v5
-```
-
-Now you have a working statebus app, in a single html file!
-Double-click to open it in your web browser with a `file:///` url.
-
-Want to turn this into a simple blog?  Replace the body with this:
-
-```coffeescript
-dom.BODY = ->
-  blog = fetch('state://stateb.us:3005/your/blog')
-  DIV {},
-    for post in blog.posts
-      DIV {},
-        H1 post.title
-        DIV post.body
-```
-
-`blog` be empty initially until you add some content though.
-
-Open your javascript console and run:
+Now you can transform APIs that use callbacks:
 
 ```javascript
-save({
-  key: 'state://stateb.us:3005/your/blog',
-  posts: [{title: 'hello', body: 'world'}]
+fs.readFile('hello.txt', (err, first_file) => {
+    if (err)
+        console.error('Error', err)
+    else
+        fs.readFile('world.txt', (err, second_file) => {
+            if (err)
+                console.error('Error', err)
+            else
+                fs.writeFile('hello world.txt', first_file + second_file)
+        })
+})
+
+```
+
+...into reactions:
+
+```javascript
+bus(() => {
+    var first_file = readFile('hello.txt')
+    var second_file = readFile('world.txt')
+    fs.writeFile('hello world.txt', first_file + second_file)
+})
+```
+Isn't that much nicer?
+
+To transform callbacky functions into reactive functions, use the `bus.uncallback()` command:
+```javascript
+var readFile = bus.uncallback(fs.readFile)  // Overly simplified
+```
+
+The catch is that callbacky function's inputs and outputs must be serializable
+JSON.  Since `fs.readFile()` returns a `Buffer`, we should serialize the result with
+`.toString()`:
+
+```javascript
+// Wrap fs.readFile() in a function that returns a string:
+readFile = bus.uncallback(function (path, cb) {
+    fs.readFile(path, (err, result) => cb(err, result.toString()))
 })
 ```
 
-Now try reloading the page.  It's still there!  You saved your blog on the
-*server* `state://stateb.us:3005`.
+You can uncallback any function where:
+  - The inputs and outputs are serializable in JSON
+  - Except the last argument, which is a callback that takes args `(error, result)`
 
-Try opening a new browser window.  If you change the blog in one, it will
-immediately update the other.  Statebus keeps the state between both browsers
-syncronized.
-
-In the above code, you fetched state from `state://stateb.us:3005`. This is long form. There is a default server for your Statebus app (the default default server is at stateb.us:3005). To fetch and save to the default server, you can instead just do e.g. `fetch('/your/blog)`. 
-
-We will discuss creating your own statebus server later on. 
-
-But...you can get incredibly far just writing client code. It is particularly useful for prototyping new interactive UIs. Every time you want a new variation of the UI, just copy the single file and use that!
-
-## Writing code
-
-In statebus we:
-
-### ...prefer to write code in coffeescript
-
-[Coffeescript](http://coffeescript.org) lets you execute javascript functions without curly braces and using indentation. You also don't need return statements.
-
-In javascript:
+## Proxy
+This wraps `fetch()` and `save()`. Makes all state look like a big global variable.
 
 ```javascript
-function foo(a, b,c ){
-  return a + b + c;
-}
+sb = bus.sb      // sb might become the new 'bus'
 
-function bar(){
-  alert('hello world');
-}
+sb.foo           // fetch("foo")
+sb["/foo"]       // fetch from server
+sb["/foo"].posts[5].title   // access an array
 
-foo(1,2,3);
-bar();
+sb.bar.fi = 3    // save({key: "bar", fi: 3})
+sb.foo = 3       // save({key: "foo", _: 3})
+sb.foo = sb.bar  // save({key: "foo", _: fetch("bar")})
+
+sb.foo()         // access the underlying raw JSON: {key: "foo", _: {key: "bar", fi: 3}}
+sb.foo().key     // => "foo"
 ```
 
-In coffeescript/statebus:
-
-```coffeescript
-foo = (a, b, c) ->
-  a + b + c
-
-bar = ->
-  alert('hello world')
-
-foo 1 2 3
-
-bar
-```
-
-Note that you can use Javascript instead of Coffeescript, but our examples will all be in Coffeescript.
-
-### ...build a virtual dom using react
-
-In [react.js](https://facebook.github.io/react/), you create a virtual dom that automatically updates based on state changes. To do this, you essentially define a render function that returns a dom element based on the current state. Statebus removes the cruft so you only need to define the render method. Like this example below, that creates a virtual comment box element and renders it with the 'render' method.
-
-In javascript:
-
-```javascript / JSX
-var CommentBox = React.createClass({ 
-  render: function() { 
-    return ( 
-      <div style="font-size:" + this.props.font_size + "px">Hello, world! I am a CARDBOARDBOX</div> ); } });
-```
-
-In statebus:
-
-```coffeescript
-dom.CARDBOARDBOX = ->
-  DIV
-    style: 
-      fontSize: @props.font_size
-    "Hello, world! I am a CARDBOARDBOX"
-```
-
-Virtual dom elements in statebus are written in ALLCAPS. You can re-use them inside other elements:
-
-```coffeescript
-dom.MAIN =->
-  DIV
-    className: 'main_area'
-    'hello'
-    CARDBOARDBOX
-      font_size: 50
-```
-
-### You manage state using `fetch` and `save` functions
-In react, each component has its own "state" and "props" objects. When these change (by calling `setState()` or `setProps()`), the virtual dom automatically re-renders. But this approach doesn't provide any support for synchronizing with a server, and it also makes it difficult for two components to communicate.
-
-Instead, statebus simplifies the idea by providing distributed access to state using a url-like syntax. Specifically you can use `fetch` and `save` commands like this:
-
-```coffeescript
-dom.EXAMPLE = ->
-  state = fetch('/morgan/example')   # fetch this key from the server
-                                     # because of the leading '/'
-  if !state.width?
-    state.width = 100
-    state.height = 100
-  DIV
-    style:
-      height: state.height
-      width: state.width
-      backgroundColor: 'red'
-
-    onClick: (e) ->
-      state.width += 100
-      state.height += 100
-      save(state)
-```
-
-This example resizes a square when you click on it. 
-
-`fetch` returns an object located at the key `/morgan/example`, and
-subscribes to that object. What that means is that any time the state
-at `/morgan/example` changes, example will re-execute. `save(state)`
-will save changes and propagate them to any function that is
-subscribed.
-
-**Important:** the leading `/` in `/morgan/example` means that the state
-will synchronize with the server. A key `morgan/example` would only be
-available to the client.
+Behind the scenes, all data is stored in a JSON encoding.  You can get the
+underlying JSON with `sb.blah()`.
 
 
-#### ...and a dumb quirk
 
-Dom elements are functions that take two arguments: props and children. For example, `DIV( { id: 'example' }, [ child1, child2 ])`. In coffeescript you can write this as
+#### JSON encoding
 
-```coffeescript
-DIV
-  id: 'example'
-  child1
-  child2
-```
+The encoding hides keys, dereferences pointers, and unwraps singleton objects
+when viewed through the `sb` proxy interface.
 
-But if you don't have any props to pass, you need to pass in 'null' like this:
+```javascript
+  // Basics
+  {_: 3}             -> 3                           // Underscore is unwrapped
+  {key: 3}           -> {}                          // Keys are hidden
+  {bar_key: '/bar'}  -> {bar: {..this is bar..}}    // *_key is a pointer to other state
+  {key_: 3}          -> {key: 3}                    // Trailing underscore escapes
+  {__: 3}            -> {_: 3}                      // Trailing underscore escapes
 
-```coffeescript
-DIV null,
-  child1
-  child2
+  // Now let's try some combinations
+  {_key: '/bar'}     -> {..this is bar..}           // _key means "unwrap this pointer"
+
+  // On an array, appending "_key" means each element is a pointer
+  {bars_key: ['/bar/1', '/bar/2']}               -> {bars: [{..bar1..}, {..bar2..}]}
+
+  // You can get the same result by wrapping each element with {_key: ..}
+  {bars: [{_key: '/bar/1'}, {_key: '/bar/2'}]}   -> {bars: [{..bar1..}, {..bar2..}]}
+
+  // In either case, you can escape an exceptional element in an array by wrapping it
+  {bars_key: ['/bar/1', {_: 'hi!'}   ]}          -> {bars: [{..bar1..}, 'hi!']}
+  {bars:     [{_key: '/bar/1'}, 'hi!']}          -> {bars: [{..bar1..}, 'hi!']}
 ```
 
 
+# What's new in Statebus v4
 
+The big news is that you can now
+**[program state behavior](#program-state-behavior)**! When combined with
+[multiple busses](#make-multiple-busses), this lets us implement
+[multiple-user support](#support-multiple-users) on the server, complete with
+permissions, authentication, and custom behavior.
 
+But first let's get installation out of the way.
 
-# Write your own statebus server
-
-You can host your own state(bus) server, with permissions and authentication (and anything else you want to do server-side).
-
-## Installation
+## Installing
 
 #### Server
 
 ```shell
-npm install statebus@5
+npm install statebus@4
 ```
 
-The `@5` tells npm to install Statebus v5.
+The `@4` tells npm to give you version 4 instead of 3.
 
 Create a server with:
 ```javascript
@@ -208,9 +140,9 @@ var bus = require('statebus/server')({
 
     // You can pass these options to your new server:
 
-    port: 3005,                  // 3005 is the default port for Statebus v5 to listen on
+    port: 3004,                  // 3004 is the default port for Statebus v4 to listen on
     // backdoor: 4004,           // For testing. Direct access to master at this port. Defaults to null.
-    file_store: true,            // Persists state across server restarts.  Defaults to true.
+    file_store: false,           // Persists state across server restarts.  Defaults to true.
     client: function (client) {} // See "multiple users" below.  Defaults to null.
 })
 ```
@@ -220,13 +152,10 @@ websocket server and serve its state over the internet.  Otherwise, it'll just
 make a new bus object, as described in
 [Multiple Busses](#make-multiple-busses), disconnected from the network.
 
-You can then run your server with `node` or `nodemon` or `supervisor`.
-
-Note that the API for starting a server is in flux. 
 
 #### Client
 
-To set your server as the default in any client code, set the `server` attribute of the statebus client script element. For example, if you're doing local development, you might have: 
+The template for client code has changed:
 
 ```coffeescript
 <script type="statebus">
@@ -235,13 +164,26 @@ dom.BODY = ->
   DIV null,
     'Hello world!'
 
-</script><script src="https://stateb.us/client5.js"
-                 server="http://localhost:3005"></script>
+</script><script src="https://stateb.us/client4.js"></script>
 ```
+
+- ~~You don't need to add `null,` to that `DIV` anymore!~~
+- Link to `client4.js` instead of `client.js` to get version 4
+- Specify a custom server with the `server` attribute:
+
+```html
+</script><script src="https://stateb.us/client4.js"
+                 server="http://localhost:3004"></script>
+```
+
+The default port for statebus version 4 is `3004`.
+
 
 ## Program state behavior
 
-You can *control* reads and writes to state to:
+Up until now, the statebus has been dumb and passive—it saves and fetches
+whatever anyone asks it to.  But now there's an API to *control* reads and
+writes to state.  You can:
 - Give distinct users distinct permissions and views of state **⬅︎ You can write server code!**
 - Connect statebusses together
 - Make proxies or caches that define state in terms of other state
@@ -253,7 +195,7 @@ How does it work? Recall the four statebus methods:
 - forget(key)
 - delete(key)
 
-You can define *handlers* that control how each method behaves on a set of keys:
+You can now define *handlers* that control how each method behaves on a set of keys:
 - bus(key_space).to_fetch = function (key) { ... }
 - bus(key_space).to_save = function (obj) { ... }
 - bus(key_space).to_forget = function (key) { ... }
@@ -269,9 +211,9 @@ When someone fetches this state, it'll run our function, which returns the
 aggregated blog:
 
 ```javascript
-bus('aggregate_blog').to_fetch = function (key) {
-   var blog1 = fetch('blog1')
-   var blog2 = fetch('blog2')
+bus('/aggregate_blog').to_fetch = function (key) {
+   var blog1 = fetch('/blog1')
+   var blog2 = fetch('/blog2')
    return {posts: blog1.posts.concat(blog2.posts)}
 }
 ```
@@ -422,8 +364,8 @@ var master = require('statebus/server')({  // The master bus is defined here
 
         // Client-specific state definitions go here
 
-        // Give each client a different view of the 'foo' state:
-        client('foo').to_fetch = function (key) {
+        // Give each client a different view of the '/foo' state:
+        client('/foo').to_fetch = function (key) {
             if (fetch('/current_user').logged_in)
                 return {you_are: 'logged in!!!'}
             else
@@ -433,7 +375,7 @@ var master = require('statebus/server')({  // The master bus is defined here
 })
 
 // Master state definitions can go below
-// master('bar').to_fetch = ...
+// master('/bar').to_fetch = ...
 ```
 
 Any handler defined on the `client` bus will shadow the `master` bus.  If you
@@ -455,9 +397,9 @@ Additionally, if you enable multi-user support with the `client:` option, each
 client will automatically have a custom `/current_user`, `/connections`, and
 `/connection` state defined for it.
 
-### The `current_user` state
+### The `/current_user` state
 
-Each user will have a different `/current_user` state. By default, it looks like this on the client:
+Each user will have a different `/current_user` state. By default, it looks like this:
 
 ```javascript
 {
@@ -473,18 +415,12 @@ If they are, you can get the current user's key with `fetch('/current_user').use
 
 You can also manipulate `/current_user`, to log in, out, or edit or create your account:
 
-#### Create a new account
+#### Log in
 
 Run this:
 ```javascript
-c.create_account = {name: 'Reginald McGee', pass: 'security-R-us', email: 'barf@toilet.guru'}
-save(c)
-
-
-#### Log in
-
-// ... and now log into it:
-c.login_as = {name: 'Reginald McGee', pass: 'security-R-us'}
+c = fetch('/current_user')
+c.login_as = {name: 'mike', pass: '••••'}
 save(c)
 ```
 
@@ -518,10 +454,19 @@ c.logout = true
 save(c)
 ```
 
+#### Create a new account
+```javascript
+c.create_account = {name: 'Reginald McGee', pass: 'security-R-us', email: 'barf@toilet.guru'}
+save(c)
+
+// ... and now log into it:
+c.login_as = {name: 'Reginald McGee', pass: 'security-R-us'}
+save(c)
+```
 
 #### The `/user/*` state
 
-Each user has a key starting with `user/` (or `user/`).  You can look up any other
+Each user has a key starting with `/user/`.  You can look up any other
 user by fetching their `/user/` key.  You'll be able to see their name, but
 you can only see your own email address.
 
@@ -549,11 +494,11 @@ the same user (me):
 
 ```javascript
 {
-  key: "connections",
+  key: "/connections",
   all: [
-    {user: {key: "user/mike", name: "mike", email: "toomim@gmail.com"}},
+    {user: {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}},
     {},
-    {user: {key: "user/mike", name: "mike", email: "toomim@gmail.com"}}
+    {user: {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}}
   ]
 }
 ```
@@ -583,19 +528,16 @@ This info is broadcast to everyone who fetched `/connections` on the server:
 {
   key: "/connections",
   all: [
-    {user: {key: "/user/mike", name: "mike"}, extra_info: "Something!"},
+    {user: {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}, extra_info: "Something!"},
     {},
-    {user: {key: "/user/mike", name: "mike"}}
+    {user: {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}}
   ]
 }
 ```
 
 ## Little things
 
-
 ### Back door entry
-
-*Travis asks: can we remove this section?*
 
 The backdoor is cool. Enable it in options on the server:
 
@@ -648,10 +590,8 @@ you are concerned with.
 
 ## Server example
 
-* Travis asks: can we eliminate this example and just use the blog example? *
-
 ```shell
-npm install statebus@5
+npm install statebus@4
 ```
 
 Make a `demo.js`:
@@ -800,6 +740,12 @@ master('/post/*').to_save = function (o) {
 }
 ```
 
+# What's missing
+
+- Good SQL database adapters
+- Finalized API names (the v5 release might break your code)
+- Connect to multiple servers simultaneously
+
 
 # What's not new
 
@@ -844,106 +790,7 @@ bus(->
 )
 ```
 
-## Eliminate callback code with `uncallback()`
-
-Now you can transform APIs that use callbacks:
-
-```javascript
-fs.readFile('hello.txt', (err, first_file) => {
-    if (err)
-        console.error('Error', err)
-    else
-        fs.readFile('world.txt', (err, second_file) => {
-            if (err)
-                console.error('Error', err)
-            else
-                fs.writeFile('hello world.txt', first_file + second_file)
-        })
-})
-
-```
-
-...into reactions:
-
-```javascript
-bus(() => {
-    var first_file = readFile('hello.txt')
-    var second_file = readFile('world.txt')
-    fs.writeFile('hello world.txt', first_file + second_file)
-})
-```
-Isn't that much nicer?
-
-To transform callbacky functions into reactive functions, use the `bus.uncallback()` command:
-```javascript
-var readFile = bus.uncallback(fs.readFile)  // Overly simplified
-```
-
-The catch is that callbacky function's inputs and outputs must be serializable
-JSON.  Since `fs.readFile()` returns a `Buffer`, we should serialize the result with
-`.toString()`:
-
-```javascript
-// Wrap fs.readFile() in a function that returns a string:
-readFile = bus.uncallback(function (path, cb) {
-    fs.readFile(path, (err, result) => cb(err, result.toString()))
-})
-```
-
-You can uncallback any function where:
-  - The inputs and outputs are serializable in JSON
-  - Except the last argument, which is a callback that takes args `(error, result)`
-
-## Proxy
-This wraps `fetch()` and `save()`. Makes all state look like a big global variable.
-
-```javascript
-sb = bus.sb      // sb might become the new 'bus'
-
-sb.foo           // fetch("foo")
-sb["/foo"]       // fetch from server
-sb["/foo"].posts[5].title   // access an array
-
-sb.bar.fi = 3    // save({key: "bar", fi: 3})
-sb.foo = 3       // save({key: "foo", _: 3})
-sb.foo = sb.bar  // save({key: "foo", _: fetch("bar")})
-
-sb.foo()         // access the underlying raw JSON: {key: "foo", _: {key: "bar", fi: 3}}
-sb.foo().key     // => "foo"
-```
-
-Behind the scenes, all data is stored in a JSON encoding.  You can get the
-underlying JSON with `sb.blah()`.
-
-#### JSON encoding
-
-The encoding hides keys, dereferences pointers, and unwraps singleton objects
-when viewed through the `sb` proxy interface.
-
-```javascript
-  // Basics
-  {_: 3}             -> 3                           // Underscore is unwrapped
-  {key: 3}           -> {}                          // Keys are hidden
-  {bar_key: '/bar'}  -> {bar: {..this is bar..}}    // *_key is a pointer to other state
-  {key_: 3}          -> {key: 3}                    // Trailing underscore escapes
-  {__: 3}            -> {_: 3}                      // Trailing underscore escapes
-
-  // Now let's try some combinations
-  {_key: '/bar'}     -> {..this is bar..}           // _key means "unwrap this pointer"
-
-  // On an array, appending "_key" means each element is a pointer
-  {bars_key: ['/bar/1', '/bar/2']}               -> {bars: [{..bar1..}, {..bar2..}]}
-
-  // You can get the same result by wrapping each element with {_key: ..}
-  {bars: [{_key: '/bar/1'}, {_key: '/bar/2'}]}   -> {bars: [{..bar1..}, {..bar2..}]}
-
-  // In either case, you can escape an exceptional element in an array by wrapping it
-  {bars_key: ['/bar/1', {_: 'hi!'}   ]}          -> {bars: [{..bar1..}, 'hi!']}
-  {bars:     [{_key: '/bar/1'}, 'hi!']}          -> {bars: [{..bar1..}, 'hi!']}
-```
-
-
-## Intermediate states, crash recovery, and loading()
+### Intermediate states, crash recovery, and loading()
 
 If a state `/foo` hasn't loaded yet, `fetch("/foo")` will return an empty
 object `{key: "/foo"}`.  In these intermediate states, your code might return
@@ -970,37 +817,9 @@ dom.BODY = ->
 
 
 
+
+
 # API Reference
-
-The API works on both client and server.
-
-## Valid State
-Each state object:
-- Is JSON
-- Is an object
-- Has a field `key:`, which defines a unique URL
-- Can contain other state objects
-
-For instance, these state objects are **valid**:
-
-| Example state |
-| :---- |
-| `{key: '/blog', posts: [], owner: '/user/4'}` |
-| `{key: 'empty thing'}` |
-| `{key: 'parent/4', child: {key: '/kiddo/3'}}` |
-| `{key: 'some variable value', var: 3}` |
-
-But these aren't:
-
-| Invalid state: | Because |
-| :---- | :---- |
-| `3` | Individual variables *have* to be wrapped in objects. |
-| `[3, 5, {23: 99}]` | Arrays must be wrapped in objects too |
-| `{var: 3}` |  Objects need a `key:` |
-| `{key: 'foo', var: function () {}}` |  Functions aren't in JSON. |
-
-## URLs
-The URL for a `key` can be an arbitrary string.
 
 ## Statebus Protocol Methods
 Each bus implements the four methods of the statebus protocol: `fetch`, `save`, `forget`, and `delete`.
@@ -1027,6 +846,8 @@ Each bus implements the four methods of the statebus protocol: `fetch`, `save`, 
 
   - (Not yet fully implemented.)
   - Removes the state at `key` from the state space
+
+
 
 ## Reactive functions
 
@@ -1108,13 +929,216 @@ loading().
 
 ### `bus.cache[key]`
   - Lets you bypass `fetch` to access the cache directly
-  - You shouldn't need this, but it can be nice for debugging.
+  - You shouldn't need this.
 
 
-# What's missing
 
-- Good SQL database adapters
-- Finalized API names (the v5 release might break your code)
-- Connect to multiple servers simultaneously
+## Valid State
+Each state object:
+- Is JSON
+- Is an object
+- Has a field `key:`, which defines a unique URL
+- Can contain other state objects
+
+For instance, these state objects are **valid**:
+
+| Example state |
+| :---- |
+| `{key: '/blog', posts: [], owner: '/user/4'}` |
+| `{key: 'empty thing'}` |
+| `{key: 'parent/4', child: {key: '/kiddo/3'}}` |
+| `{key: 'some variable value', var: 3}` |
+
+But these aren't:
+
+| Invalid state: | Because |
+| :---- | :---- |
+| `3` | Individual variables *have* to be wrapped in objects. |
+| `[3, 5, {23: 99}]` | Arrays must be wrapped in objects too |
+| `{var: 3}` |  Objects need a `key:` |
+| `{key: 'foo', var: function () {}}` |  Functions aren't in JSON. |
+
+## URLs
+The URL for a `key` can be an arbitrary string.
 
 
+# Original Readme for Statebus Version 3
+
+Statebus is a protocol for synchronizing state.
+
+## Making a client
+
+You don't need a server yet.  You don't need to download anything.
+Just make a .html file on your filesystem containing this:
+
+```coffeescript
+<script type="statebus">                                           # Initial line
+
+dom.BODY = ->                                                      # Your code here
+  DIV 'Hello, World!'    # Return a div
+
+#</script><script src="https://stateb.us/client5.js"></script>     # Loads statebus
+```
+
+Now you have a working statebus app, in a single html file!
+Double-click to open it in your web browser with a `file:///` url.
+
+Want to turn this into a simple blog?  Replace the body with this:
+
+```coffeescript
+dom.BODY = ->
+  blog = fetch('state://stateb.us:3005/your/blog')
+  DIV {},
+    for post in blog.posts
+      DIV {},
+        H1 post.title
+        DIV post.body
+```
+
+It'll be empty until you add some content though.  Open your
+javascript console and run:
+
+```javascript
+save({
+  key: 'state://stateb.us:3005/your/blog',
+  posts: [{title: 'hello', body: 'world'}]
+})
+```
+
+Now try reloading the page.  It's still there!  You saved your blog on the
+*server* `state://stateb.us:3005`.
+
+Try opening a new browser window.  If you change the blog in one, it will
+immediately update the other.  Statebus keeps the state between both browsers
+syncronized.
+
+## Writing code
+
+In statebus we:
+
+- Don't use CSS. We just inline all of our styles.
+- Don't directly write HTML. The html is generated in the javascript with e.g. `DIV {style: position: 'absolute'}, 'My div'`
+- We're using coffeescript, which is nicer syntax than javascript. It compiles down to javascript, but you don't have to worry about the compilation. That's taken care of by statebus.
+- The web framework uses facebook's Reactjs behind the scenes.
+
+## You write code in coffeescript
+
+[Coffeescript](http://coffeescript.org) lets you execute javascript functions without curly braces and using indentation. You also don't need return statements.
+
+In javascript:
+
+```javascript
+function foo(a, b,c ){
+  return a + b + c;
+}
+
+function bar(){
+  alert('hello world');
+}
+
+foo(1,2,3);
+bar();
+```
+
+In coffeescript/statebus:
+
+```coffeescript
+foo = (a, b, c) ->
+  a + b + c
+
+bar = ->
+  alert('hello world')
+
+foo 1 2 3
+
+bar
+```
+
+### You build a virtual dom using react
+
+In [react.js](https://facebook.github.io/react/), you create a virtual dom that automatically updates based on state changes. To do this, you essentially define a render function that returns a dom element based on the current state. Statebus removes the cruft so you only need to define the render method. Like this example below, that creates a virtual comment box element and renders it with the 'render' method.
+
+In javascript:
+
+```javascript
+var CommentBox = React.createClass({ 
+  render: function() { 
+    return ( 
+      <div style="font-size:" + this.props.font_size + "px">Hello, world! I am a CARDBOARDBOX</div> ); } });
+```
+
+In statebus:
+
+```coffeescript
+dom.CARDBOARDBOX = ->
+  DIV
+    style: 
+      fontSize: @props.font_size
+    "Hello, world! I am a CARDBOARDBOX"
+```
+
+Virtual dom elements in statebus are written in ALLCAPS. You can re-use them inside other elements:
+
+```coffeescript
+dom.MAIN =->
+  DIV
+    className: 'main_area'
+    'hello'
+    CARDBOARDBOX
+      font_size: 50
+```
+
+### You manage state using `fetch` and `save` functions
+In react, each component has its own "state" and "props" objects. When these change (by calling `setState()` or `setProps()`), the virtual dom automatically re-renders. But this approach doesn't provide any support for synchronizing with a server, and it also makes it difficult for two components to communicate.
+
+Instead, statebus simplifies the idea by providing distributed access to state using a url-like syntax. Specifically you can use `fetch` and `save` commands like this:
+
+```coffeescript
+dom.EXAMPLE = ->
+  state = fetch('/morgan/example')   # fetch this key from the server
+                                     # because of the leading '/'
+  if state.width == undefined
+    state.width = 100
+    state.height = 100
+  DIV
+    style:
+      height: state.height
+      width: state.width
+      backgroundColor: 'red'
+
+    onClick: (e) ->
+      state.width += 100
+      state.height += 100
+      save(state)
+```
+
+This example resizes a square when you click on it. [Play with it here](https://cheeseburgertherapy.com/emo/square).
+
+`fetch` returns an object located at the key `/morgan/example`, and
+subscribes to that object. What that means is that any time the state
+at `/morgan/example` changes, example will re-execute. `save(state)`
+will save changes and propagate them to any function that is
+subscribed.
+
+**Important:** the leading `/` in `/morgan/example` means that the state
+will synchronize with the server. A key `morgan/example` would only be
+available to the client.
+
+#### ...and a dumb quirk
+
+Dom elements are functions that take two arguments: props and children. For example, `DIV( { id: 'example' }, [ child1, child2 ])`. In coffeescript you can write this as
+
+```coffeescript
+DIV
+  id: 'example'
+  child1
+  child2
+```
+
+But if you don't have any props to pass, you need to pass in 'null' like this:
+
+```coffeescript
+DIV null,
+  child1
+  child2
+```
