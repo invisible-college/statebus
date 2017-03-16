@@ -412,7 +412,7 @@
 
         delete cache[key]
 
-        console.warn("Deleting " + key + "-- Statebus doesn't yet re-run functions subscribed to it, or update versions")
+        // console.warn("Deleting " + key + "-- Statebus doesn't yet re-run functions subscribed to it, or update versions")
 
         // Todos:
         //
