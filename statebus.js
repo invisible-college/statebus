@@ -268,14 +268,14 @@
             // Two ways to optimize this in future:
             //
             // 1. Only clone objects/arrays if they are new.
-            // 
+            //
             //    Right now we re-clone all internal arrays and objects on
             //    each pub.  But we really only need to clone them the first
             //    time they are pubbed into the cache.  After that, we can
             //    trust that they aren't referenced elsewhere.  (We make it
             //    the programmer's responsibility to clone data if necessary
             //    on fetch, but not when on pub.)
-            // 
+            //
             //    We'll optimize this once we have history.  We can look at
             //    the old version to see if an object/array existed already
             //    before cloning it.
@@ -317,7 +317,7 @@
                     for (var k in obj)
                         if (cache[obj.key][k] !== obj[k])
                             cache[obj.key][k] = obj[k]
-                    
+
                     // Then delete extra fields from cache
                     for (var k in cache[obj.key])
                         if (!(k in obj))
@@ -342,7 +342,7 @@
         for (var i=0; i < keys.length; i++)
             update_cache(backup_cache[keys[i]], cache)
     }
-        
+
 
     function forget (key, save_handler) {
         if (arguments.length === 0) {
@@ -564,7 +564,7 @@
             params = /([^\s,]+)/g,
             s = handler.toString().replace(comments, '')
         params = s.slice(s.indexOf('(')+1, s.indexOf(')')).match(params) || []
-        
+
         handler.args = {}
         for (var i=0; i<params.length; i++)
             switch (params[i]) {
@@ -820,7 +820,7 @@
             // if (fetches_out[key])
             //     console.error('Two .to_fetch functions are running on the same key',
             //                   key+'!', funk_name(funck), funk_name(fetches_out[key]))
-            
+
             fetches_out[arg] = fetches_out[arg] || []
             fetches_out[arg].push(f)   // Record active to_fetch handler
             pending_fetches[arg] = f   // Record that the fetch is pending
@@ -828,7 +828,7 @@
 
         if (just_make_it)
             return f
-        
+
         return f()
     }
 
@@ -852,7 +852,7 @@
 
     // ****************
     // Reactive functions
-    // 
+    //
     // We wrap any function with a reactive wrapper that re-calls it whenever
     // state it's fetched changes.
 
@@ -1030,8 +1030,80 @@
         }
     }
 
-    // Proxy
     function sb () {
+    // I have the cache behind the scenes
+    // Each proxy has a target object -- the raw data on cache
+    // If we're proxying a {_: ...} singleton then ...
+
+    function item_proxy (base, o) {
+        if (typeof o === 'number'
+            || typeof o === 'string'
+            || typeof o === 'boolean'
+            || o === undefined
+            || o === null
+            || typeof o === 'function') return o
+
+        return new Proxy(o, {
+            get: function get(o, k) {
+                if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
+                    return undefined
+                k = escape_key(k)
+                return item_proxy(base, o[k])
+            },
+            set: function set(o, k, v) {
+                var result = o[escape_key(k)] = v
+                bus.save(base)
+                return result
+            },
+            has: function has(o, k) {
+                return escape_key(k) in o
+            },
+            deleteProperty: function del (o, k) {
+                delete o[escape_key(k)]
+            },
+            apply: function apply (o, This, args) {
+                return o
+            }
+        })}
+
+    return new Proxy(bus.cache, {
+        get: function get(o, k) {
+            if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
+                return undefined
+            var raw = bus.fetch(k),
+                obj = raw
+            while (typeof obj == 'object' && '_' in obj) obj = obj._
+            return item_proxy(raw, obj)
+        },
+        set: function set(o, k, v) {
+            if (typeof v === 'number'
+                || typeof v === 'string'
+                || typeof v === 'boolean'
+                || v === undefined
+                || v === null
+                || typeof v === 'function'
+                || Array.isArray(v))
+                v = {_:v}
+            else
+                v = bus.clone(v)
+            v.key = k
+            bus.save(v)
+        },
+        // In future, this might check if there's a .to_fetch function OR
+        // something in the cache:
+        //
+        // has: function has(o, k) {
+        //     return k in o
+        // },
+        // ... but I haven't had a need yet.
+        deleteProperty: function del (o, k) {
+            bus.delete(escape_key(k))
+        }
+    })
+}
+
+    // Proxy2
+    function sb2 () {
         // I have the cache behind the scenes
         // Each proxy has a target object -- the raw data on cache
         // If we're proxying a {_: ...} singleton then ...
@@ -1103,7 +1175,7 @@
             },
             // In future, this might check if there's a .to_fetch function OR
             // something in the cache:
-            // 
+            //
             // has: function has(o, k) {
             //     return k in o
             // },
@@ -1389,7 +1461,7 @@
                 item[i] = clone(item[i])
             return item
         }
-        
+
         if (typeof item == "object") {
             // Is it DOM
             if (item.nodeType && typeof item.cloneNode == "function")
