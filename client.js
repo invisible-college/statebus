@@ -52,6 +52,8 @@
         document.cookie = key + '=' + val + '; Expires=21 Oct 2025 00:0:00 GMT;'
     }
     function sockjs_client (prefix, url) {
+	var bus = this;
+
         function socket_api (url) {
             url = url.replace(/^state:\/\//, 'https://')
             url = url.replace(/^istate:\/\//, 'http://')
