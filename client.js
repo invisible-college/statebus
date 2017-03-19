@@ -52,6 +52,8 @@
         document.cookie = key + '=' + val + '; Expires=21 Oct 2025 00:0:00 GMT;'
     }
     function sockjs_client (prefix, url) {
+	var bus = this;
+
         function socket_api (url) {
             url = url.replace(/^state:\/\//, 'https://')
             url = url.replace(/^istate:\/\//, 'http://')
@@ -339,6 +341,9 @@
         var react_class = React.createClass(component)
         var result = function (props, children) {
             props = props || {}
+            if(props.key !== undefined) props['data-key'] = props.key 
+            props['data-component'] = component.displayName
+
             return (React.version >= '0.12.'
                     ? React.createElement(react_class, props, children)
                     : react_class(props, children))
@@ -494,12 +499,17 @@
                         for (k in arg)
                             if (is_css_prop[k])
                                 attrs.style[k] = arg[k]        // Merge styles
-                    else
-                        if (k === 'style')             // Merge insides of style tags
-                            for (k2 in arg[k])
-                                attrs.style[k2] = arg[k][k2]
-                    else
-                        attrs[k] = arg[k]          // Or be normal.
+                            else if (k === 'style')            // Merge insides of style tags
+                                for (k2 in arg[k])
+                                    attrs.style[k2] = arg[k][k2]
+                            else {
+                                attrs[k] = arg[k]          // Or be normal.
+
+                                if (k === 'key') {
+                                    attrs['data-key'] = arg[k]
+                                } 
+                            }
+
                     // else
                     //     console.log("Couldn't parse param", arg)
                 }
@@ -509,7 +519,6 @@
                 return el(attrs, children)
             }
         }
-
         for (var el in React.DOM)
             window[el.toUpperCase()] = better_element(React.DOM[el])
         
@@ -545,9 +554,17 @@
     // Load the components
     function make_component(name) {
         // Define the component
+
         window[name] = window.React_View({
             displayName: name,
-            render: function () { return window.dom[name].bind(this)()},
+            render: function () { 
+                var c = window.dom[name].bind(this)()
+
+                c.props['data-component'] = name
+                c.props['data-key'] = this.props['data-key']
+
+                return c
+            },
             componentDidMount: function () {
                 var refresh = window.dom[name].refresh
                 refresh && refresh.bind(this)()
@@ -605,6 +622,7 @@
                     for (var view in dom) {
                         window.dom[view] = dom[view]
                         make_component(view)
+
                     }
                 }
             }
