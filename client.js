@@ -391,6 +391,7 @@
                 var bus = orig_statebus()
                 for (var i=0; i<extra_stuff.length; i++)
                     bus[extra_stuff[i]] = eval(extra_stuff[i])
+                bus.localstorage_client('ls/*')
                 return bus
             }
         }
@@ -435,7 +436,6 @@
         improve_react()
         window.dom = window.dom || {}
         window.ignore_flashbacks = false
-        bus.localstorage_client('ls/*')
         bus.sockjs_client ('/*', statebus_server)
 
         if (window.statebus_backdoor) {
