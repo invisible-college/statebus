@@ -460,6 +460,10 @@
         }
         load_coffee()
 
+        if (window.statebus_ready)
+            for (var i=0; i<statebus_ready.length; i++)
+                statebus_ready[i]()
+
         if (dom.Body || dom.body || dom.BODY)
             React.render((window.Body || window.body || window.BODY)(), document.body)
     }
