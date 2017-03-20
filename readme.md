@@ -4,9 +4,7 @@
 
 When we program dynamic web applications, we write an extraordinary amount of code just trying to keep state synchronized between different UI components, between client and server, and between multiple connected clients. 
 
-<Reactjs made an important breakthrough by enabling web components to be programmed declaratively, without having to write code that specifically updates the HTML whenever a given piece of state changes.>
-
-Statebus <takes state synchronization further. It> gives every piece of state its own URL, provides a simple, unified API for accessing state on clients and servers, and automatically handles synchronization. Whereas HTTP provides State Transfer, Statebus provides State Synchronization: 
+Statebus gives every piece of state its own URL, provides a simple, unified API for accessing state on clients and servers, and automatically handles synchronization. Whereas HTTP provides State Transfer, Statebus provides State Synchronization: 
 
 | HTTP | Statebus | 
 | ----: | :---- |
@@ -16,7 +14,7 @@ Statebus <takes state synchronization further. It> gives every piece of state it
 | `PATCH`     — Change state on server   | `Delete`  — Remove state from all nodes |
 | `DELETE`    — Remove state from server   |  |
 
-This repository is a Javascript implementation of the Statebus protocol. It is backwards compatible with HTTP. You can use it right now to build web applications. It builds on Reactjs to provide reactive re-rendering, but extends the reactivity through the whole web stack. Servers and clients are automatically synchronized. 
+This repository is a Javascript implementation of the Statebus protocol you can use it right now to build web applications. It builds from Reactjs to provide reactive re-rendering, but extends the reactivity through the whole web stack. Servers and clients are automatically synchronized.
 
 This implementation is great for prototyping. It can be used in production (see e.g. [Consider.it](https://consider.it) or [Cheeseburger Therapy](https://cheeseburgertherapy.com)), but there are rough edges. We welcome contributions, and are excited to help you build your own Statebus applications.
 
@@ -81,10 +79,12 @@ Statebus provides a distributed key/value store. Each state object:
 - Can contain other state objects
 
 `fetch(key)` returns an object in Statebus' distributed key/value store, and also subscribes the calling function to changes to that state. So when a reactive function like dom.BODY runs `fetch('/your/blog')`, it returns:
+```javascript
 {
   key: '/your/blog',
   posts: [{title: 'hello', body: 'world'}]
 }
+```
 
 Importantly, Statebus notes that `dom.BODY` depends on the state at `/your/blog` and will re-execute it if the state changes. These web component functions are *reactive* to changes in state.
 
