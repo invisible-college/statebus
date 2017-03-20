@@ -1,53 +1,103 @@
 # Statebus
 
-*State* is the changing data your application uses and modifies. Some state is only relevant for a given client, like the current url or whether a button is depressed. And some state should be persisted to the server and broadcast to other clients, like an authenticated user's pseudonym or a new post in a forum. 
+Statebus is a new web protocol where every piece of state has a URL. It provides a unified API for accessing state on clients and servers, and automatically handles synchronization. In contrast to how HTTP provides State Transfer, Statebus provides State *Synchronization*.
 
-When we program dynamic web applications, we write an extraordinary amount of code just trying to keep state synchronized between different UI components, between client and server, and between multiple connected clients. 
+This repository is a Javascript implementation of the Statebus protocol. You can use it right now to build web applications. It builds from [Reactjs](http://reactjs.org) to provide reactive re-rendering, but extends the reactivity through the whole web stack.
 
-Statebus gives every piece of state its own URL, provides a simple, unified API for accessing state on clients and servers, and automatically handles synchronization. Whereas HTTP provides State Transfer, Statebus provides State Synchronization: 
-
-| HTTP | Statebus | 
-| ----: | :---- |
-| `GET`       — Retrieve state from server | `Fetch`    — Retrieve and subscribe to future changes | 
-| `PUT`       — Change state on server  | `Save`     — Change state and update all nodes |
-| `POST`      — Change state on server     | `Forget`  — Unsubscribe from fetch |
-| `PATCH`     — Change state on server   | `Delete`  — Remove state from all nodes |
-| `DELETE`    — Remove state from server   |  |
-
-This repository is a Javascript implementation of the Statebus protocol you can use it right now to build web applications. It builds from Reactjs to provide reactive re-rendering, but extends the reactivity through the whole web stack. Servers and clients are automatically synchronized.
-
-This implementation is great for prototyping. It can be used in production (see e.g. [Consider.it](https://consider.it) or [Cheeseburger Therapy](https://cheeseburgertherapy.com)), but there are rough edges. We welcome contributions, and are excited to help you build your own Statebus applications.
+This implementation is great for prototyping. You can see a list of existing prototypes [here](https://invisible.college). We welcome contributions, and are excited to help you build your own Statebus applications.
 
 # Getting started
+Today we are going to make a basic message feed widget. It's a public feed that anyone can post to. We hope you'll post a message on it - it's a guestbook for anyone who visits this tutorial!
 
-## Make a client
+We've broken the tutorial into two parts: Making a client and Making a server. Most of the logic is in the client, because Statebus [collapses time and space](https://invisible.college). The server handles basic privacy and data filtering features.
 
-You don't need a server yet.  You don't need to download anything.
-Just make a .html file on your filesystem containing this:
+## Making a client
+To write client code, you don't need to download anything. Instead, you'll just edit a single file locally on your computer. However, you'll be writing in [Coffeescript](http://coffeescript.org) and creating [React](http://reactjs.org) web components, so make sure you're familiar with both of these tools.
+
+
+Here's what you'll be making. Copy and paste this into your html file.
 
 ```coffeescript
-<script type="statebus">                                           # Initial line
+<script type="statebus">                                          
 
-dom.BODY = ->                                                      # Your code here
-  DIV 'Hello, World!'    # Return a div
 
-#</script><script src="https://stateb.us/client5.js"></script>     # Loads statebus v5
+dom.BODY = ->                                                
+    DIV
+      style: 
+        width: 500
+        fontFamily: 'avenir'
+
+      FEED {}
+
+      SENDBOX {}
+
+
+
+dom.FEED = ->
+  feedstate = fetch('/tutorial/feed')
+
+  if not feedstate.posts
+    feedstate.posts = []
+
+  DIV
+    style: @props.style
+    for post in feedstate.posts
+      do(post) =>
+        POST
+          poststate: post
+
+
+
+
+dom.POST = ->
+  DIV
+    style: 
+      backgroundColor: '#E4E4E4'
+      margin: '5 0 5 0'
+      padding: 5
+    @props.poststate.text
+
+
+dom.SENDBOX = ->
+  DIV null,
+    TEXTAREA
+      style:
+        height: 50
+        width: 500
+      id: 'textbox'
+      onChange: (e) => 
+        @local.value = e.target.value
+        save(@local)
+    DIV
+      style: 
+        backgroundColor: '#527FCE'
+        cursor: 'hand'
+        color: 'white'
+        marginTop: 3
+        padding: 3
+        width: 50
+        textAlign: 'center'
+
+      onClick: (e) =>
+        feedstate = fetch('/tutorial/feed')
+        message = @local.value
+        if not feedstate.posts
+          feedstate.posts = []
+        feedstate.posts.push( {text: message} )
+        save(feedstate)
+        @local.value = ''
+        document.getElementById('textbox').value = ''
+      'Post' 
+
+
+
+
+</script><script src="https://stateb.us/client5.js"></script>
 ```	
 
 Now you have a working statebus app, in a single html file!
 Double-click to open it in your web browser with a `file:///` url.
 
-Want to turn this into a simple blog?  Replace the body with this:
-
-```coffeescript
-dom.BODY = ->
-  blog = fetch('/your/blog')
-  DIV {},
-    for post in blog.posts
-      DIV {},
-        H1 post.title
-        DIV post.body
-```
 
 Your blog will be empty initially until you add some content though.
 
