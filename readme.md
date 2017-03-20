@@ -1,4 +1,24 @@
-Statebus is a protocol for synchronizing state. The protocol is described []. What we describe here is a Javascript implementation of the Statebus protocol. We welcome alternative implementations for Javascript, or any language! Send us a message and we'll link to your implementation.
+# Statebus
+
+*State* is the changing data your application uses and modifies. Some state is only relevant for a given client, like the current url or whether a button is depressed. And some state should be persisted to the server and broadcast to other clients, like an authenticated user's pseudonym or a new post in a forum. 
+
+When we program dynamic web applications, we write an extraordinary amount of code just trying to keep state synchronized between different UI components, between client and server, and between multiple connected clients. 
+
+<Reactjs made an important breakthrough by enabling web components to be programmed declaratively, without having to write code that specifically updates the HTML whenever a given piece of state changes.>
+
+Statebus <takes state synchronization further. It> gives every piece of state its own URL, provides a simple, unified API for accessing state on clients and servers, and automatically handles synchronization. Whereas HTTP provides State Transfer, Statebus provides State Synchronization: 
+
+| HTTP | Statebus | 
+| ----: | :---- |
+| `GET`       — Retrieve state from server | `Fetch`    — Retrieve and subscribe to future changes | 
+| `PUT`       — Change state on server  | `Save`     — Change state and update all nodes |
+| `POST`      — Change state on server     | `Forget`  — Unsubscribe from fetch |
+| `PATCH`     — Change state on server   | `Delete`  — Remove state from all nodes |
+| `DELETE`    — Remove state from server   |  |
+
+This repository is a Javascript implementation of the Statebus protocol. It is backwards compatible with HTTP. You can use it right now to build web applications. It builds on Reactjs to provide reactive re-rendering, but extends the reactivity through the whole web stack. Servers and clients are automatically synchronized. 
+
+This implementation is great for prototyping. It can be used in production (see e.g. [Consider.it](https://consider.it) or [Cheeseburger Therapy](https://cheeseburgertherapy.com)), but there are rough edges. We welcome contributions, and are excited to help you build your own Statebus applications.
 
 # Getting started
 
@@ -14,7 +34,7 @@ dom.BODY = ->                                                      # Your code h
   DIV 'Hello, World!'    # Return a div
 
 #</script><script src="https://stateb.us/client5.js"></script>     # Loads statebus v5
-```
+```	
 
 Now you have a working statebus app, in a single html file!
 Double-click to open it in your web browser with a `file:///` url.
@@ -23,7 +43,7 @@ Want to turn this into a simple blog?  Replace the body with this:
 
 ```coffeescript
 dom.BODY = ->
-  blog = fetch('state://stateb.us:3005/your/blog')
+  blog = fetch('/your/blog')
   DIV {},
     for post in blog.posts
       DIV {},
@@ -31,31 +51,108 @@ dom.BODY = ->
         DIV post.body
 ```
 
-`blog` be empty initially until you add some content though.
+Your blog will be empty initially until you add some content though.
 
 Open your javascript console and run:
 
 ```javascript
 save({
-  key: 'state://stateb.us:3005/your/blog',
+  key: '/your/blog',
   posts: [{title: 'hello', body: 'world'}]
 })
 ```
 
-Now try reloading the page.  It's still there!  You saved your blog on the
-*server* `state://stateb.us:3005`.
+Boom! Your post shows up.
 
-Try opening a new browser window.  If you change the blog in one, it will
-immediately update the other.  Statebus keeps the state between both browsers
+Now try reloading the page. It's still there! You saved your blog on the
+*server* hosted at `state://stateb.us:3005`.
+
+Try opening a new browser window. If you change the blog in one, it will
+immediately update the other. Statebus keeps the state between both browsers
 syncronized.
 
-In the above code, you fetched state from `state://stateb.us:3005`. This is long form. There is a default server for your Statebus app (the default default server is at stateb.us:3005). To fetch and save to the default server, you can instead just do e.g. `fetch('/your/blog)`. 
+## What's going on here?
 
-We will discuss creating your own statebus server later on. 
+Statebus provides a distributed key/value store. Each state object:
 
-But...you can get incredibly far just writing client code. It is particularly useful for prototyping new interactive UIs. Every time you want a new variation of the UI, just copy the single file and use that!
+- Is JSON
+- Is an object
+- Has a field `key:`, which defines a unique URL
+- Can contain other state objects
 
-## Writing code
+`fetch(key)` returns an object in Statebus' distributed key/value store, and also subscribes the calling function to changes to that state. So when a reactive function like dom.BODY runs `fetch('/your/blog')`, it returns:
+{
+  key: '/your/blog',
+  posts: [{title: 'hello', body: 'world'}]
+}
+
+Importantly, Statebus notes that `dom.BODY` depends on the state at `/your/blog` and will re-execute it if the state changes. These web component functions are *reactive* to changes in state.
+
+Go ahead and change the state. In the javascript console, run:
+```javascript
+index = fetch('state://stateb.us:3005/your/blog')
+index.posts[0].body = 'universe'
+save(index)
+```
+
+`save(state)` saves changes and propagates them to any function that depends on that state.
+
+
+### Where is state stored?
+
+[distinguish local / server state]
+You can do a lot writing Statebus web applications without a server! It is particularly useful for prototyping new interactive UIs. Every time you want a new variation of the UI, just copy the single file and modify it. It will have access to the same state.
+
+[merge below]
+In the above code, you accessed `state://stateb.us:3005`. This is long form. You can instead just do e.g. `fetch('/your/blog')`. This will access state at the default server (which is stateb.us:3005 by default). You only need the full state URL if you are 
+
+
+## Make a server
+
+You can host your own state(bus) server, with permissions, authentication, and anything else you want to do server-side.
+
+```shell
+npm install statebus@5
+```
+
+The `@5` tells npm to install Statebus v5.
+
+Create a server with:
+```javascript 
+var bus = require('statebus/server')({
+    // You can pass these options to your new server:
+    port: 3005,                  // 3005 is the default port for Statebus v5 to listen on
+    // backdoor: 4004,           // For testing. Direct access to master at this port. Defaults to null.
+    file_store: true,            // Persists state across server restarts.  Defaults to true.
+    client: function (client) {} // See "multiple users" below.  Defaults to null.
+})
+// ...put server methods for handling requests, enforcing access control, etc. 
+// Note that the API for starting a server is in flux. 
+```
+
+If you specify a `port`, `backdoor`, or `client`, then this bus will start a
+websocket server and serve its state over the internet.  Otherwise, it'll just
+make a new bus object, as described in
+[Multiple Busses](#make-multiple-busses), disconnected from the network.
+
+You can then run your server with `node` or `nodemon` or `supervisor`.
+
+To set your server as the default in any client code, set the `server` attribute of the statebus client script element. For example, if you're doing local development, you might have: 
+
+```coffeescript
+<script type="statebus">
+
+dom.BODY = ->
+  DIV null,
+    'Hello world!'
+
+</script><script src="https://stateb.us/client5.js"
+                 server="http://localhost:3005"></script>
+```
+
+
+
+# Writing code
 
 In statebus we:
 
@@ -188,56 +285,6 @@ DIV null,
 
 
 
-# Write your own statebus server
-
-You can host your own state(bus) server, with permissions and authentication (and anything else you want to do server-side).
-
-## Installation
-
-#### Server
-
-```shell
-npm install statebus@5
-```
-
-The `@5` tells npm to install Statebus v5.
-
-Create a server with:
-```javascript
-var bus = require('statebus/server')({
-
-    // You can pass these options to your new server:
-
-    port: 3005,                  // 3005 is the default port for Statebus v5 to listen on
-    // backdoor: 4004,           // For testing. Direct access to master at this port. Defaults to null.
-    file_store: true,            // Persists state across server restarts.  Defaults to true.
-    client: function (client) {} // See "multiple users" below.  Defaults to null.
-})
-```
-
-If you specify a `port`, `backdoor`, or `client`, then this bus will start a
-websocket server and serve its state over the internet.  Otherwise, it'll just
-make a new bus object, as described in
-[Multiple Busses](#make-multiple-busses), disconnected from the network.
-
-You can then run your server with `node` or `nodemon` or `supervisor`.
-
-Note that the API for starting a server is in flux. 
-
-#### Client
-
-To set your server as the default in any client code, set the `server` attribute of the statebus client script element. For example, if you're doing local development, you might have: 
-
-```coffeescript
-<script type="statebus">
-
-dom.BODY = ->
-  DIV null,
-    'Hello world!'
-
-</script><script src="https://stateb.us/client5.js"
-                 server="http://localhost:3005"></script>
-```
 
 ## Program state behavior
 
@@ -258,6 +305,8 @@ You can define *handlers* that control how each method behaves on a set of keys:
 - bus(key_space).to_save = function (obj) { ... }
 - bus(key_space).to_forget = function (key) { ... }
 - bus(key_space).to_delete = function (key) { ... }
+
+These handlers can be written on clients as well -- on any bus. 
 
 Let's start with the handlers for `fetch` and `save`.
 
@@ -888,7 +937,7 @@ state is always available if you use them from within a *rerunnable* function.
 This way, if a piece of state isn't available, statebus will just wait until
 it becomes available, and re-run the function then. And every time the state
 changes, statebus will re-run the function again. This way you can write
-functions that produce state that is always up to date, whithout callbacks,
+functions that produce state that is always up to date, without callbacks,
 promises, async/yield, threads, or fibers.
 
 Statebus automatically makes functions rerunnable that are passed to it:
