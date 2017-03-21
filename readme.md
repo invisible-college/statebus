@@ -20,33 +20,32 @@ Here's what you'll be making. Copy and paste this into your html file.
 ```coffeescript
 <script type="statebus">                                          
 
-dom.BODY = ->
-  messagesstate = fetch('/tutorial/messages')
-  if not messagesstate.posts then messagesstate.posts = []
 
+dom.BODY = ->                                                
+  messages = fetch('/chat').messages or []
   DIV {},
-    for post in messagesstate.posts
-        DIV {},
-          post.text
+    for message in messages
+      DIV(message.author + ': ', message.content)
+    NEW_MESSAGE()
 
-    TEXTAREA
-      style: height: 50, width: 500
-      value: @local.value
+dom.NEW_MESSAGE = ->
+  DIV {},
+    INPUT
+      type: 'text'
+      value: @local.message
       onChange: (e) => 
-        @local.value = e.target.value
+        @local.message = e.target.value
         save(@local)
-
-    DIV {},
+    BUTTON
       onClick: (e) =>
-        messagesstate = fetch('/tutorial/messages')
-        message = @local.value
-        if not messagesstate.posts
-          messagesstate.posts = []
-        messagesstate.posts.push( {text: message} )
-        save(messagesstate)
-        @local.value = ''
+        chat = fetch('/chat')
+        chat.messages or= []
+        chat.messages.push( {content: @local.message} )
+        save(chat)
+
+        @local.message = ''
         save(@local)
-      'Post' 
+      'Send'
 
 </script><script src="https://stateb.us/client5.js"></script>
 ```	
