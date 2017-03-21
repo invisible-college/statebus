@@ -19,48 +19,36 @@ Here's what you'll be making. Copy and paste this into your html file.
 
 ```coffeescript
 
-#Scripts with this tag are interpreted by statebus
-<script type="statebus">
 
-#Define the react component that renders the dom body
-dom.BODY = ->
-  
-  #Synchronize with the chat messages using statebus                       
-  messages = fetch('/chat').messages or []
+<script type="statebus">                          #Scripts with this tag are interpreted by statebus
 
-  #Define a div that displays the messages      
-  DIV {},
-    #For each message render its text                
-    for message in messages
+
+dom.BODY = ->                                     #Define the react component that renders the dom body
+
+  messages = fetch('/chat').messages or []        #Synchronize with the chat messages using statebus  
+  DIV {},                                         #Define a div that displays the messages       
+    for message in messages                       #For each message render its text  
       DIV(message.content)
+    NEW_MESSAGE()                                 #A component for writing new messsages
 
-    #An widget for writing new messsages
-    NEW_MESSAGE()
-
-#Define a react component for writing new messages
+                                                  #Defining the new message component here
 dom.NEW_MESSAGE = ->
 
   DIV {},
     INPUT
       type: 'text'
-      value: @local.message
-      #@local is shorthand for fetch("This react component's id")
-      #When someone types, update the text in this input box
-      onChange: (e) => 
-        @local.message = e.target.value
-        #Save this local state and re-render the NEW_MESSAGE component
+      value: @local.message                       #@local is shorthand for fetch("This react component's id")
+      onChange: (e) =>                            #When someone types, update the text in this input box
+        @local.message = e.target.value           #Save this local state and re-render the NEW_MESSAGE component
         save(@local)
 
     BUTTON
-      #When someone clicks on this button, publish their message
-      onClick: (e) =>
-        #Get the chat messages from statebus
-        chat = fetch('/chat')
-        chat.messages or= []
-        #Add a new message to the chat and save it using statebus
-        #This will cause the body to re-render
-        chat.messages.push( {content: @local.message} )
-        save(chat)
+      onClick: (e) =>                             #When someone clicks on this button, publish their message
+        chat = fetch('/chat')                     #Get the chat messages from statebus
+        chat.messages or= []                      #Add a new message to the chat and save it using statebus
+        message = {content: @local.message}       
+        chat.messages.push( message )
+        save(chat)                                #This publish the new message and cause the body to re-render
         @local.message = ''
         save(@local)
       'Send'
