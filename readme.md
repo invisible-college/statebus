@@ -7,7 +7,7 @@ This repository is a Javascript implementation of the Statebus protocol. You can
 This implementation is great for prototyping. You can see a list of existing prototypes [here](https://invisible.college). We welcome contributions, and are excited to help you build your own Statebus applications.
 
 # Getting started
-Today we are going to make a basic message feed widget. It's a public feed that anyone can post to. We hope you'll post a message on it - it's a guestbook for anyone who visits this tutorial!
+Today we are going to make a basic social media feed, like facebook's wall. It's a public feed that anyone can post to. We hope you'll post a message on it - it's a guestbook for anyone who visits this tutorial!
 
 We've broken the tutorial into two parts: Making a client and Making a server. Most of the logic is in the client, because Statebus [collapses time and space](https://invisible.college). The server handles basic privacy and data filtering features.
 
@@ -20,100 +20,39 @@ Here's what you'll be making. Copy and paste this into your html file.
 ```coffeescript
 <script type="statebus">                                          
 
+dom.BODY = ->
+  messagesstate = fetch('/tutorial/messages')
+  if not messagesstate.posts then messagesstate.posts = []
 
-dom.BODY = ->                                                
-    DIV
-      style: 
-        width: 500
-        fontFamily: 'avenir'
+  DIV {},
+    for post in messagesstate.posts
+        DIV {},
+          post.text
 
-      FEED {}
-
-      SENDBOX {}
-
-
-
-dom.FEED = ->
-  feedstate = fetch('/tutorial/feed')
-
-  if not feedstate.posts
-    feedstate.posts = []
-
-  DIV
-    style: @props.style
-    for post in feedstate.posts
-      do(post) =>
-        POST
-          poststate: post
-
-
-
-
-dom.POST = ->
-  DIV
-    style: 
-      backgroundColor: '#E4E4E4'
-      margin: '5 0 5 0'
-      padding: 5
-    @props.poststate.text
-
-
-dom.SENDBOX = ->
-  DIV null,
     TEXTAREA
-      style:
-        height: 50
-        width: 500
-      id: 'textbox'
+      style: height: 50, width: 500
+      value: @local.value
       onChange: (e) => 
         @local.value = e.target.value
         save(@local)
-    DIV
-      style: 
-        backgroundColor: '#527FCE'
-        cursor: 'hand'
-        color: 'white'
-        marginTop: 3
-        padding: 3
-        width: 50
-        textAlign: 'center'
 
+    DIV {},
       onClick: (e) =>
-        feedstate = fetch('/tutorial/feed')
+        messagesstate = fetch('/tutorial/messages')
         message = @local.value
-        if not feedstate.posts
-          feedstate.posts = []
-        feedstate.posts.push( {text: message} )
-        save(feedstate)
+        if not messagesstate.posts
+          messagesstate.posts = []
+        messagesstate.posts.push( {text: message} )
+        save(messagesstate)
         @local.value = ''
-        document.getElementById('textbox').value = ''
+        save(@local)
       'Post' 
-
-
-
 
 </script><script src="https://stateb.us/client5.js"></script>
 ```	
 
 Now you have a working statebus app, in a single html file!
 Double-click to open it in your web browser with a `file:///` url.
-
-
-Your blog will be empty initially until you add some content though.
-
-Open your javascript console and run:
-
-```javascript
-save({
-  key: '/your/blog',
-  posts: [{title: 'hello', body: 'world'}]
-})
-```
-
-Boom! Your post shows up.
-
-Now try reloading the page. It's still there! You saved your blog on the
-*server* hosted at `state://stateb.us:3005`.
 
 Try opening a new browser window. If you change the blog in one, it will
 immediately update the other. Statebus keeps the state between both browsers
