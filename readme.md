@@ -53,10 +53,11 @@ dom.NEW_MESSAGE = ->
 </script><script src="https://stateb.us/client5.js"></script> #This is the server we'll synchronize our state with.
 ```	
 
-Now you have a working statebus app, in a single html file!
+Now you have a working statebus app, in a single html file! 
 Double-click to open it in your web browser with a `file:///` url.
+You should be able to see everyone's messages.
 
-Try opening a new browser window. If you change the blog in one, it will
+Try opening a new browser window. If you change the chat in one, it will
 immediately update the other. Statebus keeps the state between both browsers
 syncronized.
 
