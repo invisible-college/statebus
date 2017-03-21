@@ -7,7 +7,7 @@ This repository is a Javascript implementation of the Statebus protocol. You can
 This implementation is great for prototyping. You can see a list of existing prototypes [here](https://invisible.college). We welcome contributions, and are excited to help you build your own Statebus applications.
 
 # Getting started
-Today we are going to make a basic social media feed, like facebook's wall. It's a public feed that anyone can post to. We hope you'll post a message on it - it's a guestbook for anyone who visits this tutorial!
+Today we are going to make a basic chat widget. It's a public chat that anyone can post to. We hope you'll post a message on it - it's a guestbook for anyone who visits this tutorial!
 
 We've broken the tutorial into two parts: Making a client and Making a server. Most of the logic is in the client, because Statebus [collapses time and space](https://invisible.college). The server handles basic privacy and data filtering features.
 
@@ -18,31 +18,49 @@ To write client code, you don't need to download anything. Instead, you'll just 
 Here's what you'll be making. Copy and paste this into your html file.
 
 ```coffeescript
-<script type="statebus">                                          
 
+#Scripts with this tag are interpreted by statebus
+<script type="statebus">
 
-dom.BODY = ->                                                
+#Define the react component that renders the dom body
+dom.BODY = ->
+  
+  #Synchronize with the chat messages using statebus                       
   messages = fetch('/chat').messages or []
+
+  #Define a div that displays the messages      
   DIV {},
+    #For each message render its text                
     for message in messages
-      DIV(message.author + ': ', message.content)
+      DIV(message.content)
+
+    #An widget for writing new messsages
     NEW_MESSAGE()
 
+#Define a react component for writing new messages
 dom.NEW_MESSAGE = ->
+
   DIV {},
     INPUT
       type: 'text'
       value: @local.message
+      #@local is shorthand for fetch("This react component's id")
+      #When someone types, update the text in this input box
       onChange: (e) => 
         @local.message = e.target.value
+        #Save this local state and re-render the NEW_MESSAGE component
         save(@local)
+
     BUTTON
+      #When someone clicks on this button, publish their message
       onClick: (e) =>
+        #Get the chat messages from statebus
         chat = fetch('/chat')
         chat.messages or= []
+        #Add a new message to the chat and save it using statebus
+        #This will cause the body to re-render
         chat.messages.push( {content: @local.message} )
         save(chat)
-
         @local.message = ''
         save(@local)
       'Send'
