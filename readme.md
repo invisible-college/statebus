@@ -22,9 +22,7 @@ Here's what you'll be making. Copy and paste this into your html file.
 
 <script type="statebus">                          #Scripts with this tag are interpreted by statebus
 
-
 dom.BODY = ->                                     #Define the react component that renders the dom body
-
   messages = fetch('/chat').messages or []        #Synchronize with the chat messages using statebus  
   DIV {},                                         #Define a div that displays the messages       
     for message in messages                       #For each message render its text  
@@ -33,7 +31,6 @@ dom.BODY = ->                                     #Define the react component th
 
                                                   #Defining the new message component here
 dom.NEW_MESSAGE = ->
-
   DIV {},
     INPUT
       type: 'text'
@@ -48,12 +45,12 @@ dom.NEW_MESSAGE = ->
         chat.messages or= []                      #Add a new message to the chat and save it using statebus
         message = {content: @local.message}       
         chat.messages.push( message )
-        save(chat)                                #This publish the new message and cause the body to re-render
+        save(chat)                                #This publishes the new message and cause the body to re-render
         @local.message = ''
         save(@local)
       'Send'
 
-</script><script src="https://stateb.us/client5.js"></script>
+</script><script src="https://stateb.us/client5.js"></script> #This is the server we'll synchronize our state with.
 ```	
 
 Now you have a working statebus app, in a single html file!
