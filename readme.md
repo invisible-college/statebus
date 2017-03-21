@@ -12,8 +12,7 @@ Today we are going to make a basic chat widget. It's a public chat that anyone c
 We've broken the tutorial into two parts: Making a client and Making a server. Most of the logic is in the client, because Statebus [collapses time and space](https://invisible.college). The server handles basic privacy and data filtering features.
 
 ## Making a client
-To write client code, you don't need to download anything. Instead, you'll just edit a single file locally on your computer. However, you'll be writing in [Coffeescript](http://coffeescript.org) and creating [React](http://reactjs.org) web components, so make sure you're familiar with both of these tools.
-
+To write client code, you don't need to download anything. Instead, you'll just edit a single file locally on your computer. However, you'll be writing in [Coffeescript](http://coffeescript.org) and creating [React](http://reactjs.org) web components, so make sure you're familiar with both of these tools. Aside from Coffeescript and React, there are really only two methods that you will need to learn: `fetch` and `save`. To get a sense of how they work, let's make something!
 
 Here's what you'll be making. Copy and paste this into your html file.
 
@@ -31,19 +30,20 @@ dom.BODY = ->                                     #Define the react component th
 
                                                   #Defining the new message component here
 dom.NEW_MESSAGE = ->
+  new_message = fetch('new_message')              #Access local state for the new message
   DIV {},
     INPUT
       type: 'text'
-      value: @local.message                       #@local is shorthand for fetch("This react component's id")
+      value: new_message.text                     #Display the new message in the input 
       onChange: (e) =>                            #When someone types, update the text in this input box
-        @local.message = e.target.value           #Save this local state and re-render the NEW_MESSAGE component
-        save(@local)
+        new_message.text = e.target.value         #Save this local state and re-render the NEW_MESSAGE component
+        save(new_message)
 
     BUTTON
       onClick: (e) =>                             #When someone clicks on this button, publish their message
         chat = fetch('/chat')                     #Get the chat messages from statebus
         chat.messages or= []                      #Add a new message to the chat and save it using statebus
-        message = {content: @local.message}       
+        message = {content: new_message.text}       
         chat.messages.push( message )
         save(chat)                                #This publishes the new message and cause the body to re-render
         @local.message = ''
@@ -57,11 +57,33 @@ Now you have a working statebus app, in a single html file!
 Double-click to open it in your web browser with a `file:///` url.
 You should be able to see everyone's messages.
 
-Try opening a new browser window. If you change the chat in one, it will
-immediately update the other. Statebus keeps the state between both browsers
-syncronized.
+### Reactive Functions
+This code is built using reactive functions. 
+Statebus provides a distributed key/value store for
+managing your state, and will notify those functions to re-run whenever
+it detects a change.
 
-## What's going on here?
+Here's one of those reactive functions:
+```coffeescript
+dom.BODY = -> #Define the react component that renders the dom body
+``` 
+Anything starting with _dom._ that has UPPERCASE characters will define
+a new react component. The body defines the react component's
+render function. This syntax strips away the cruft in programming
+with react.
+
+### Fetch
+```coffeescript
+messages = fetch('/chat').messages or []
+```
+Fetch both retreives and subscribes to a piece of state
+in statebus. So the line of code above subscribes to the
+state at the URL '/chat', and returns it's "messages" field.
+If there isn't a messages field defined on that state, 
+Statebus returns undefined and we set messages to be an empty list.
+
+State is arbitrary JSON with a field `key:`, which
+defines a unique URL for the state.
 
 Statebus provides a distributed key/value store. Each state object:
 
