@@ -12,9 +12,9 @@ Today we are going to make a basic chat widget. It's a public chat that anyone c
 We've broken the tutorial into two parts: Making a client and Making a server. Most of the logic is in the client, because Statebus [collapses time and space](https://invisible.college). The server handles basic privacy and data filtering features.
 
 ## Making a client
-To write client code, you don't need to download anything. Instead, you'll just edit a single file locally on your computer. However, you'll be writing in [Coffeescript](http://coffeescript.org) and creating [React](http://reactjs.org) web components, so make sure you're familiar with both of these tools. Aside from Coffeescript and React, there are really only two methods that you will need to learn: `fetch` and `save`. To get a sense of how they work, let's make something!
+To write client code, you don't need to download anything. Instead, you'll just edit a single .html file locally on your computer. However, you'll be writing in [Coffeescript](http://coffeescript.org) and creating [React](http://reactjs.org) web components, so make sure you're familiar with both of these tools. Aside from Coffeescript and React, there are really only two methods that you will need to learn: `fetch` and `save`. To get a sense of how they work, let's make something!
 
-Here's what you'll be making. Copy and paste this into your html file.
+Here's the chat you'll be making. Copy and paste this into your .html file.
 
 ```coffeescript
 
@@ -69,7 +69,7 @@ dom.BODY = -> #Define the react component that renders the dom body
 ``` 
 Anything starting with _dom._ that has UPPERCASE characters will define
 a new react component. The body defines the react component's
-render function. This syntax strips away the cruft in programming
+render function. This syntax strips away some cruft in programming
 with react.
 
 ### Fetch
@@ -77,42 +77,58 @@ with react.
 messages = fetch('/chat').messages or []
 ```
 Fetch both retreives and subscribes to a piece of state
-in statebus. So the line of code above subscribes to the
-state at the URL '/chat', and returns it's "messages" field.
+in statebus. State is arbitrary JSON with a field `key:`, which
+defines its unique URL. So the line of code above subscribes to the
+state at the URL '/chat', and returns its messages field.
 If there isn't a messages field defined on that state, 
-Statebus returns undefined and we set messages to be an empty list.
+Statebus returns undefined, and we so we set messages to be an empty list.
 
-State is arbitrary JSON with a field `key:`, which
-defines a unique URL for the state.
+### Executing reactive functions
+You can execute a reactive function using its UPPERCASE name.
+There are the standard html components, like DIV and TEXTAREA,
+and there are also the ones you define on your own.
 
-Statebus provides a distributed key/value store. Each state object:
+Let's look at both standard components and custom components
+in the next few lines of code.
+```coffeescript
+ DIV {},    
+    for message in messages
+      DIV(message.content)
+    NEW_MESSAGE() 
+```
+This block of code that renders (1) the list of chat messages
+and (2) a custom component for typing new messages. These both are
+contained in a parent DIV. Any time list of messages changes,
+these components will re-render.
 
-- Is JSON
-- Is an object
-- Has a field `key:`, which defines a unique URL
-- Can contain other state objects
+You might be wondering about the syntax `DIV {},`. The `{},` is related
+to styling your components with css styling rules. Reactive functions
+accept styling rules as their first argument, but we're not styling anything
+right now for simplicity, so we're just passing in an empty object.
+If you're curious about styles, jump to our [Defining styles](http://) section.
 
-`fetch(key)` returns an object in Statebus' distributed key/value store, and also subscribes the calling function to changes to that state. So when a reactive function like dom.BODY runs `fetch('/your/blog')`, it returns:
-```javascript
-{
-  key: '/your/blog',
-  posts: [{title: 'hello', body: 'world'}]
-}
+The custom NEW_MESSAGE component is defined in the next line.
+```coffeescript
+dom.NEW_MESSAGE = ->
 ```
 
-Importantly, Statebus notes that `dom.BODY` depends on the state at `/your/blog` and will re-execute it if the state changes. These web component functions are *reactive* to changes in state.
-
-Go ahead and change the state. In the javascript console, run:
-```javascript
-index = fetch('state://stateb.us:3005/your/blog')
-index.posts[0].body = 'universe'
-save(index)
-```
-
-`save(state)` saves changes and propagates them to any function that depends on that state.
-
+Just like we defined the dom.BODY, this component defines an input box and
+a send button. One difference is that the NEW_MESSAGE component is
+concerned with changes in state that occur locally when the user types in
+a box. So this is a good time to look at where state is stored.
 
 ### Where is state stored?
+State can be stored locally on the client, or on any server that implements the
+statebus protocol. The next line shows how to access state that is defined locally.
+
+```coffeescript
+  new_message = fetch('new_message')
+```
+
+
+The chat messages we fetched earlier are publicly available at [invisible.college/blah]().
+This is because of the key we provided as the argument to `fetch`.
+
 
 [distinguish local / server state]
 You can do a lot writing Statebus web applications without a server! It is particularly useful for prototyping new interactive UIs. Every time you want a new variation of the UI, just copy the single file and modify it. It will have access to the same state.
