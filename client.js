@@ -563,7 +563,7 @@
             displayName: name,
             render: function () { 
                 var c = window.dom[name].bind(this)()
-                if (c) {
+                if (c.props) {
                     c.props['data-component'] = name
                     c.props['data-key'] = this.props['data-key']
                 }
