@@ -4,12 +4,14 @@ Statebus is a new web protocol where every piece of state has a URL. It provides
 
 This repository is a Javascript implementation of the Statebus protocol. You can use it right now to build web applications. It builds from [Reactjs](http://reactjs.org) to provide reactive re-rendering, but extends the reactivity through the whole web stack.
 
-This implementation is great for prototyping. You can see a list of existing prototypes [here](https://invisible.college). We welcome contributions, and are excited to help you build your own Statebus applications.
+This implementation is great for prototyping. You can see some prototypes and applications [here](https://invisible.college). We welcome contributions, and are excited to help you build your own Statebus applications.
 
 # Getting started
 Today we are going to make a basic chat widget. It's a public chat that anyone can post to. We hope you'll post a message on it - it's a guestbook for anyone who visits this tutorial!
 
-We've broken the tutorial into two parts: Making a client and Making a server. Most of the logic is in the client, because Statebus [collapses time and space](https://invisible.college). The server handles basic privacy and data filtering features.
+We've broken the tutorial into two parts: Making a client and Making a server. Most of the logic is in the client 
+<!---, because Statebus [collapses time and space](https://invisible.college) --->
+. The server handles basic privacy and data filtering features.
 
 ## Making a client
 To write client code, you don't need to download anything. Instead, you'll just edit a single .html file locally on your computer. However, you'll be writing in [Coffeescript](http://coffeescript.org) and creating [React](http://reactjs.org) web components, so make sure you're familiar with both of these tools. Aside from Coffeescript and React, there are really only two methods that you will need to learn: `fetch` and `save`. To get a sense of how they work, let's make something!
