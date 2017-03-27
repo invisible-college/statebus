@@ -9,8 +9,7 @@ This implementation is great for prototyping. You can see some prototypes and ap
 # Getting started
 Today we are going to make a basic chat widget. It's a public chat that anyone can post to. We hope you'll post a message on it - it's a guestbook for anyone who visits this tutorial!
 
-<!---, because Statebus [collapses time and space](https://invisible.college) --->
-We've broken the tutorial into two parts: Making a client and Making a server. Most of the logic is in the client. The server handles basic privacy and data filtering features.
+We've broken the tutorial into two parts: Making a client and Making a server. Most of the logic is in the client, because Statebus [collapses time and space](https://github.com/invisible-college/statebus/blob/v5/readme.md#fetch-and-save-are-reactive-functions). The server handles basic privacy and data filtering features.
 
 ## Making a client
 To write client code, you don't need to download anything. Instead, you'll just edit a single .html file locally on your computer. However, you'll be writing in [Coffeescript](http://coffeescript.org) and creating [React](http://reactjs.org) web components, so make sure you're familiar with both of these tools. Aside from Coffeescript and React, there are really only two methods that you will need to learn: `fetch` and `save`. To get a sense of how they work, let's make something!
@@ -84,6 +83,15 @@ state at the URL '/chat', and returns its messages field.
 If there isn't a messages field defined on that state, 
 Statebus returns undefined, and we so we set messages to be an empty list.
 
+```javascript
+> console.log(fetch('/chat'))
+> {
+    key: '/chat',
+    messages: [{content: 'hello world!'}]
+  }
+```
+
+
 ### Executing reactive functions
 You can execute a reactive function using its UPPERCASE name.
 There are the standard html components, like DIV and TEXTAREA,
@@ -99,14 +107,12 @@ in the next few lines of code.
 ```
 This block of code that renders (1) the list of chat messages
 and (2) a custom component for typing new messages. These both are
-contained in a parent DIV. Any time list of messages changes,
+contained in a parent DIV. Any time the list of messages changes,
 these components will re-render.
 
 You might be wondering about the syntax `DIV {},`. The `{},` is related
-to styling your components with css styling rules. Reactive functions
-accept styling rules as their first argument, but we're not styling anything
-right now for simplicity, so we're just passing in an empty object.
-If you're curious about styles, jump to our [Defining styles](http://) section.
+to passing arguments to your components, like styling your components with css rules. But we're not passing any arguments now for simplicity, so we're just passing in an empty object.
+<!---If you're curious about styles, jump to our [Defining styles](http://) section.---->
 
 The custom NEW_MESSAGE component is defined in the next line.
 ```coffeescript
@@ -134,6 +140,7 @@ That's a little verbose if you're always fetching from the same server, so we al
 fetch('/chat')
 ``` 
 
+<!--- Travis sez this isn't quite right...the state is stored locally, but not what is typically called Local Storage. You can store against local storage with the ls/ prefix, as in 'ls/you'. This state will persist between page refreshes. ---->
 And if you provide no prefix at all, then you can access the local storage in the browser.
 
 ```coffeescript
