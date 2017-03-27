@@ -9,7 +9,8 @@ This implementation is great for prototyping. You can see some prototypes and ap
 # Getting started
 Today we are going to make a basic chat widget. It's a public chat that anyone can post to. We hope you'll post a message on it - it's a guestbook for anyone who visits this tutorial!
 
-We've broken the tutorial into two parts: Making a client and Making a server. Most of the logic is in the client <!---, because Statebus [collapses time and space](https://invisible.college) --->. The server handles basic privacy and data filtering features.
+<!---, because Statebus [collapses time and space](https://invisible.college) --->
+We've broken the tutorial into two parts: Making a client and Making a server. Most of the logic is in the client. The server handles basic privacy and data filtering features.
 
 ## Making a client
 To write client code, you don't need to download anything. Instead, you'll just edit a single .html file locally on your computer. However, you'll be writing in [Coffeescript](http://coffeescript.org) and creating [React](http://reactjs.org) web components, so make sure you're familiar with both of these tools. Aside from Coffeescript and React, there are really only two methods that you will need to learn: `fetch` and `save`. To get a sense of how they work, let's make something!
