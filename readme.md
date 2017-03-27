@@ -165,8 +165,8 @@ message is added to the chat feed, and the textbox is cleared away.
         message = {content: new_message.text}
         chat.messages.push( message )
         save(chat)
-        @local.message = ''
-        save(@local)
+        new_message.text = ''
+        save(new_message)
       'Send'
 ```
 
