@@ -208,13 +208,13 @@ Your server should now be running at localhost:3005.
 
 ### Update your client to use your server
 
-In your sample (client code)[https://github.com/invisible-college/statebus#making-a-client], you included the statebus library with:
+In your sample [client code](https://github.com/invisible-college/statebus#making-a-client), you included the statebus library with:
 
 ```html
 <script src="https://stateb.us/client5.js"></script>
 ``` 
 
-Now we're going to use our own server, not the default https://stateb.us server. Then Update your client with:
+Now we're going to use our own server, not the default https://stateb.us server. Update your client with:
 
 ```html
 <script src="https://stateb.us/client5.js" server="http://localhost:3005"></script>
