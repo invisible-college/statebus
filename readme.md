@@ -128,10 +128,10 @@ a box. So this is a good time to look at where state is stored.
 State can be stored locally in the browser or remotely on any server that implements the
 statebus protocol. Just like HTTP documents, the location of state is determined by its URL prefix.
 
-Here's how you access 'chat' state from a server `invisible.college`: 
+Here's how you access 'chat' state from a server `stateb.us`: 
 
 ```coffeescript
-fetch('state://invisible.college/chat')
+fetch('state://stateb.us/chat')
 ``` 
 
 That's a little verbose if you're always fetching from the same server, so we allow you to omit the server name when accessing statebus's default server.
@@ -184,23 +184,51 @@ necessary to implement a server that handles permissions and other features like
 
 Let's make a server for our chat widget that allows us to create users and handle privacy.
 
-Make sure you install statebus first.
+### Install statebus and create your server
+
 ```shell
 npm install statebus
 ```
 
-And create a single .js file that will be our server.
-Here's what we'll be building:
+Now create a barebones server called server.js, and put this in it:
 
 ```javascript 
-var bus = require('statebus/server')({
-    port: 3005,                  // 3005 is the default port for Statebus to listen
-    client: function (client) {} // See "multiple users" below.  Defaults to null.
-})
+var bus = require('statebus/server')()
 ```
 
+### Start your server
 
+```shell
+node server.js
+```
 
+If you want the server to restart automatically when you edit your files, use `nodemon` or `supervisor` instead of `node`.
+
+Your server should now be running at localhost:3005.
+
+### Update your client to use your server
+
+In your sample (client code)[https://github.com/invisible-college/statebus#making-a-client], you included the statebus library with:
+
+```html
+<script src="https://stateb.us/client5.js"></script>
+``` 
+
+Now we're going to use our own server, not the default https://stateb.us server. Then Update your client with:
+
+```html
+<script src="https://stateb.us/client5.js" server="http://localhost:3005"></script>
+``` 
+
+Open your .html file in your browser. It has an empty chat history. This is because every Statebus server has its own data store, and when you set the `server` attribute of the statebus client script tag, you specify a default server for the data. Thus, `fetch('/chat')` state is now accessing the data stored at your new server.
+
+<!--- To continue fetching and saving chat data to the stateb.us server, use absolute state URLs by fetching from `state://stateb.us/chat` instead of `/chat`---->
+
+For now, let's add access control to our chat application. Later on, we'll reintegrate the chat history data hosted at stateb.us!
+
+### A server with authentication and access control
+
+Under construction!
 
 
 # API Reference
@@ -434,6 +462,8 @@ You can uncallback any function where:
   - The inputs and outputs are serializable in JSON
   - Except the last argument, which is a callback that takes args `(error, result)`
 
+
+<!---
 ## Proxy interface
 This wraps `fetch()` and `save()`. Makes all state look like a big global variable.
 
@@ -482,6 +512,7 @@ when viewed through the `sb` proxy interface.
   {bars:     [{_key: '/bar/1'}, 'hi!']}          -> {bars: [{..bar1..}, 'hi!']}
 ```
 
+---->
 
 ## Intermediate states, crash recovery, and loading()
 
