@@ -46,8 +46,8 @@ dom.NEW_MESSAGE = ->
         message = {content: new_message.text}       
         chat.messages.push( message )
         save(chat)                                #This publishes the new message and cause the body to re-render
-        @local.message = ''
-        save(@local)
+        new_message.text = ''
+        save(new_message)
       'Send'
 
 </script><script src="https://stateb.us/client5.js"></script> #This is the server we'll synchronize our state with.
@@ -76,8 +76,8 @@ with react.
 ```coffeescript
 messages = fetch('/chat').messages or []
 ```
-Fetch both retreives and subscribes to a piece of state
-in statebus. State is arbitrary JSON with a field `key:`, which
+Fetch both retrieves and subscribes to a piece of state
+in Statebus. State is arbitrary JSON with a field `key:`, which
 defines its unique URL. So the line of code above subscribes to the
 state at the URL '/chat', and returns its messages field.
 If there isn't a messages field defined on that state, 
