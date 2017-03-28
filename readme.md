@@ -193,7 +193,7 @@ npm install statebus
 Now create a barebones server called server.js, and put this in it:
 
 ```javascript 
-var bus = require('statebus/server')()
+var bus = require('statebus/server')({port: 3005})
 ```
 
 ### Start your server
