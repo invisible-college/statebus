@@ -1,5 +1,4 @@
 # Statebus
-
 Statebus is a new web protocol where every piece of state has a URL. It provides a unified API for accessing state on clients and servers, and automatically handles synchronization. In contrast to how HTTP provides State Transfer, Statebus provides State *Synchronization*.
 
 This repository is a Javascript implementation of the Statebus protocol. You can use it right now to build web applications. It builds from [Reactjs](http://reactjs.org) to provide reactive re-rendering, but extends the reactivity through the whole web stack.
@@ -17,8 +16,6 @@ To write client code, you don't need to download anything. Instead, you'll just 
 Here's the chat you'll be making. Copy and paste this into your .html file.
 
 ```coffeescript
-
-
 <script type="statebus">                          #Scripts with this tag are interpreted by statebus
 
 dom.BODY = ->                                     #Define the react component that renders the dom body
@@ -43,14 +40,19 @@ dom.NEW_MESSAGE = ->
       onClick: (e) =>                             #When someone clicks on this button, publish their message
         chat = fetch('/chat')                     #Get the chat messages from statebus
         chat.messages or= []                      #Add a new message to the chat and save it using statebus
-        message = {content: new_message.text}       
-        chat.messages.push( message )
-        save(chat)                                #This publishes the new message and cause the body to re-render
+        message = {
+          key: "/message/#{new_key_id()}"         #Give the message its own state URL. Will be useful for us later.
+          content: new_message.text
+        }
+        chat.messages.push( message )             #Add the new message to the chat history
+        save(message)                             #Publish the new message and cause the body to re-render
         new_message.text = ''
         save(new_message)
       'Send'
 
-</script><script src="https://stateb.us/client5.js"></script> #This is the server we'll synchronize our state with.
+new_key_id = -> Math.random().toString(36).substring(3)
+
+</script><script src="https://stateb.us/client5.js" server="http://localhost:3005"></script> #This is the server we'll synchronize our state with.
 ```	
 
 Now you have a working statebus app, in a single html file! 
@@ -131,7 +133,7 @@ statebus protocol. Just like HTTP documents, the location of state is determined
 Here's how you access 'chat' state from a server `stateb.us`: 
 
 ```coffeescript
-fetch('state://stateb.us/chat')
+fetch('state://stateb.us:3005/chat')
 ``` 
 
 That's a little verbose if you're always fetching from the same server, so we allow you to omit the server name when accessing statebus's default server.
@@ -140,8 +142,9 @@ That's a little verbose if you're always fetching from the same server, so we al
 fetch('/chat')
 ``` 
 
-<!--- Travis sez this isn't quite right...the state is stored locally, but not what is typically called Local Storage. You can store against local storage with the ls/ prefix, as in 'ls/you'. This state will persist between page refreshes. ---->
 And if you provide no prefix at all, then you can access the local storage in the browser.
+
+<!--- Travis sez this isn't quite right...the state is stored locally, but not what is typically called Local Storage. You can store in local storage with the ls/ prefix, as in 'ls/you'. This state will persist between page refreshes. ---->
 
 ```coffeescript
 fetch('chat')
@@ -202,9 +205,8 @@ var bus = require('statebus/server')({port: 3005})
 node server.js
 ```
 
-If you want the server to restart automatically when you edit your files, use `nodemon` or `supervisor` instead of `node`.
+Your server should now be running at localhost:3005. If you want the server to restart automatically when you edit your files, use `nodemon` or `supervisor` instead of `node`.
 
-Your server should now be running at localhost:3005.
 
 ### Update your client to use your server
 
@@ -214,22 +216,136 @@ In your sample [client code](https://github.com/invisible-college/statebus#makin
 <script src="https://stateb.us/client5.js"></script>
 ``` 
 
-Now we're going to use our own server, not the default https://stateb.us server. Update your client with:
+We're going to use our own server, not the default https://stateb.us:3005 server. Update your html file with:
 
 ```html
 <script src="https://stateb.us/client5.js" server="http://localhost:3005"></script>
 ``` 
 
-Open your .html file in your browser. It has an empty chat history. This is because every Statebus server has its own data store, and when you set the `server` attribute of the statebus client script tag, you specify a default server for the data. Thus, `fetch('/chat')` state is now accessing the data stored at your new server.
+Open your .html file in your browser. It now has an empty chat history. This is because every Statebus server has its own data store, and when you set the `server` attribute of the statebus client script tag, you specify a default server for the data. Thus, `fetch('/chat')` state is now accessing the data stored at your new server.
 
-<!--- To continue fetching and saving chat data to the stateb.us server, use absolute state URLs by fetching from `state://stateb.us/chat` instead of `/chat`---->
+<!--- To continue fetching and saving chat data to the stateb.us server, use absolute state URLs by fetching from `state://stateb.us:3005/chat` instead of `/chat`---->
 
 For now, let's add access control to our chat application. Later on, we'll reintegrate the chat history data hosted at stateb.us!
 
 ### A server with authentication and access control
 
-Under construction!
+It is time to add authentication and access control to our server. Copy and paste the code below into your server.js file, and then we'll unpack it. 
 
+Don't be intimidated!
+
+```javascript
+// A chat server
+// We want these controls on the server:
+//  • Users can save a "draft" post before it is shown publicly
+//  • Users can see their own draft posts
+//  • Some users are admins
+//  • Admins can delete any post; users can delete their own
+//  • Ensure the /chat index stays in sync with new posts added
+
+var master = require('statebus/server')({           // The master bus
+  port: 3005,
+
+  client: function (client) {                       // The client bus defines an API for how each connected 
+                                                    // user can fetch() and save() master state.
+
+    var admins = {'user/powertripper': true,        // Only some users are admins
+                  'user/2': true}
+    
+    client('message/*').to_fetch = function (k) {   // Enforce access control on draft messages
+
+      var message = master.fetch(k),                // Get the message from the master bus
+          user = uid(client)                        // Know who the client is. uid is defined below.
+
+      if (!message.draft || message.author == user)
+        return message                              // a-ok! Pass through the master state for this message
+      else
+        return {error: 'not permitted'}
+    }
+
+    client('message/*').to_save = function (o) {    // Only authors can update a post
+      o.key = o.key || 'message/' + new_key_id()    // Ensure that a message has a URL
+      var obj = master.fetch(o.key)                 // Get the version of this state stored in master, if any
+
+      author_change = obj.author && obj.author != o.author
+      if (!author_change)
+        o.author = o.author || uid(client)          // Initialize author for new messages
+
+      if (author_change || o.author != uid(client))
+        client.save.abort(o)                        // Thwart devious clients!
+      else {
+        master.save(o)                              // Save it to master
+      }
+    }
+
+    client('chat').to_fetch = function (k) {        // Each client has a different view of the chat history
+      var user = uid(client),
+          chat = master.clone(master.fetch('chat')) // We start with a copy of the full chat history...
+                                                    // and filter out messages this user isn't permitted to see
+      permitted = function(m) {return !client.fetch(m).error}
+      chat.messages = chat.messages.filter(permitted)
+      return chat
+    }
+
+    client('chat').to_save = function (o) {         // Clients can't change the chat history directly
+      client.save.abort(o)                          // Abort this save attempt!
+    }
+
+    client('message/*').to_delete = function (k) {  // Admins can delete any message
+      var u = client.fetch('current_user')
+      if (!u.logged_in || !admins[u.user.key])     // Ensure current user is an admin.
+        client.save.abort(o)
+      else 
+        master.delete(k)
+    }
+
+    // Anything not matched to the handlers above will automatically pass
+    // through to the master bus.
+
+  }
+
+})
+
+// Now we can define how state on the master bus behaves.
+
+master('message/*').to_save = function (o) {       // When a message is saved, put it in the chat history
+  var chat = master.fetch('chat'),                 
+      idx = chat.messages.findIndex(function (m) {return m.key === o.key})
+
+  if (idx == -1) {                                 // If this message is not in the chat history...   
+    chat.messages.push(o)                          // add it
+    master.save(chat)                              // and save our change to the history
+  }
+  master.save.fire(o)                              // Now complete the save of the message
+}
+
+master('message/*').to_delete = function (k) {     // Cleanup when a message is deleted
+  var chat = master.fetch('chat'), 
+      idx = chat.messages.findIndex(function(m){return m.key == k})
+
+  if (idx > -1) {                                  // We found the message to delete
+    m = chat.messages.splice(idx, 1)               // Remove the message from the index
+    master.save(chat)
+  }
+}
+
+chat = master.fetch('chat')                        
+if (!chat.messages) {                              // Initialize chat history
+  chat.messages = []
+  master.save(chat)
+}
+
+function uid(client) {
+  var c = client.fetch('connection'),              // Know who the client is...
+      u = c.user ? c.user.key : 'user/' + c.client //    either a logged in user or session id
+                                                   // Note: Reactive functions that call this function will 
+  return u                                         // be subscribed to changes to any state that this 
+}                                                  // function fetches. 
+
+function new_key_id() { return Math.random().toString(36).substring(3) }
+```
+
+<!--- # Statebus programming model ---->
 
 # API Reference
 
