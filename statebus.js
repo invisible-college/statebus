@@ -1730,7 +1730,7 @@
 
     // Export globals
     if (Object.keys(busses).length === 0) {
-        var globals = 'fetch save del forget loading clone'.split(' ')
+        var globals = 'fetch save sync del forget loading clone'.split(' ')
         for (var i=0; i<globals.length; i++)
             this[globals[i]] = eval(globals[i])
     }
