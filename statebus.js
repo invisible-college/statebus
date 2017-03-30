@@ -7,7 +7,12 @@
     var nodejs = typeof window === 'undefined'
 
     // ****************
-    // Public API
+    // Fetch, Save, Forget, Delete
+
+    function sync () {
+        return (typeof arguments[0] === 'string') ?
+            fetch.apply(this, arguments) : save.apply(this, arguments)
+    }
 
     function fetch (key, callback) {
         key = key.key || key    // You can pass in an object instead of key
@@ -1707,7 +1712,7 @@
     // #######################################
 
     // Make these private methods accessible
-    var api = ['cache backup_cache fetch save forget del fire dirty',
+    var api = ['cache backup_cache fetch save forget del fire dirty sync',
                'subspace bindings run_handler bind unbind reactive uncallback',
                'versions new_version',
                'funk_key funk_name funks key_id key_name id',
