@@ -407,6 +407,14 @@ function make_server_bus (options)
         bus.net_client(prefix, url, make_sock, login)
     },
 
+    universal_ws_client: function () {
+        function make_sock (url) {
+            WebSocket = require('websocket').w3cwebsocket
+            return new WebSocket(url+'/statebus/websocket')
+        }
+        bus.go_net(make_sock)
+    },
+
     file_store: (function () {
         // Make a database
         var filename = 'db'
@@ -1244,6 +1252,9 @@ function make_server_bus (options)
     // Maybe serve
     else if (options && (options.client || options.port || options.backdoor))
         bus.serve(options)
+
+    bus.universal_ws_client()
+
     return bus
 }
 module.exports = make_server_bus
