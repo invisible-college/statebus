@@ -1061,6 +1061,10 @@ function make_server_bus (options)
                         // console.log('DEFAULT ROUTE', t)
                         master_bus.save(bus.clone(o), t)
                     }, method, arg, {t: t})
+                else if (method == 'to_delete')
+                    bus.run_handler(function delete_from_master (k, t) {
+                        master_bus.delete(k)
+                    }, method, arg, {t: t})
             }
             return count
         }

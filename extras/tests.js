@@ -453,7 +453,13 @@ var tests = [
     },
 
     function uncallback (next) {
-        var chokidar = require('chokidar')
+        try {
+            var chokidar = require('chokidar')
+        } catch (e) {
+            console.warn('#### Yo!  You need to run "npm install chokidar"')
+            process.exit()
+        }
+
         var watchers = {}
         fs = require('fs')
         function read_file (filename, cb) {
@@ -791,6 +797,22 @@ var tests = [
             process.exit()
         }
         log('Ok good, we have the goods.')
+        next()
+    },
+
+    function default_route (next) {
+        var b1 = require('../server.js')()
+        var b2 = require('../server.js')()
+        b1.route_defaults_to(b2)
+        b2.save({key: 'foo', bar: 3})
+        console.assert(b1.fetch('foo').bar)
+        log(b1.fetch('foo'))
+        log(b2.fetch('foo'))
+        b1.delete('foo')
+        log(b1.fetch('foo'))
+        log(b2.fetch('foo'))
+        console.assert(!b1.fetch('foo').bar)
+        console.assert(!b2.fetch('foo').bar)
         next()
     },
 
