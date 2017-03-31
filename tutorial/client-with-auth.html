@@ -1,0 +1,160 @@
+<script type="statebus">                          #Scripts with this tag are interpreted by statebus
+
+dom.BODY = ->                                     #Define the react component that renders the dom body
+  messages = fetch('/chat').messages or []        #Synchronize with the chat messages using statebus  
+  DIV {},                                         #Define a div that displays the messages 
+    AUTH()                                        #For logging in and out
+    for message in messages
+      MESSAGE                                     #A component for displaying a message
+        key: message.key
+        message: message
+    NEW_MESSAGE()                                 #A component for writing new messsages
+
+dom.MESSAGE = ->                                  #Renders a message
+  msg = fetch(@props.message)                     #Get the message and subscribe to updates
+  current_user = fetch('/current_user')
+  author =  if msg.author && fetch(msg.author).name
+              fetch(msg.author).name
+            else 
+              'incognito bus driver'
+
+  # bug: when I login, I will no longer be owner of any messages i previously wrote
+  is_author = current_user.user?.key == msg.author || 
+              '/' + fetch('/connection').client == msg.author
+
+  DIV 
+    style: 
+      padding: '4px 0'
+    
+    DIV 
+      style: 
+        fontSize: 20
+      msg.content 
+
+    DIV 
+      style: 
+        fontSize: 14
+        color: '#888'
+      "by #{author}"
+
+    if is_author
+      BUTTON 
+        onClick: (e) -> 
+          bus.delete msg.key
+        'delete'
+    else 
+      BUTTON 
+        onClick: (e) -> 
+          bus.delete msg.key
+        'you cannot delete me if you try'
+
+dom.NEW_MESSAGE = ->
+  new_message = fetch('new_message')              #Access local state for the new message
+  DIV {},
+    INPUT
+      type: 'text'
+      value: new_message.text                     #Display the new message in the input 
+      onChange: (e) =>                            #When someone types, update the text in this input box
+        new_message.text = e.target.value         #Save this local state and re-render the NEW_MESSAGE component
+        save(new_message)
+
+    BUTTON
+      onClick: (e) =>                             #When someone clicks on this button, publish their message
+        chat = fetch('/chat')                     #Get the chat messages from statebus
+        chat.messages or= []                      #Add a new message to the chat and save it using statebus
+        message = {
+          key: "/message/#{new_key_id()}"         #Give the message its own state URL. Will be useful for us later.
+          content: new_message.text
+        }
+        chat.messages.push( message )             #Add the new message to the chat history
+        save(message)                             #Publish the new message and cause the body to re-render
+        new_message.text = ''
+        save(new_message)
+      'Send'
+
+
+dom.AUTH = -> 
+  auth = fetch 'auth'
+  current_user = fetch '/current_user'
+
+  if current_user.logged_in
+    BUTTON 
+      onClick: -> 
+        current_user.logout = true; save current_user
+      'logout'
+  else 
+    DIV null,
+
+      BUTTON
+        onClick: -> 
+          auth.form = 'register'; save auth
+        'Create account'
+
+      BUTTON 
+        onClick: -> 
+          auth.form = 'log in'; save auth
+        'Login'
+
+      if auth.form
+        AUTH_FORM()
+
+
+
+dom.AUTH_FORM = -> 
+  auth = fetch 'auth'
+  current_user = fetch '/current_user'
+  new_user = auth.form == 'register'
+  submit_enabled = auth.name && auth.password \
+                   && (!new_user || auth.email)
+    
+  DIV {},                     
+    INPUT
+      type: 'text'
+      placeholder: 'Your name'
+      value: auth.name
+      onChange: (e) =>
+        auth.name = e.target.value; save auth
+
+    if new_user
+      INPUT
+        type: 'email'
+        placeholder: 'Your email'
+        value: auth.email
+        onChange: (e) =>
+          auth.email = e.target.value; save auth    
+
+    INPUT
+      type: 'password'
+      placeholder: 'password'
+      value: auth.password
+      onChange: (e) =>
+        auth.password = e.target.value; save auth    
+
+
+    INPUT 
+      type: 'submit'
+      value: if new_user then 'Register' else 'Log in'
+      disabled: !submit_enabled
+      onClick: if submit_enabled then ->
+        current_user.create_account = auth if new_user
+        current_user.login_as = auth
+        save current_user
+        auth.form = auth.name = auth.password = auth.email = null
+        save auth
+
+    if current_user.error
+      setTimeout => 
+        delete current_user.error 
+        save current_user
+      , 6000
+
+      DIV 
+        style: 
+          backgroundColor: '#eee'
+          color: 'red'
+        current_user.error
+
+
+new_key_id = -> Math.random().toString(36).substring(3)
+
+</script><script src="https://stateb.us/client5.js" server="http://localhost:3005"></script> #This is the server we'll synchronize our state with.
