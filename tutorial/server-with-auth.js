@@ -68,7 +68,7 @@ var master_bus = require('statebus/server')({       // The master bus
 
 master_bus('message/*').to_save = function (o) {   // When a message is saved, put it in the chat history
   var chat = master_bus.fetch('chat'),                 
-      idx = chat.messages.findIndex(function (m) {return m.key === o.key})
+      idx = chat.messages.findIndex( function (m) {return m.key === o.key} )
 
   if (idx == -1) {                                 // If this message is not in the chat history...   
     chat.messages.push(o)                          // add it
@@ -79,7 +79,7 @@ master_bus('message/*').to_save = function (o) {   // When a message is saved, p
 
 master_bus('message/*').to_delete = function (k) { // Cleanup when a message is deleted
   var chat = master_bus.fetch('chat'), 
-      idx = chat.messages.findIndex(function(m){return m.key == k})
+      idx = chat.messages.findIndex( function(m){return m.key == k} )
 
   if (idx > -1) {                                  // We found the message to delete
     m = chat.messages.splice(idx, 1)               // Remove the message from the index
@@ -94,7 +94,7 @@ if (!chat.messages) {                              // Initialize chat history
 }
 
 function uid(client) {
-  var c = client.fetch('connection'),              // Know who the client is...
+  var c = client.fetch('connection'),              // Uniquely identify the client...
       u = client.fetch('current_user')             //    either a logged in user or session id
       k = u.logged_in ? '/' + u.user.key : c.client 
                                                    // Reactive functions that call this function will 

@@ -259,7 +259,7 @@ Now open your .html file in a browser. You can once again see all of the chat me
 
 ### Question: What's on the bus?
 
-Answer: State is on the bus. Being delivered to you.
+Answer: The bus is delivering state. 
 
 ```javascript
 var upstream_bus = statebus(),
@@ -270,7 +270,7 @@ upstream_bus.ws_client('/*', 'state://stateb.us:3005')
 
 Each bus defines a separate state space that allows a client to access data through it. On our proxy server, we have a `proxy_bus` that will deliver state to any clients that connect to our proxy. Our proxy, in turn, will access state from our upstream server through the `upstream_bus`. 
 
-You can make multiple busses anywhere—client or server—but we have some defaults set up for you on the client.
+You can make multiple busses anywhere, client or server, fetch and save from them independently, and set to_* handlers on them. 
 
 ```javascript
 var statebus = require('statebus')  // This is already done for you on client
@@ -278,11 +278,7 @@ var statebus = require('statebus')  // This is already done for you on client
 // Make a couple busses:
 var bus = statebus()                // This is already done for you on client
 var gus = statebus()
-```
 
-You can fetch and save from busses independently:
-
-```javascript
 bus.fetch('foo').bar          // ==> undefined
 bus.save({key:'foo', bar: 3})
 bus.fetch('foo').bar          // ==> 3
@@ -290,7 +286,7 @@ fetch('foo').bar              // ==> 3
 gus.fetch('foo').bar          // ==> undefined
 ```
 
-On the client, you can use the global `fetch()` and `save()` functions, which access state on `bus`.
+(On the client, you can use the global `fetch()` and `save()` functions, which access state on `bus`.)
 
 ### Programming state with to_* handlers 
 
@@ -301,11 +297,11 @@ proxy_bus('chat').to_fetch = function (k) {[snip]}
 proxy_bus('message/*').to_save = function (o) {[snip]}
 ```
 
-...that defines how our our server to pass data back and forth between the client and the upstream `stateb.us:3005` server. 
+These handlers define how our proxy server relays state between clients and the upstream `stateb.us:3005` server. 
 
 These handlers give you control over how state is read and written through the respective bus. You can use them to:
 - Make proxies or caches that define state in terms of other state
-- Give distinct users distinct permissions and views of state (we'll do this later)
+- Give users distinct permissions and views of state (we'll do this later)
 - Create handy state abstractions that live-update on any schedule you can program
 
 There is a handler for each of the Statebus methods:
@@ -333,7 +329,7 @@ proxy_bus('chat').to_fetch = function (k) {
 
 Whenever a client requests the chat state from our proxy server, the `to_fetch` handler just passes through the chat state from our upstream server. 
 
-A `to_fetch` handler can add any state it wishes. For example, perhaps we want to note the origin of the state from our upstream server: 
+A `to_fetch` handler can add any state it wishes. For example, perhaps we want to note the origin of the state from our upstream server for our client: 
 
 ```javascript
 proxy_bus('chat').to_fetch = function (k) {  
@@ -354,7 +350,6 @@ You can also define a `to_fetch` handler for a *space* of keys, by appending `*`
 
 ```javascript
 bus('one_plus/*').to_fetch = function (key) {         // The specific key being fetched is passed as "key"
-   
    var num = Number(key.split('/')[1])
    return {result: 1 + num}
 }
@@ -371,25 +366,24 @@ bus('the_answer').to_fetch = function (key) {
    // using one of these equivalent statements:
    return {key: 'the_answer', n: 42}
    return {n: 42}                                    // Statebus can infer the key in return statements
-   bus.save.fire({key: 'the_answer', n: 42})         // Use this from within callbacks
+   my_async_funk( function(){
+     bus.save.fire({key: 'the_answer', n: 42})       // Use this from within callbacks
+   })
 }
 ```
 
 Each .to_fetch function *must* eventually return new state, either with a
-return statement or bus.save.fire.  Until the .to_fetch function returns,
+return statement or bus.save.fire.  Until the `.to_fetch function returns,
 anything that fetches it will be *loading*.
 
 ### Handle saves with `to_save`
 
 `to_save` handlers help you control what happens when a piece of state changes. For example, 
-our proxy server will send new and updated messages to our upstream server, making sure 
-that the message's key is appropriately prefixed with the absolute url of the upstream server:
+our proxy server will send new and updated messages to our upstream server: 
 
 ```javascript
-proxy('message/*').to_save = function (o) {              
-  if (!o.key.startsWith(upstream))  
-    o.key = upstream + o.key
-  proxy.save.fire(o)                                     
+proxy_bus('message/*').to_save = function (o) { 
+  upstream_bus.save.fire(o)     
 }
 ```
 
@@ -397,9 +391,7 @@ The general form of a `to_save` handler is:
 
 ```javascript
 bus("key_pattern").to_save = function (obj) {
-
    // Here you can validate obj, tweak it, update a backing store...
-
    // And eventually, either call:
    bus.save.abort(obj)   // To deny this save request!
 
@@ -413,9 +405,8 @@ bus("key_pattern").to_save = function (obj) {
 
 Your `to_save` handler will receive the requested new state `obj` as a
 parameter, and must either call `save.abort(obj)` to ignore the request, or
-`save.fire(obj)` (after making any desired changes to `obj`) to broadcast it.
-It doesn't matter if the `to_save` handler *itself* fires the change, but the
-save will remain pending until *something* does.
+`save.fire(obj)` to broadcast it. It doesn't matter if the `to_save` handler 
+*itself* fires the change, but the save will remain pending until *something* does.
 
 This lets you control:
 - Which changes to state are allowed
@@ -424,13 +415,15 @@ This lets you control:
 - Updating dependent state
 - When to broadcast updates
 
-To_save handlers are also reactive, but stop reacting as soon as they run once
+`to_save handlers are also reactive, but stop reacting as soon as they run once
 to completion without anything fetched loading.  This lets you fetch state
 from other places (*e.g.* over the network) and be sure that your handler will
 run once the state has loaded.
 
 
 ## A server with authentication and access control
+
+Sometimes you want to know who is riding your bus, and make sure they're only rifling through their own luggage. 
 
 Let's create a different server with multiple users, authentication, and access control. Copy and paste the code below into your server.js file, entirely replacing its contents. We'll then unpack it. 
 
@@ -527,7 +520,7 @@ Before we unpack this code, also replace your .html file with the following code
 
 ## Support multiple users
 
-In our previous server example, we had a bus for a proxy server and a bus for an upstream server. In the server above, we have a client bus and a master bus:
+Earlier, we had a bus for our proxy server and an upstream server. In our multi-user server above, we have a client bus and a master bus:
 
 ```javascript
 var master_bus = require('statebus/server')({
@@ -535,10 +528,12 @@ var master_bus = require('statebus/server')({
   client: function (client_bus) {                   
     client_bus('message/*').to_fetch = function (k) {...}
     (...)
-}
+  }
+  (...)
+})
 ```
 
-If you use the `client:` option when you create a bus, you enable multiple users and authentication on your server. Each user will have a distinct `client` bus, and which inherit state from a common `master` bus. Thus, each user sees a different state space derived from the master state:
+If you use the `client:` option when you create a bus, you enable multiple users and authentication on your server. Each user will have a distinct `client` bus that shadows the state on the `master` bus. Thus, each user can have a different view of the master state:
 
 ```
  Client Busses
@@ -556,8 +551,7 @@ var master = require('statebus/server')({  // The master bus is defined here
 
         // Client-specific state definitions go here
 
-        // Give each client a different view of the 'foo' state:
-        client('foo').to_fetch = function (key) {
+        client('foo').to_fetch = function (key) {         // Each client gets a different view of 'foo'
             if (fetch('/current_user').logged_in)
                 return {you_are: 'logged in!!!'}
             else
