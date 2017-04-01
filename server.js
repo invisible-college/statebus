@@ -392,7 +392,11 @@ function make_server_bus (options)
 
     ws_client: function (prefix, url, account) {
         function make_sock (url) {
+            url = url.replace(/^state:\/\//, 'wss://')
+            url = url.replace(/^istate:\/\//, 'ws://')
+            url = url.replace(/^statei:\/\//, 'ws://')
             WebSocket = require('websocket').w3cwebsocket
+            console.log('opening websocket at', url + '/statebus/websocket')
             return new WebSocket(url + '/statebus/websocket')
         }
         function login (send_login_info) {
