@@ -10,7 +10,7 @@ var master_bus = require('statebus/server')({       // The master bus
                                                     // user can fetch() and save() master state.
 
     client_bus('message/*').to_save = function (o) {// Only authors can update a post
-      o.key = o.key || 'message/' + new_key_id()    // Ensure that a message has a key
+      o.key = o.key || 'message/' + random_string()    // Ensure that a message has a key
       var obj = master_bus.fetch(o.key)             // Get the version of this state stored in master, if any
 
       author_change = obj.author &&                 // Address case where a malicious client tries to 
@@ -49,7 +49,7 @@ var master_bus = require('statebus/server')({       // The master bus
 
 master_bus('message/*').to_save = function (o) {   // When a message is saved, put it in the chat history
   var chat = master_bus.fetch('chat'),                 
-      idx = chat.messages.findIndex( function (m) {return m.key === o.key} )
+      idx = chat.messages.findIndex(function (m) {return m.key === o.key})
 
   if (idx == -1) {                                 // If this message is not in the chat history...   
     chat.messages.push(o)                          // add it
@@ -60,7 +60,7 @@ master_bus('message/*').to_save = function (o) {   // When a message is saved, p
 
 master_bus('message/*').to_delete = function (k) { // Cleanup when a message is deleted
   var chat = master_bus.fetch('chat'), 
-      idx = chat.messages.findIndex( function(m){return m.key == k} )
+      idx = chat.messages.findIndex(function(m){return m.key == k})
 
   if (idx > -1) {                                  // We found the message to delete
     m = chat.messages.splice(idx, 1)               // Remove the message from the index
@@ -75,11 +75,11 @@ if (!chat.messages) {                              // Initialize chat history
 }
 
 function uid(client) {
-  var c = client.fetch('connection'),              // Uniquely identify the client
+  var c = client.fetch('connection'),              // Know who the client is...
       u = client.fetch('current_user')             //    either a logged in user or session id
       k = u.logged_in ? '/' + u.user.key : c.client 
                                                    // Reactive functions that call this function will 
   return k                                         // be subscribed to changes to current_user and connection
 }
 
-function new_key_id() { return Math.random().toString(36).substring(3) }
+function random_string() { return Math.random().toString(36).substring(3) }

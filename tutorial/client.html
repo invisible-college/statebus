@@ -23,7 +23,7 @@ dom.NEW_MESSAGE = ->
         chat = fetch('/chat')                     #Get the chat messages from statebus
         chat.messages or= []                      #Add a new message to the chat and save it using statebus
         message = {
-          key: "/message/#{new_key_id()}"         #Give the message its own state URL. Will be useful for us later.
+          key: "/message/#{random_string()}"         #Give the message its own state URL. Will be useful for us later.
           content: new_message.text
         }
         chat.messages.push( message )             #Add the new message to the chat history
@@ -32,6 +32,6 @@ dom.NEW_MESSAGE = ->
         save(new_message)
       'Send'
 
-new_key_id = -> Math.random().toString(36).substring(3)
+random_string = -> Math.random().toString(36).substring(3)
 
 </script><script src="https://stateb.us/client5.js" server="http://localhost:3005"></script> #This is the server we'll synchronize our state with.

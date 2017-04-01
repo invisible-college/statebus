@@ -29,6 +29,7 @@ dom.BODY = ->                                     # Define the webpage with dom.
 
 dom.NEW_MESSAGE = ->
   new_message = fetch('new_message')              # The state of the message as it is being written
+
   DIV {},
     INPUT
       type: 'text'
@@ -68,6 +69,7 @@ managing your state, and will notify those functions to re-run whenever
 it detects a change.
 
 Here's one of those reactive functions:
+
 ```coffeescript
 dom.NEW_MESSAGE = ->
 ``` 
@@ -447,7 +449,7 @@ var master_bus = require('statebus/server')({       // The master bus
                                                     // user can fetch() and save() master state.
 
     client_bus('message/*').to_save = function (o) {// Only authors can update a post
-      o.key = o.key || 'message/' + new_key_id()    // Ensure that a message has a key
+      o.key = o.key || 'message/' + random_string()    // Ensure that a message has a key
       var obj = master_bus.fetch(o.key)             // Get the version of this state stored in master, if any
 
       author_change = obj.author &&                 // Address case where a malicious client tries to 
@@ -519,7 +521,7 @@ function uid(client) {
   return k                                         // be subscribed to changes to current_user and connection
 }
 
-function new_key_id() { return Math.random().toString(36).substring(3) }
+function random_string() { return Math.random().toString(36).substring(3) }
 ```
 
 Before we unpack this code, also replace your .html file with [this code](tutorial/client-with-auth.html), which implements authentication.
