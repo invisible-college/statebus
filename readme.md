@@ -5,10 +5,12 @@ This repository is a Javascript implementation of the Statebus protocol. You can
 
 This implementation is great for prototyping. You can see some prototypes and applications [here](https://invisible.college). We welcome contributions, and are excited to help you build your own Statebus applications.
 
-# Getting started
+# Tutorial
+Hello future bus drivers, welcome to your training!
+
 Today we are going to make a basic chat widget. It's a public chat that anyone can post to. We hope you'll post a message on it - it's a guestbook for anyone who visits this tutorial!
 
-We've broken the tutorial into two parts: Making a client and Making a server. Most of the logic is in the client, because Statebus [collapses time and space](https://github.com/invisible-college/statebus/blob/v5/readme.md#fetch-and-save-are-reactive-functions). The server handles basic privacy and data filtering features.
+We've broken the training into two parts: Making a client and Making a server. Most of the logic is in the client, because Statebus [collapses time and space](https://github.com/invisible-college/statebus/blob/v5/readme.md#fetch-and-save-are-reactive-functions). The server handles basic privacy and data filtering features.
 
 ## Making a client
 To write client code, you don't need to download anything. Instead, you'll just edit a single .html file locally on your computer. However, you'll be writing in [Coffeescript](http://coffeescript.org) and creating [React](http://reactjs.org) web components, so make sure you're familiar with both of these tools. Aside from Coffeescript and React, there are really only two methods that you will need to learn: `fetch` and `save`. To get a sense of how they work, let's make something!
@@ -19,14 +21,15 @@ Here's the chat you'll be making. Copy and paste this into your .html file.
 <script type="statebus">                          # Scripts with this tag are interpreted by statebus
 
 dom.BODY = ->                                     # Define the webpage with dom.BODY = ->
-  messages = fetch('/chat').messages or []        # Let's get the chat messages!
+  messages = fetch('/chat').messages or []        # Get the current state of the chat!
   DIV {},
     for message in messages
       DIV(message.content)
-    NEW_MESSAGE()                                 # New messages are defined below...
+    NEW_MESSAGE()
 
-dom.NEW_MESSAGE = ->                              # ... right here!
-  new_message = fetch('new_message')              # This is the state of the message as it is being written
+dom.NEW_MESSAGE = ->
+  new_message = fetch('new_message')              # The state of the message as it is being written
+
   DIV {},
     INPUT
       type: 'text'
@@ -66,13 +69,17 @@ managing your state, and will notify those functions to re-run whenever
 it detects a change.
 
 Here's one of those reactive functions:
+
 ```coffeescript
-dom.BODY = -> # Define the react component that renders the dom body
+dom.NEW_MESSAGE = ->
 ``` 
-Anything starting with _dom._ that has UPPERCASE characters will define
-a new react component. The body defines the react component's
-render function. This syntax strips away some cruft in programming
-with react.
+
+Any function on `dom.*` defines a reactive HTML tag, which you can use
+anywhere else in the page with e.g. `NEW_MESSAGE()`.  When the function runs,
+it remembers every piece of state it fetches, and will re-runs automatically
+whenever that state changes, to determine its new HTML.
+
+Behind the scenes, these dom functions are actually creating React components.
 
 ### Fetch
 ```coffeescript
@@ -216,134 +223,770 @@ In your sample [client code](https://github.com/invisible-college/statebus#makin
 <script src="https://stateb.us/client5.js"></script>
 ``` 
 
-We're going to use our own server, not the default https://stateb.us:3005 server. Update your html file with:
+We're going to use our own server, not the default `https://stateb.us:3005` server. Update your html file with:
 
 ```html
 <script src="https://stateb.us/client5.js" server="http://localhost:3005"></script>
 ``` 
 
-Open your .html file in your browser. It now has an empty chat history. This is because every Statebus server has its own data store, and when you set the `server` attribute of the statebus client script tag, you specify a default server for the data. Thus, `fetch('/chat')` state is now accessing the data stored at your new server.
+Open your .html file in your browser. It now has an empty chat history. This is because every Statebus server has its own data store, and when you set the `server` attribute of the statebus client script tag, you specify a default server for the data. Thus, `fetch('/chat')` state is by default accessing the data stored at your new server.
 
-<!--- To continue fetching and saving chat data to the stateb.us server, use absolute state URLs by fetching from `state://stateb.us:3005/chat` instead of `/chat`---->
+To continue fetching and saving chat data to the stateb.us server, you could modify your .html file to use absolute state URLs by fetching from `state://stateb.us:3005/chat` instead of `/chat`. Our we could change our server to proxy state stored at `stateb.us:3005`. Let's create that proxy server!
 
-For now, let's add access control to our chat application. Later on, we'll reintegrate the chat history data hosted at stateb.us!
+## A proxy server 
 
-### A server with authentication and access control
+Let's get your new server serving the chat messages that you saw earlier by proxying the data stored at `stateb.us:3005`. Copy and paste the code below into your server.js file, entirely replacing its contents.
 
-It is time to add authentication and access control to our server. Copy and paste the code below into your server.js file, and then we'll unpack it. 
+```javascript
+// A proxy server
+//  • Chat messages are taken from the stateb.us server
+//  • New messages are posted to stateb.us
 
-Don't be intimidated!
+statebus = require('statebus/server')
+
+var upstream_bus = statebus(),                           // Create a bus for our upstream server
+    proxy_bus = statebus({port: 3005})                   // ..and our proxy server
+
+proxy_bus('chat').to_fetch = function (k) {              // When a client fetches '/chat',
+  return upstream_bus.fetch('/chat')                     // return the chat data stored at our upstream server
+}                                                        // We're also subscribed to changes from upstream server
+
+proxy_bus('message/*').to_save = function (o) {          // When a client saves a message, 
+  chat = upstream_bus.fetch('/chat')                     // we'll add it to the chat history of the upstream bus
+  chat.key = '/' + chat.key                              // (the need for this key prefixing is a bug)
+  o.key = '/' + o.key
+  chat.messages.push(o)
+  upstream_bus.save(chat)                                // and then deliver it upstream  
+}
+
+upstream_bus.ws_client('/*', 'state://stateb.us:3005')   // Connect to our upstream server
+```
+
+Next, restart your server if you're not using `nodemon`or `supervisor`. 
+
+Now open your .html file in a browser. You can once again see all of the chat messages of other people who have gone through this tutorial! If you post another message, it will be saved to `stateb.us:3005`.
+
+### Question: What's on the bus?
+
+Answer: State is on the bus, getting delivered. 
+
+```javascript
+var upstream_bus = statebus(),
+    proxy_bus = statebus({port: 3005})
+
+upstream_bus.ws_client('/*', 'state://stateb.us:3005')
+```
+
+Each bus defines a separate state space that allows a client to access data through it. On our proxy server, we have a `proxy_bus` that will deliver state to any clients that connect to our proxy. Our proxy, in turn, will access state from our upstream server through the `upstream_bus`. 
+
+You can make multiple busses anywhere, client or server, fetch and save from them independently, and set to_* handlers on them. 
+
+```javascript
+var statebus = require('statebus')  // This is already done for you on client
+
+// Make a couple busses:
+var bus = statebus()                // This is already done for you on client
+var gus = statebus()
+
+bus.fetch('foo').bar          // ==> undefined
+bus.save({key:'foo', bar: 3})
+bus.fetch('foo').bar          // ==> 3
+fetch('foo').bar              // ==> 3 
+gus.fetch('foo').bar          // ==> undefined
+```
+
+(On the client, you can use the global `fetch()` and `save()` functions, which access state on `bus`.)
+
+### Programming state with to_* handlers 
+
+In our proxy server above, we defined two custom handlers for our state:
+
+```javascript
+proxy_bus('chat').to_fetch = function (k) {[snip]}
+proxy_bus('message/*').to_save = function (o) {[snip]}
+```
+
+These handlers define how our proxy server relays state between clients and the upstream `stateb.us:3005` server. 
+
+These handlers give you control over how state is read and written through the respective bus. You can use them to:
+- Make proxies or caches that define state in terms of other state
+- Give users distinct permissions and views of state (we'll do this later)
+- Create handy state abstractions that live-update on any schedule you can program
+
+There is a handler for each of the Statebus methods:
+
+| Method      | Handler                                           | 
+| :---------- | :------------------------------------------------ |
+| fetch(key)  | bus(key_space).to_fetch  = function (key) { ... } | 
+| save(obj)   | bus(key_space).to_save   = function (obj) { ... } |
+| forget(key) | bus(key_space).to_forget = function (key) { ... } |
+| delete(key) | bus(key_space).to_delete = function (key) { ... } |
+
+These handlers can be written on clients as well -- on any state bus. 
+
+Let's take a closer look at the `to_fetch` and `to_save` handlers. 
+
+### Define state programmatically with `to_fetch`
+
+`to_fetch` is handy for making proxies or caches in terms of other state, regardless of where that state is stored. 
+
+```javascript
+proxy_bus('chat').to_fetch = function (k) {
+  return upstream_bus.fetch('chat')
+}
+```
+
+Whenever a client requests the chat state from our proxy server, the `to_fetch` handler just passes through the chat state from our upstream server. 
+
+A `to_fetch` handler can add any state it wishes. For example, perhaps we want to note the origin of the state from our upstream server for our client: 
+
+```javascript
+proxy_bus('chat').to_fetch = function (k) {  
+  return {
+    key: 'chat',
+    origin: 'stateb.us:3005',
+    messages: upstream_bus.fetch('chat').messages
+  }
+} 
+```
+
+Handlers are automatically reactive, so whenever the chat state on our upstream server changes, our
+`to_fetch` handler will re-run and produce a new chat history for any clients that fetched the 
+proxy's chat history.  The reactions will start when a client fetches it, and stop when all clients
+have forgotten it, so that we don't carry on with unnecessary reactions.
+
+You can also define a `to_fetch` handler for a *space* of keys, by appending `*` to the key:
+
+```javascript
+bus('one_plus/*').to_fetch = function (key) {         // The specific key being fetched is passed as "key"
+   var num = Number(key.split('/')[1])
+   return {result: 1 + num}
+}
+
+fetch('one_plus/2').result   // ==> 3
+```
+
+The general form of a `to_fetch` handler is:
+
+```javascript
+bus('the_answer').to_fetch = function (key) {
+   // Do some stuff...
+   // ...and then fire the new state across the bus,
+   // using one of these equivalent statements:
+   return {key: 'the_answer', n: 42}
+   return {n: 42}                                    // Statebus can infer the key in return statements
+   my_async_funk( function(){
+     bus.save.fire({key: 'the_answer', n: 42})       // Use this from within callbacks
+   })
+}
+```
+
+Each .to_fetch function *must* eventually return new state, either with a
+return statement or bus.save.fire.  Until the `.to_fetch function returns,
+anything that fetches it will be *loading*.
+
+### Handle saves with `to_save`
+
+`to_save` handlers help you control what happens when a piece of state changes. For example, 
+our proxy server will send new and updated messages to our upstream server: 
+
+```javascript
+proxy_bus('message/*').to_save = function (o) { 
+  upstream_bus.save.fire(o)     
+}
+```
+
+The general form of a `to_save` handler is:
+
+```javascript
+bus("key_pattern").to_save = function (obj) {
+   // Here you can validate obj, tweak it, update a backing store...
+   // And eventually, either call:
+   bus.save.abort(obj)   // To deny this save request!
+
+   // ... or:
+   bus.save.fire(obj)    // To broadcast the result across the bus!
+
+   // ... or:
+   bus.dirty(obj.key)    // To re-run a to_fetch handler, if you've defined one.
+}
+```
+
+Your `to_save` handler will receive the requested new state `obj` as a
+parameter, and must either call `save.abort(obj)` to ignore the request, or
+`save.fire(obj)` to broadcast it. It doesn't matter if the `to_save` handler 
+*itself* fires the change, but the save will remain pending until *something* does.
+
+This lets you control:
+- Which changes to state are allowed
+- Validation and cleaning
+- Where state is stored (*e.g.* in a database)
+- Updating dependent state
+- When to broadcast updates
+
+`to_save handlers are also reactive, but stop reacting as soon as they run once
+to completion without anything fetched loading.  This lets you fetch state
+from other places (*e.g.* over the network) and be sure that your handler will
+run once the state has loaded.
+
+
+## A server with authentication and access control
+
+Sometimes you want to know who is riding your bus, and make sure they're only rifling through their own luggage. 
+
+Let's create a different server with multiple users, authentication, and access control. Copy and paste the code below into your server.js file, entirely replacing its contents. We'll then unpack it. 
 
 ```javascript
 // A chat server
 // We want these controls on the server:
-//  • Users can save a "draft" post before it is shown publicly
-//  • Users can see their own draft posts
-//  • Some users are admins
-//  • Admins can delete any post; users can delete their own
-//  • Ensure the /chat index stays in sync with new posts added
+//  • Only authors can update a message or delete it
+//  • Ensure the /chat index stays in sync with new messages added
 
-var master = require('statebus/server')({           // The master bus
+var master_bus = require('statebus/server')({       // The master bus
   port: 3005,
 
-  client: function (client) {                       // The client bus defines an API for how each connected 
+  client: function (client_bus) {                   // The client bus defines an API for how each connected 
                                                     // user can fetch() and save() master state.
 
-    var admins = {'user/powertripper': true,        // Only some users are admins
-                  'user/2': true}
-    
-    client('message/*').to_fetch = function (k) {   // Enforce access control on draft messages
+    client_bus('message/*').to_save = function (o) {// Only authors can update a post
+      o.key = o.key || 'message/' + random_string()    // Ensure that a message has a key
+      var obj = master_bus.fetch(o.key)             // Get the version of this state stored in master, if any
 
-      var message = master.fetch(k),                // Get the message from the master bus
-          user = uid(client)                        // Know who the client is. uid is defined below.
+      author_change = obj.author &&                 // Address case where a malicious client tries to 
+                      obj.author != o.author        // directly change the author of the message
 
-      if (!message.draft || message.author == user)
-        return message                              // a-ok! Pass through the master state for this message
-      else
-        return {error: 'not permitted'}
-    }
+      if (!o.author && !author_change)              
+        o.author = uid(client_bus)                  // Set the author of a new message
 
-    client('message/*').to_save = function (o) {    // Only authors can update a post
-      o.key = o.key || 'message/' + random_string() // Ensure that a message has a URL
-      var obj = master.fetch(o.key)                 // Get the version of this state stored in master, if any
-
-      author_change = obj.author && obj.author != o.author
-      if (!author_change)
-        o.author = o.author || uid(client)          // Initialize author for new messages
-
-      if (author_change || o.author != uid(client))
-        client.save.abort(o)                        // Thwart devious clients!
+      if (author_change || o.author != uid(client_bus))
+        client_bus.save.abort(o)                    // Ha! A devious client thwarted!
       else {
-        master.save(o)                              // Save it to master
+        master_bus.save(o)                          // Looks good. Save it to master
       }
     }
-
-    client('chat').to_fetch = function (k) {        // Each client has a different view of the chat history
-      var user = uid(client),
-          chat = master.clone(master.fetch('chat')) // We start with a copy of the full chat history...
-                                                    // and filter out messages this user isn't permitted to see
-      permitted = function(m) {return !client.fetch(m).error}
-      chat.messages = chat.messages.filter(permitted)
-      return chat
+                                                    // Only authors can delete a message
+    client_bus('message/*').to_delete = function (k,t) { 
+      var msg = client_bus.fetch(k)
+      if (uid(client_bus) == msg.author)            // Ensure current user is the author
+        master_bus.delete(k)                        // to delete the message
+      else {
+        t.abort()                                   // otherwise, reject the delete
+      }                                             // (the abort method for delete will change soon)      
     }
 
-    client('chat').to_save = function (o) {         // Clients can't change the chat history directly
-      client.save.abort(o)                          // Abort this save attempt!
+    client_bus('chat').to_save = function (o) {     // Clients can't change the chat history directly
+      client_bus.save.abort(o)                      // Prevent save from happening!
     }
 
-    client('message/*').to_delete = function (k) {  // Admins can delete any message
-      var u = client.fetch('current_user')
-      if (!u.logged_in || !admins[u.user.key])     // Ensure current user is an admin.
-        client.save.abort(o)
-      else 
-        master.delete(k)
-    }
-
-    // Anything not matched to the handlers above will automatically pass
-    // through to the master bus.
-
+    client_bus.route_defaults_to(master_bus)        // Anything not matched to the handlers above 
+                                                    // will pass through to the master bus.
   }
 
 })
 
 // Now we can define how state on the master bus behaves.
 
-master('message/*').to_save = function (o) {       // When a message is saved, put it in the chat history
-  var chat = master.fetch('chat'),                 
+master_bus('message/*').to_save = function (o) {   // When a message is saved, put it in the chat history
+  var chat = master_bus.fetch('chat'),                 
       idx = chat.messages.findIndex(function (m) {return m.key === o.key})
 
   if (idx == -1) {                                 // If this message is not in the chat history...   
     chat.messages.push(o)                          // add it
-    master.save(chat)                              // and save our change to the history
+    master_bus.save(chat)                          // and save our change to the history
   }
-  master.save.fire(o)                              // Now complete the save of the message
+  master_bus.save.fire(o)                          // Now complete the save of the message
 }
 
-master('message/*').to_delete = function (k) {     // Cleanup when a message is deleted
-  var chat = master.fetch('chat'), 
+master_bus('message/*').to_delete = function (k) { // Cleanup when a message is deleted
+  var chat = master_bus.fetch('chat'), 
       idx = chat.messages.findIndex(function(m){return m.key == k})
 
   if (idx > -1) {                                  // We found the message to delete
     m = chat.messages.splice(idx, 1)               // Remove the message from the index
-    master.save(chat)
+    master_bus.save(chat)
   }
 }
 
-chat = master.fetch('chat')                        
+chat = master_bus.fetch('chat')                        
 if (!chat.messages) {                              // Initialize chat history
   chat.messages = []
-  master.save(chat)
+  master_bus.save(chat)
 }
 
 function uid(client) {
   var c = client.fetch('connection'),              // Know who the client is...
-      u = c.user ? c.user.key : 'user/' + c.client //    either a logged in user or session id
-                                                   // Note: Reactive functions that call this function will 
-  return u                                         // be subscribed to changes to any state that this 
-}                                                  // function fetches. 
+      u = client.fetch('current_user')             //    either a logged in user or session id
+      k = u.logged_in ? '/' + u.user.key : c.client 
+                                                   // Reactive functions that call this function will 
+  return k                                         // be subscribed to changes to current_user and connection
+}
 
 function random_string() { return Math.random().toString(36).substring(3) }
 ```
+
+Before we unpack this code, also replace your .html file with [this code](tutorial/client-with-auth.html), which implements authentication.
+
+## Support multiple users
+
+Earlier, we had a bus for our proxy server and an upstream server. In our multi-user server above, we have a client bus and a master bus:
+
+```javascript
+var master_bus = require('statebus/server')({
+
+  client: function (client_bus) {                   
+    client_bus('message/*').to_fetch = function (k) {...}
+    (...)
+  }
+  (...)
+})
+```
+
+If you use the `client:` option when you create a bus, you enable multiple users and authentication on your server. Each user will have a distinct `client` bus that shadows the state on the `master` bus. Thus, each user can have a different view of the master state:
+
+```
+ Client Busses
+     o o o
+      \|/
+       o
+   Master Bus
+```
+
+The function you pass to the `client:` option when you create a bus defines the custom view each connected user will have of the master state. The general pattern is:
+
+```javascript
+var master = require('statebus/server')({  // The master bus is defined here
+    client: function (client) {            // Each client bus is passed as an argument here
+
+        // Client-specific state definitions go here
+
+        client('foo').to_fetch = function (key) {         // Each client gets a different view of 'foo'
+            if (fetch('/current_user').logged_in)
+                return {you_are: 'logged in!!!'}
+            else
+                return {you_are: 'not logged in... sad.'}
+        }
+    }
+})
+
+// Master state definitions can go below
+// master('bar').to_fetch = ...
+```
+
+Any handler defined on the `client` bus will shadow the `master` bus.  If you
+don't define any custom behavior for a key, all `fetch` and `save` calls will
+pass through to `master`, and thus be shared across all clients.  For example:
+
+<!--- when does the pass through happen and when doesn't it? ---->
+
+```javascript
+// client 1:
+fetch('/foo').you_are        // -> 'logged in!!!'
+fetch('/bar').num            // -> undefined
+save({key: '/bar', num: 3})  // Saved to master
+
+// client 2:
+fetch('/foo').you_are        // -> 'not logged in... sad.'
+fetch('/bar').num            // -> 3
+```
+
+Additionally, if you enable multi-user support with the `client:` option, each
+client will automatically have a custom `current_user`, `connections`, and
+`connection` state defined for it. Let's look at those!
+
+### The `current_user` state
+
+Each user will have a different `current_user` state. By default, it looks like this on the client:
+
+```javascript
+{
+  key: "/current_user",
+  logged_in: false,
+  user: null,
+  salt: 0.6722493639426692
+}
+```
+
+You can check if the current user is logged in with `fetch('/current_user').logged_in`.  
+If they are, you can get the current user's key with `fetch('/current_user').user.key`.
+
+In our server code above, we use the `current_user` state to check if the client has sufficient permissions to delete the message:
+
+```javascript
+client_bus('message/*').to_delete = function (k) {
+  var msg = client_bus.fetch(k)
+  if (uid(client_bus) == msg.author)
+    master_bus.delete(k)
+  else 
+    client_bus.save.abort(o)
+}
+
+function uid(client) {
+  var c = client.fetch('connection'),              // Know who the client is...
+      u = client.fetch('current_user')             //    either a logged in user or session id
+      k = u.logged_in ? u.user.key : 'user/' + c.client 
+                                                   // Reactive functions that call this function will 
+  return k                                         // be subscribed to changes to current_user and connection
+}
+```
+
+You can also manipulate `current_user`, to log in, out, or edit or create your account:
+
+#### Create a new account
+
+Run this:
+```javascript
+c.create_account = {name: 'Reginald McGee', pass: 'security-R-us', email: 'barf@toilet.guru'}
+save(c)
+```
+
+#### Log in
+
+// ... and now log into it:
+c.login_as = {name: 'Reginald McGee', pass: 'security-R-us'}
+save(c)
+```
+
+If successful, you'll see something like this:
+
+```javascript
+{
+  key: "/current_user",
+  logged_in: true,
+  user: {
+    key: "/user/mike",
+    name: "mike",
+    email: "toomim@gmail.com"
+  },
+  salt: 0.6722493639426692
+}
+```
+
+#### Edit your account
+
+```javascript
+c.user.name = 'Miiiiike'
+c.user.email = 'my_new_email@gmail.com'
+c.user.pass = '••••••••••'
+save(c.user)
+```
+
+#### Log out
+```javascript
+c.logout = true
+save(c)
+```
+
+
+#### The `/user/*` state
+
+Each user has a key starting with `user/` (or `user/`).  You can look up any other
+user by fetching their `user/` key.  You'll be able to see their name, but
+not private information like email address. 
+
+For instance:
+
+```javascript
+// As mike:
+fetch('/user/mike')
+=> {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}
+
+// Log out:
+c.logout = true
+save(c)
+
+// Now my email is hidden:
+fetch('/user/mike')
+=> {key: "/user/mike", name: "mike"}
+```
+
+### The `/connections` state
+
+<!--- todo: add client/id for each connection ---->
+
+
+This is the list of all clients connected to the server—whether logged in or
+not.  For example, this server has 3 connected clients, and two of them are
+the same user (me):
+
+```javascript
+{
+  key: "connections",
+  all: [
+    {user: {key: "user/mike", name: "mike", email: "toomim@gmail.com"}},
+    {},
+    {user: {key: "user/mike", name: "mike", email: "toomim@gmail.com"}}
+  ]
+}
+```
+
+I have two connections because I have two browser tabs open to the server.
+
+You can see your client's current connection with the `/connection` state:
+
+```javascript
+{
+  key: "/connection",
+  user: {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}
+}
+```
+
+Each client can store additional information in their connection:
+
+```javascript
+c = fetch('/connection')
+c.extra_info = 'Something!'
+save(c)
+```
+
+This info is broadcast to everyone who fetched `/connections` on the server:
+
+```javascript
+{
+  key: "/connections",
+  all: [
+    {user: {key: "/user/mike", name: "mike"}, extra_info: "Something!"},
+    {},
+    {user: {key: "/user/mike", name: "mike"}}
+  ]
+}
+```
+
+## ...And now you're a bus driver
+
+Congrats on working through the tutorial!
+
+<!--- todo: add client/id for each connection ---->
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!---
+### Client and master: 
+
+
+## Client and server busses
+
+Each bus defines a separate state space.  
+
+
+
+
+
+
+
+Note that you can make multiple busses 
+anywhere—client or server—but we have some defaults set up for you on the client.
+
+```javascript
+var statebus = require('statebus')  // This is already done for you on client
+
+// Make a couple busses:
+var bus = statebus()                // This is already done for you on client
+var gus = statebus()
+```
+
+You can fetch and save from busses independently:
+
+```javascript
+bus.fetch('foo').bar          // ==> undefined
+bus.save({key:'foo', bar: 3})
+bus.fetch('foo').bar          // ==> 3
+
+gus.fetch('foo').bar          // ==> undefined
+```
+
+You can connect busses together with handlers.  For instance:
+```javascript
+// Connect fetches on 'foo' to gus
+bus('foo').to_fetch = function () { return gus.fetch('foo') }
+
+// Connect saves on 'foo' to gus
+bus('foo').to_save = function (obj) { gus.save(obj) }
+```
+
+If you only have one bus, you can also use the global `fetch()` and `save()`
+functions.
+
+```javascript
+fetch('foo').fuzz          // ==> undefined
+save({key: 'foo', fuzz: 3})
+fetch('foo').fuzz          // ==> 3
+```
+
+But these globals are disabled on multi-user servers, where they become ambiguous.
+
+(We might remove multiple busses in a future release.  Then you would disambiguate with keys, instead.)
+
+## Support multiple users
+
+Multiple busses let you interact with multiple users on the server, where each
+user sees a different state space.  Each user will have a distinct `client`
+bus, and which inherit state from a common `master` bus.
+
+```
+ Client Busses
+     o o o
+      \|/
+       o
+   Master Bus
+```
+
+To enable multiple users, use the `client:` option when you create a bus,
+passing it a function that will run to customize each client bus as new users
+connect to the server:
+
+```javascript
+var master = require('statebus/server')({  // The master bus is defined here
+    client: function (client) {            // Each client bus is passed as an argument here
+
+        // Client-specific state definitions go here
+
+        // Give each client a different view of the 'foo' state:
+        client('foo').to_fetch = function (key) {
+            if (fetch('/current_user').logged_in)
+                return {you_are: 'logged in!!!'}
+            else
+                return {you_are: 'not logged in... sad.'}
+        }
+    }
+})
+
+// Master state definitions can go below
+// master('bar').to_fetch = ...
+```
+
+Any handler defined on the `client` bus will shadow the `master` bus.  If you
+don't define any custom behavior for a key, all `fetch` and `save` calls will
+pass through to `master`, and thus be shared across all clients.  For example:
+
+```javascript
+// client 1:
+fetch('/foo').you_are        // -> 'logged in!!!'
+fetch('/bar').num            // -> undefined
+save({key: '/bar', num: 3})  // Saved to master
+
+// client 2:
+fetch('/foo').you_are        // -> 'not logged in... sad.'
+fetch('/bar').num            // -> 3
+```
+
+Additionally, if you enable multi-user support with the `client:` option, each
+client will automatically have a custom `/current_user`, `/connections`, and
+`/connection` state defined for it.
+
+### The `current_user` state
+
+Each user will have a different `/current_user` state. By default, it looks like this on the client:
+
+```javascript
+{
+  key: "/current_user",
+  logged_in: false,
+  user: null,
+  salt: 0.6722493639426692
+}
+```
+
+You can check if the current user is logged in with `fetch('/current_user').logged_in`.  
+If they are, you can get the current user's key with `fetch('/current_user').user.key`.
+
+You can also manipulate `/current_user`, to log in, out, or edit or create your account:
+
+#### Create a new account
+
+Run this:
+```javascript
+c.create_account = {name: 'Reginald McGee', pass: 'security-R-us', email: 'barf@toilet.guru'}
+save(c)
+
+
+#### Log in
+
+// ... and now log into it:
+c.login_as = {name: 'Reginald McGee', pass: 'security-R-us'}
+save(c)
+```
+
+If successful, you'll see something like this:
+
+```javascript
+{
+  key: "/current_user",
+  logged_in: true,
+  user: {
+    key: "/user/mike",
+    name: "mike",
+    email: "toomim@gmail.com"
+  },
+  salt: 0.6722493639426692
+}
+```
+
+#### Edit your account
+
+```javascript
+c.user.name = 'Miiiiike'
+c.user.email = 'my_new_email@gmail.com'
+c.user.pass = '••••••••••'
+save(c.user)
+```
+
+#### Log out
+```javascript
+c.logout = true
+save(c)
+```
+
+
+#### The `/user/*` state
+
+Each user has a key starting with `user/` (or `user/`).  You can look up any other
+user by fetching their `/user/` key.  You'll be able to see their name, but
+you can only see your own email address.
+
+For instance:
+
+```javascript
+// As mike:
+fetch('/user/mike')
+=> {key: "/user/mike", name: "mike", email: "toomim@gmail.com"}
+
+// Log out:
+c.logout = true
+save(c)
+
+// Now my email is hidden:
+fetch('/user/mike')
+=> {key: "/user/mike", name: "mike"}
+```
+
+
+
+
+
+
+---->
+
+
+
+
+
+
 
 <!--- # Statebus programming model ---->
 
