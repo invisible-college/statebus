@@ -16,43 +16,43 @@ To write client code, you don't need to download anything. Instead, you'll just 
 Here's the chat you'll be making. Copy and paste this into your .html file.
 
 ```coffeescript
-<script type="statebus">                          #Scripts with this tag are interpreted by statebus
+<script type="statebus">                          # Scripts with this tag are interpreted by statebus
 
-dom.BODY = ->                                     #Define the react component that renders the dom body
-  messages = fetch('/chat').messages or []        #Synchronize with the chat messages using statebus  
-  DIV {},                                         #Define a div that displays the messages       
-    for message in messages                       #For each message render its text  
+dom.BODY = ->                                     # Define the webpage with dom.BODY = ->
+  messages = fetch('/chat').messages or []        # Let's get the chat messages!
+  DIV {},
+    for message in messages
       DIV(message.content)
-    NEW_MESSAGE()                                 #A component for writing new messsages
+    NEW_MESSAGE()                                 # New messages are defined below...
 
-                                                  #Defining the new message component here
-dom.NEW_MESSAGE = ->
-  new_message = fetch('new_message')              #Access local state for the new message
+dom.NEW_MESSAGE = ->                              # ... right here!
+  new_message = fetch('new_message')              # This is the state of the message as it is being written
   DIV {},
     INPUT
       type: 'text'
-      value: new_message.text                     #Display the new message in the input 
-      onChange: (e) =>                            #When someone types, update the text in this input box
-        new_message.text = e.target.value         #Save this local state and re-render the NEW_MESSAGE component
-        save(new_message)
+      value: new_message.text                     # Show the current state of the text in the box
+      onChange: (e) =>                            # ...and when it changes:
+        new_message.text = e.target.value         #    1) Update the state of the text
+        save(new_message)                         #    2) And save the new value to the bus!
 
-    BUTTON
-      onClick: (e) =>                             #When someone clicks on this button, publish their message
-        chat = fetch('/chat')                     #Get the chat messages from statebus
-        chat.messages or= []                      #Add a new message to the chat and save it using statebus
-        message = {
-          key: "/message/#{new_key_id()}"         #Give the message its own state URL. Will be useful for us later.
-          content: new_message.text
-        }
-        chat.messages.push( message )             #Add the new message to the chat history
-        save(message)                             #Publish the new message and cause the body to re-render
-        new_message.text = ''
+    BUTTON                                        # This button sends the message!
+      onClick: (e) =>                             #
+        chat = fetch('/chat')                     #    1) Take all messages
+        chat.messages or= []                      #       ... initialize them if empty
+                                                  #
+        chat.messages.push({                      #    2) Add our new message!
+          key: "/message/#{random_string()}"      #       ... with a new random key
+          content: new_message.text               #
+        })                                        #
+        save(chat)                                #    3) Save our (now larger) list of messages!
+                                                  #
+        new_message.text = ''                     #    4) And clear out the new message box
         save(new_message)
       'Send'
 
-new_key_id = -> Math.random().toString(36).substring(3)
+random_string = -> Math.random().toString(36).substring(3)
 
-</script><script src="https://stateb.us/client5.js" server="http://localhost:3005"></script> #This is the server we'll synchronize our state with.
+</script><script src="https://stateb.us/client5.js"></script>
 ```	
 
 Now you have a working statebus app, in a single html file! 
@@ -67,7 +67,7 @@ it detects a change.
 
 Here's one of those reactive functions:
 ```coffeescript
-dom.BODY = -> #Define the react component that renders the dom body
+dom.BODY = -> # Define the react component that renders the dom body
 ``` 
 Anything starting with _dom._ that has UPPERCASE characters will define
 a new react component. The body defines the react component's
@@ -264,7 +264,7 @@ var master = require('statebus/server')({           // The master bus
     }
 
     client('message/*').to_save = function (o) {    // Only authors can update a post
-      o.key = o.key || 'message/' + new_key_id()    // Ensure that a message has a URL
+      o.key = o.key || 'message/' + random_string() // Ensure that a message has a URL
       var obj = master.fetch(o.key)                 // Get the version of this state stored in master, if any
 
       author_change = obj.author && obj.author != o.author
@@ -342,7 +342,7 @@ function uid(client) {
   return u                                         // be subscribed to changes to any state that this 
 }                                                  // function fetches. 
 
-function new_key_id() { return Math.random().toString(36).substring(3) }
+function random_string() { return Math.random().toString(36).substring(3) }
 ```
 
 <!--- # Statebus programming model ---->
