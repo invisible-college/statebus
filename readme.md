@@ -231,7 +231,7 @@ We're going to use our own server, not the default `https://stateb.us:3005` serv
 
 Open your .html file in your browser. It now has an empty chat history. This is because every Statebus server has its own data store, and when you set the `server` attribute of the statebus client script tag, you specify a default server for the data. Thus, `fetch('/chat')` state is by default accessing the data stored at your new server.
 
-To continue fetching and saving chat data to the stateb.us server, you could modify your .html file to use absolute state URLs by fetching from `state://stateb.us:3005/chat` instead of `/chat`. Our we could change our server to proxy state stored at `stateb.us:3005`. Let's create that proxy server!
+To continue fetching and saving chat data to the stateb.us server, you could modify your .html file to use absolute state URLs by fetching from `state://stateb.us:3005/chat` instead of `/chat`. Or we could change our server to proxy state stored at `stateb.us:3005`. Let's create that proxy server!
 
 ## A proxy server 
 
