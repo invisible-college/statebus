@@ -4,7 +4,7 @@ dom.BODY = ->                                     #Define the react component th
   messages = fetch('/chat').messages or []        #Synchronize with the chat messages using statebus  
   DIV {},                                         #Define a div that displays the messages 
     AUTH()                                        #For logging in and out
-    for message in messages
+    for message in messages when message.key
       MESSAGE                                     #A component for displaying a message
         key: message.key
         message: message
@@ -19,8 +19,8 @@ dom.MESSAGE = ->                                  #Renders a message
               'incognito bus driver'
 
   # bug: when I login, I will no longer be owner of any messages i previously wrote
-  is_author = current_user.user?.key == msg.author || 
-              '/' + fetch('/connection').client == msg.author
+  is_author = msg.author && current_user.user?.key == msg.author || 
+              fetch('/connection').client == msg.author
 
   DIV 
     style: 
@@ -136,7 +136,8 @@ dom.AUTH_FORM = ->
       value: if new_user then 'Register' else 'Log in'
       disabled: !submit_enabled
       onClick: if submit_enabled then ->
-        current_user.create_account = auth if new_user
+        if new_user
+          current_user.create_account = auth 
         current_user.login_as = auth
         save current_user
         auth.form = auth.name = auth.password = auth.email = null

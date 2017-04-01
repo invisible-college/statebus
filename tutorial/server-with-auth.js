@@ -25,38 +25,19 @@ var master_bus = require('statebus/server')({       // The master bus
         master_bus.save(o)                          // Looks good. Save it to master
       }
     }
-
-    client_bus('message/*').to_delete = function (k) {  // Only authors can delete a post
+                                                    // Only authors can delete a message
+    client_bus('message/*').to_delete = function (k,t) { 
       var msg = client_bus.fetch(k)
-      if (uid(client_bus) == msg.author)                // Ensure current user is the author
-        master_bus.delete(k)                            // to delete the message
-      else 
-        client_bus.delete.abort(k)                      // otherwise, reject the delete
-                                                        // TODO: delete abort not implemented!
+      if (uid(client_bus) == msg.author)            // Ensure current user is the author
+        master_bus.delete(k)                        // to delete the message
+      else {
+        t.abort()                                   // otherwise, reject the delete
+      }                                             // (the abort method for delete will change soon)      
     }
 
     client_bus('chat').to_save = function (o) {     // Clients can't change the chat history directly
       client_bus.save.abort(o)                      // Prevent save from happening!
     }
-
-    // client_bus('current_user').to_save = function(cur) {
-    //   if(cur.logged_in)
-    //     session_id = client_bus.fetch('connection').client
-    //     messages = Object
-    //                 .values(master_bus.cache)
-    //                 .filter(function(o){
-    //                   return o.key.match('message/') &&
-    //                          o.author == session_id
-    //                 })
-    //     for(var i=0;i<master_bus.cache.length;i++){
-    //       o = master_bus.cache
-    //       if ()
-    //     }
-
-    //   prev = client_bus.fetch('current_user')
-    //   if (cur.logged_in && !prev.logged_in)
-    //     console.log('transition!!! ***********')
-    // }
 
     client_bus.route_defaults_to(master_bus)        // Anything not matched to the handlers above 
                                                     // will pass through to the master bus.
@@ -94,7 +75,7 @@ if (!chat.messages) {                              // Initialize chat history
 }
 
 function uid(client) {
-  var c = client.fetch('connection'),              // Uniquely identify the client...
+  var c = client.fetch('connection'),              // Uniquely identify the client
       u = client.fetch('current_user')             //    either a logged in user or session id
       k = u.logged_in ? '/' + u.user.key : c.client 
                                                    // Reactive functions that call this function will 

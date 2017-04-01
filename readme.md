@@ -245,12 +245,16 @@ statebus = require('statebus/server')
 var upstream_bus = statebus(),                           // Create a bus for our upstream server
     proxy_bus = statebus({port: 3005})                   // ..and our proxy server
 
-proxy_bus('chat').to_fetch = function (k) {              // When a client fetches '/chat', 
-  return upstream_bus.fetch('chat')                      // return the chat data stored at our upstream server
+proxy_bus('chat').to_fetch = function (k) {              // When a client fetches '/chat',
+  return upstream_bus.fetch('/chat')                     // return the chat data stored at our upstream server
 }                                                        // We're also subscribed to changes from upstream server
 
 proxy_bus('message/*').to_save = function (o) {          // When a client saves a message, 
-  upstream_bus.save.fire(o)                              // pass it upstream
+  chat = upstream_bus.fetch('/chat')                     // we'll add it to the chat history of the upstream bus
+  chat.key = '/' + chat.key                              // (the need for this key prefixing is a bug)
+  o.key = '/' + o.key
+  chat.messages.push(o)
+  upstream_bus.save(chat)                                // and then deliver it upstream  
 }
 
 upstream_bus.ws_client('/*', 'state://stateb.us:3005')   // Connect to our upstream server
@@ -443,7 +447,7 @@ var master_bus = require('statebus/server')({       // The master bus
                                                     // user can fetch() and save() master state.
 
     client_bus('message/*').to_save = function (o) {// Only authors can update a post
-      o.key = o.key || 'message/' + random_string()    // Ensure that a message has a key
+      o.key = o.key || 'message/' + new_key_id()    // Ensure that a message has a key
       var obj = master_bus.fetch(o.key)             // Get the version of this state stored in master, if any
 
       author_change = obj.author &&                 // Address case where a malicious client tries to 
@@ -458,17 +462,18 @@ var master_bus = require('statebus/server')({       // The master bus
         master_bus.save(o)                          // Looks good. Save it to master
       }
     }
-
-    client_bus('message/*').to_delete = function (k) {  // Only authors can delete a post
+                                                    // Only authors can delete a message
+    client_bus('message/*').to_delete = function (k,t) { 
       var msg = client_bus.fetch(k)
-      if (uid(client_bus) == msg.author)                // Ensure current user is the author
-        master_bus.delete(k)                            // to delete the message
-      else 
-        client_bus.save.abort(o)                        // otherwise, reject the delete
+      if (uid(client_bus) == msg.author)            // Ensure current user is the author
+        master_bus.delete(k)                        // to delete the message
+      else {
+        t.abort()                                   // otherwise, reject the delete
+      }                                             // (the abort method for delete will change soon)      
     }
 
     client_bus('chat').to_save = function (o) {     // Clients can't change the chat history directly
-      client_bus.save.abort(o)                      // Abort this save attempt!
+      client_bus.save.abort(o)                      // Prevent save from happening!
     }
 
     client_bus.route_defaults_to(master_bus)        // Anything not matched to the handlers above 
@@ -509,17 +514,15 @@ if (!chat.messages) {                              // Initialize chat history
 function uid(client) {
   var c = client.fetch('connection'),              // Know who the client is...
       u = client.fetch('current_user')             //    either a logged in user or session id
-      k = u.logged_in ? u.user.key : 'user/' + c.client 
+      k = u.logged_in ? '/' + u.user.key : c.client 
                                                    // Reactive functions that call this function will 
   return k                                         // be subscribed to changes to current_user and connection
 }
 
-function random_string() { return Math.random().toString(36).substring(3) }
+function new_key_id() { return Math.random().toString(36).substring(3) }
 ```
 
 Before we unpack this code, also replace your .html file with [this code](tutorial/client-with-auth.html), which implements authentication.
-
-<!--- TODO! ---->
 
 ## Support multiple users
 
@@ -632,9 +635,7 @@ Run this:
 ```javascript
 c.create_account = {name: 'Reginald McGee', pass: 'security-R-us', email: 'barf@toilet.guru'}
 save(c)
-``
-
-<!--- todo: show .html code ---->
+```
 
 #### Log in
 
@@ -657,9 +658,6 @@ If successful, you'll see something like this:
   salt: 0.6722493639426692
 }
 ```
-
-<!--- todo: show .html code ---->
-
 
 #### Edit your account
 
@@ -751,6 +749,11 @@ This info is broadcast to everyone who fetched `/connections` on the server:
 }
 ```
 
+## ...And now you're a bus driver
+
+Congrats on working through the tutorial!
+
+<!--- todo: add client/id for each connection ---->
 
 
 
