@@ -69,12 +69,15 @@ it detects a change.
 
 Here's one of those reactive functions:
 ```coffeescript
-dom.BODY = -> #Define the react component that renders the dom body
+dom.NEW_MESSAGE = ->
 ``` 
-Anything starting with _dom._ that has UPPERCASE characters will define
-a new react component. The body defines the react component's
-render function. This syntax strips away some cruft in programming
-with react.
+
+Any function on `dom.*` defines a reactive HTML tag, which you can use
+anywhere else in the page with e.g. `NEW_MESSAGE()`.  When the function runs,
+it remembers every piece of state it fetches, and will re-runs automatically
+whenever that state changes, to determine its new HTML.
+
+Behind the scenes, these dom functions are actually creating React components.
 
 ### Fetch
 ```coffeescript
