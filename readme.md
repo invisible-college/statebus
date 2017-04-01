@@ -259,7 +259,7 @@ Now open your .html file in a browser. You can once again see all of the chat me
 
 ### Question: What's on the bus?
 
-Answer: The bus is delivering state. 
+Answer: State is on the bus, getting delivered. 
 
 ```javascript
 var upstream_bus = statebus(),
@@ -514,7 +514,7 @@ function uid(client) {
 function new_key_id() { return Math.random().toString(36).substring(3) }
 ```
 
-Before we unpack this code, also replace your .html file with the following code, which implements authentication:
+Before we unpack this code, also replace your .html file with [this code](tutorial/client-with-auth.html), which implements authentication.
 
 <!--- TODO! ---->
 
