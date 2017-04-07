@@ -641,7 +641,9 @@ save(c)
 
 #### Log in
 
-// ... and now log into it:
+... and now log into it:
+
+```javascript
 c.login_as = {name: 'Reginald McGee', pass: 'security-R-us'}
 save(c)
 ```
