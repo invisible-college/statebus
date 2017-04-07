@@ -441,7 +441,8 @@
         improve_react()
         window.dom = window.dom || {}
         window.ignore_flashbacks = false
-        bus.sockjs_client ('/*', statebus_server)
+        if (statebus_server !== 'none')
+            bus.sockjs_client ('/*', statebus_server)
 
         if (window.statebus_backdoor) {
             window.master = statebus()
