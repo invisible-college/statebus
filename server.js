@@ -770,7 +770,7 @@ function make_server_bus (options)
 
             if (!(typeof name === 'string' && typeof pass === 'string')) return false
             if (name === 'key') return false
-            if (!userpass) return null
+            if (!userpass || !userpass.pass) return null
 
             //console.log('comparing passwords', pass, userpass.pass)
             if (require('bcrypt-nodejs').compareSync(pass, userpass.pass))
