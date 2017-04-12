@@ -77,7 +77,10 @@ var tests = [
             [{key: '/foo'}, {key: 'string'}, true],
             [{a: 2, b: [], c: 'foo'},           {a: 'number', b: 'array', c: 'string'}, true],
             [{a: 2, b: [], c: 'foo', d: false}, {a: 'number', b: 'array', c: 'string'}, false],
-            [{a: false}, {a: 'boolean'}, true]
+            [{a: false}, {a: 'boolean'}, true],
+            [{a: 1, b: 2}, {a: 1}, false],
+            [{a: 1, b: 2}, {a: 1, '*':'*'}, true],
+            [{a: 2, b: 2}, {a: 1, '*':'*'}, false]
         ]
 
         for (var i=0; i<v_tests.length; i++)

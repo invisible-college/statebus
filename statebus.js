@@ -1630,13 +1630,16 @@
                         sk = k
                     else if (schema.hasOwnProperty('?'+k))
                         sk = '?'+k
-                    else return false
+                    else if (schema.hasOwnProperty('*'))
+                        sk = '*'
+                    else
+                        return false
 
                     if (!validate(obj[k], schema[sk]))
                         return false
                 }
                 for (var k in schema)
-                    if (k[0] !== '?')
+                    if (k[0] !== '?' && k !== '*')
                         if (!(obj.hasOwnProperty(k)))
                             return false
 
