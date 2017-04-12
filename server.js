@@ -893,7 +893,6 @@ function add_server_methods (bus)
             // Update name (if unique)
             var userpass = master.fetch('users/passwords')
             if (!userpass.hasOwnProperty(o.name.toLowerCase()))
-                // Bug: doesn't update picture's url, which is tied to name
                 u.name = o.name
 
             // Hash password
@@ -901,14 +900,14 @@ function add_server_methods (bus)
             u.pass = o.pass || u.pass
 
             // Users can have pictures (remove this soon)
+            // Bug: if user changes name, this picture's url doesn't change.
             if (o.pic && o.pic.indexOf('data:image') > -1) {
                 var img_type = o.pic.match(/^data:image\/(\w+);base64,/)[1]
                 var b64 = o.pic.replace(/^data:image\/\w+;base64,/, '')
                 var upload_dir = 'static/'
                 // ensure that the uploads directory exists
-                if (!fs.existsSync(upload_dir)){
+                if (!fs.existsSync(upload_dir))
                     fs.mkdirSync(upload_dir)
-                }
 
                 // bug: users with the same name can overwrite each other's files
                 u.pic = u.name + '.' + img_type
