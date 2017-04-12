@@ -15,7 +15,7 @@ function add_server_methods (bus)
             port: 3006,
             backdoor: null,
             client: (c) => {c.shadows(bus)},
-            file_store: true,
+            file_store: {save_delay: 250},
             serve: true,
             __secure: false
         }
@@ -761,8 +761,7 @@ function add_server_methods (bus)
             var new_account = {key: key,
                                name: params.name,
                                pass: params.pass,
-                               email: params.email,
-                               admin: false }
+                               email: params.email }
 
             var users = master.fetch('users')
             users.all.push(new_account)
@@ -914,7 +913,7 @@ function add_server_methods (bus)
             }
 
             // For anything else, go ahead and add it to the user object
-            var protected = {key:1, name:1, email:1, admin:1, pic:1, pass:1}
+            var protected = {key:1, name:1, email:1, pic:1, pass:1}
             for (k in o)
                 if (!protected.hasOwnProperty(k))
                     u[k] = o[k]
@@ -932,7 +931,6 @@ function add_server_methods (bus)
         function user_obj (k, logged_in) {
             var o = master.clone(master.fetch(k))
             delete o.pass
-            delete o.admin
             if (!logged_in) delete o.email
             return o
         }
