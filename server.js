@@ -715,7 +715,7 @@ function add_server_methods (bus)
                 for (var i=0; i<users.all.length; i++) {
                     var u = master.fetch(users.all[i])
                     if (u.name !== 'key')
-                        result[u.name] = {user: u.key, pass: u.pass}
+                        result[u.name.toLowerCase()] = {user: u.key, pass: u.pass}
                     else
                         console.error("upass: can't have a user named key, dude.", u.key)
                 }
@@ -888,9 +888,10 @@ function add_server_methods (bus)
             var u = master.fetch(o.key)
             u.email = o.email
 
-            // Update name (if unique)
+            // Update name
             var userpass = master.fetch('users/passwords')
-            if (!userpass.hasOwnProperty(o.name.toLowerCase()))
+            if (!userpass.hasOwnProperty(o.name.toLowerCase())   // if unique
+                || u.name.toLowerCase() == o.name.toLowerCase()) // or just changing caps
                 u.name = o.name
 
             // Hash password
