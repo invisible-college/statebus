@@ -741,9 +741,8 @@ function add_server_methods (bus)
                 return master.fetch(userpass.user)
         }
         function create_account (params) {
-            if (!(   typeof params.name === 'string'
-                  && typeof params.pass === 'string'
-                  && typeof params.email === 'string'))
+            if (!master.validate(params, {name: 'string', pass: 'string',
+                                          email: 'string'}))
                 return false
 
             var passes = master.fetch('users/passwords')
