@@ -873,7 +873,7 @@ function add_server_methods (bus)
 
             // Validate types
             if (!user.validate(o, {name: 'string', email: 'string', '?pic': 'string',
-                                   key: 'string', '?pass': 'string'})) {
+                                   key: 'string', '?pass': 'string', '*':'*'})) {
                 user.save.abort(o)
                 return
             }
@@ -920,6 +920,9 @@ function add_server_methods (bus)
             for (k in o)
                 if (!protected.hasOwnProperty(k))
                     u[k] = o[k]
+            for (k in u)
+                if (!protected.hasOwnProperty(k) && !o.hasOwnProperty(k))
+                    delete u[k]
 
             master.save(u)
         }
