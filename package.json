@@ -1,6 +1,6 @@
 {
   "name": "statebus",
-  "version": "5.0.18",
+  "version": "6.0.0",
   "description": "Synchronize state.",
   "main": "statebus.js",
   "scripts": {
@@ -12,6 +12,7 @@
     "bcrypt-nodejs": "0.0.3",
     "chokidar": "^1.6.1",
     "coffee-script": "^1.11.1",
+    "cookie": "^0.3.1",
     "express": "^4.14.0",
     "sockjs": "^0.3.17",
     "websocket": "^1.0.22"

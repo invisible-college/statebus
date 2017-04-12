@@ -3,11 +3,16 @@
     if (typeof module != 'undefined') module.exports = definition()
     else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
     else this[name] = definition()
-}('statebus', function() { statelog_indent = 0; var busses = {}, executing_funk, global_funk, funks = {}, clean_timer; return function make_bus () {
-    var nodejs = typeof window === 'undefined'
+}('statebus', function() {statelog_indent = 0; var busses = {}, executing_funk, global_funk, funks = {}, clean_timer, nodejs = typeof window === 'undefined'; function make_bus (options) {
+    
 
     // ****************
-    // Public API
+    // Fetch, Save, Forget, Delete
+
+    function sync () {
+        return (typeof arguments[0] === 'string') ?
+            fetch.apply(this, arguments) : save.apply(this, arguments)
+    }
 
     function fetch (key, callback) {
         key = key.key || key    // You can pass in an object instead of key
@@ -75,6 +80,11 @@
             backup_cache[key] = backup_cache[key] || {key: key}
             run_handler(funk, 'on_save', cache[key] = cache[key] || {key: key})
         }
+    }
+    function fetch_once (key, cb) {
+        function cb2 (o) { cb(o); forget(key, cb2) }
+        fetch(key)
+        fetch(key, cb2)
     }
     var pending_fetches = {}
     var fetches_out = {}                // Maps `key' to `func' iff we've fetched `key'
@@ -1202,7 +1212,7 @@
     }
     function net_client(prefix, url, socket_api, login) {
         var preprefix = prefix.slice(0,-1)
-        var is_absolute = /^i?state:\/\//
+        var is_absolute = /^i?statei?:\/\//
         var has_prefix = new RegExp('^' + preprefix)
         var bus = this
         var sock
@@ -1255,7 +1265,7 @@
                 nlog('[*] opened ' + url)
 
                 // Login
-                login(function (clientid, name, pass) {
+                login && login(function (clientid, name, pass) {
                     var i = []
                     function intro (o) {i.push(JSON.stringify({save: o}))}
                     if (clientid)
@@ -1331,7 +1341,7 @@
     function go_net (socket_api, login) {
         var connections = {}
         function get_domain(key) { // Returns e.g. "state://foo.com"
-            var m = key.match(/^i?state\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
+            var m = key.match(/^i?statei?\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
             // if (!m) throw Error('Bad url: ', key)
             return m && m[0]
         }
@@ -1347,7 +1357,7 @@
             }
         }
 
-        for (prefix in {'state://*':0, 'istate://*':0}) {
+        for (prefix in {'state://*':0, 'istate://*':0, 'statei://*':0}) {
             bus(prefix).to_fetch = function (k) {
                 var c = make_connection(k)
                 if (c) c.send({fetch: k})
@@ -1707,7 +1717,7 @@
     // #######################################
 
     // Make these private methods accessible
-    var api = ['cache backup_cache fetch save forget del fire dirty',
+    var api = ['cache backup_cache fetch save forget del fire sync dirty fetch_once',
                'subspace bindings run_handler bind unbind reactive uncallback',
                'versions new_version',
                'funk_key funk_name funks key_id key_name id',
@@ -1725,10 +1735,26 @@
 
     // Export globals
     if (Object.keys(busses).length === 0) {
-        var globals = 'fetch save del forget loading clone'.split(' ')
+        var globals = 'fetch save sync del forget loading clone'.split(' ')
         for (var i=0; i<globals.length; i++)
             this[globals[i]] = eval(globals[i])
     }
     busses[bus.id] = bus
+
+    if (nodejs)
+        require('./server').import_server(bus, options)
+
     return bus
-}}))
+}
+
+if (nodejs) {
+    module.exports.repl = require('./server').repl
+    make_bus.serve = function serve (options) {
+        var bus = make_bus()
+        require('./server').run_server(bus, options)
+        return bus
+    }
+}
+
+return make_bus
+}))

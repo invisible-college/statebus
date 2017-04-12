@@ -1,86 +1,32 @@
-fs = require('fs')
+var fs = require('fs'),
+    util = require('util')
+var unique_sockjs_string = '_connect_to_statebus_'
 
-var util = require('util')
-function make_server_bus (options)
+function add_server_methods (bus)
 {   var extra_methods = {
-    setup: function setup (options) {
-        options = options || {}
-        if (!('file_store' in options) || options.file_store)
-            bus.file_store('*')           // Save everything to a file
-
-        bus.label = bus.label || 'server'
-
-        // Custom route
-        var OG_route = bus.route
-        bus.route = function(key, method, arg, opts) {
-            var count = OG_route(key, method, arg, opts)
-
-            // This whitelists anything we don't have a specific handler for,
-            // reflecting it to all clients!
-            if (count === 0 && method === 'to_save') {
-                bus.save.fire(arg, opts)
-                count++
-            }
-
-            return count
-        }
-    },
     serve: function serve (options) {
-        bus.honk = 'statelog'
+        // Initialize Options
+        var default_options = {
+            port: 3006,
+            backdoor: null,
+            client: (c) => {c.shadows(bus)},
+            file_store: true,
+            serve: true,
+            __secure: false
+        }
+        bus.options = default_options
         options = options || {}
-        var c = options.client_definition
-        if (options.client) {
-            var master = bus
-            master.label = 'master'
-            delete global.fetch
-            delete global.save
-            c = function (client, conn) {
-                client.honk = 'statelog'
-                client.serves_auth(conn, master)
-                if (!bus.options.__secure) client.route_defaults_to(master)
-                options.client(client)
-            }
-        }
+        for (k in (options || {}))
+            bus.options[k] = options[k]
 
-        if (!('file_store' in options) || options.file_store)
-            bus.file_store('*')                // Save everything to a file
-
-        bus.make_http_server(options)          // Create our own http server
-        bus.sockjs_server(this.http_server, c) // Serve via sockjs on it
-        bus.label = bus.label || 'server'
-
-        // Custom route
-        var OG_route = bus.route
-        bus.route = function(key, method, arg, opts) {
-            var count = OG_route(key, method, arg, opts)
-
-            // This whitelists anything we don't have a specific handler for,
-            // reflecting it to all clients!
-            if (count === 0 && method === 'to_save') {
-                bus.save.fire(arg, opts)
-                count++
-            }
-
-            return count
-        }
-
-        // Back door to the control room
-        if (options.backdoor) {
-            bus.make_http_server({
-                port: options.backdoor,
-                name: 'backdoor_http_server'
-            })
-            bus.sockjs_server(this.backdoor_http_server)
-        }
-    },
-
-    serve_node: function serve_node () {
-        bus.honk = 'statelog'
-
+        // Now let's do more stuff...
         var master = bus
+        bus.honk = 'statelog'
         master.label = 'master'
         delete global.fetch
         delete global.save
+
+        console.log('bus.options is', bus.options, 'for', bus)
 
         var on_listen = null
         // Do extra stuff if we're root:
@@ -148,9 +94,32 @@ function make_server_bus (options)
         bus.express.use('/', bus.http)
 
         // Add a fallback that goes to state
-        // bus.express.get('*', function (req, res) {
-        //     bus.fetch(  // Unfinished
-        // })
+        var httpclient_num = 0
+        bus.express.get('*', function (req, res) {
+            // Make a temporary client bus
+            var cbus = new_bus()
+            cbus.label = 'client_http' + httpclient_num++
+            cbus.master = master
+
+            // Log in as the client
+            var clientid = require('cookie').parse(req.headers.cookie || '').client
+            cbus.serves_auth({client: clientid,
+                              remoteAddress: req.connection.remoteAddress},
+                             bus)
+            bus.options.client(cbus)
+            cbus.save({key: 'current_user', client: clientid})
+
+            // Do the fetch
+            var singleton = req.path.match(/^\/code\//)
+            cbus.fetch_once(req.path.substr(1), (o) => {
+                var unwrap = (Object.keys(o).length === 2
+                              && '_' in o
+                              && typeof o._ === 'string')
+                // To do: translate pointers as keys
+                res.send(unwrap ? o._ : JSON.stringify(o))
+                cbus.delete_bus()
+            })
+        })
 
         bus.serve_client_coffee()
         bus.label = bus.label || 'server'
@@ -223,7 +192,7 @@ function make_server_bus (options)
         this.http_server.on('request',  // Install express
 		            function (request, response) {
 		                // But express should ignore all sockjs requests
-		                if (!request.url.startsWith('/statebus/'))
+		                if (!request.url.startsWith('/'+unique_sockjs_string+'/'))
 			            express_app(request, response)
 		            })
 
@@ -251,7 +220,7 @@ function make_server_bus (options)
 
                 connections[conn.id] = {client: conn.id}; master.save(connections)
 
-                var user = make_server_bus()
+                var user = new_bus()
                 user.label = 'client' + client_num++
                 master.label = master.label || 'master'
                 user.master = master
@@ -387,13 +356,13 @@ function make_server_bus (options)
             }
         })
 
-        s.installHandlers(httpserver, {prefix:'/statebus'})
+        s.installHandlers(httpserver, {prefix:'/' + unique_sockjs_string})
     },
 
     ws_client: function (prefix, url, account) {
         function make_sock (url) {
             WebSocket = require('websocket').w3cwebsocket
-            return new WebSocket(url + '/statebus/websocket')
+            return new WebSocket(url+'/'+unique_sockjs_string+'/websocket')
         }
         function login (send_login_info) {
             account = account || bus.account || {}
@@ -405,6 +374,14 @@ function make_server_bus (options)
             send_login_info(account.clientid, account.name, account.pass)
         }
         bus.net_client(prefix, url, make_sock, login)
+    },
+
+    universal_ws_client: function () {
+        function make_sock (url) {
+            WebSocket = require('websocket').w3cwebsocket
+            return new WebSocket(url+'/'+unique_sockjs_string+'/websocket')
+        }
+        bus.go_net(make_sock)
     },
 
     file_store: (function () {
@@ -1039,12 +1016,11 @@ function make_server_bus (options)
         }
     },
 
-    route_defaults_to: function route_defaults_to (master_bus) {
+    shadows: function shadows (master_bus) {
         // Custom route
         var OG_route = bus.route
         bus.route = function(key, method, arg, t) {
             var count = OG_route(key, method, arg, t)
-
             // This forwards anything we don't have a specific handler for
             // to the global cache
             if (count === 0) {
@@ -1060,6 +1036,10 @@ function make_server_bus (options)
                     bus.run_handler(function save_to_master (o, t) {
                         // console.log('DEFAULT ROUTE', t)
                         master_bus.save(bus.clone(o), t)
+                    }, method, arg, {t: t})
+                else if (method == 'to_delete')
+                    bus.run_handler(function delete_from_master (k, t) {
+                        master_bus.delete(k)
                     }, method, arg, {t: t})
             }
             return count
@@ -1097,7 +1077,7 @@ function make_server_bus (options)
     },
 
     http_serve: function http_serve (route, fetcher) {
-        var textbus = make_server_bus()
+        var textbus = new_bus()
         textbus.label = 'textbus'
         var watched = new Set()
         textbus('*').to_fetch = (filename, old) => {
@@ -1212,40 +1192,20 @@ function make_server_bus (options)
         return url_tree(bus.cache)
     }
 }
-
-    var bus = require('./statebus')()
-    bus.honk = 'statelog'
-
-    // Options
-    var default_options = {
-        port: 3005,
-        backdoor: null,
-        client: null,
-        file_store: true,
-        __secure: false,
-        full_node: false
-    }
-    bus.options = default_options
-    options = options || {}
-    for (k in (options || {}))
-        bus.options[k] = options[k]
-
+    //if (!bus) bus = require('./statebus')()
     // Add methods to bus object
     for (m in extra_methods)
         bus[m] = extra_methods[m]
-
-    if (options.full_node)
-        bus.serve_node()
-
-    // Maybe serve
-    else if (options && (options.client || options.port || options.backdoor))
-        bus.serve(options)
     return bus
 }
-module.exports = make_server_bus
+function new_bus () { return require('./statebus')() }
+
+module.exports.import_server = function (bus, options) { add_server_methods(bus) }
+module.exports.run_server = function (bus, options) { bus.serve(options) }
+
 
 // Handy repl. Invoke with node -e 'require("statebus/server").repl("/tmp/foo")'
-make_server_bus.repl = function (filename) {
+module.exports.repl = function (filename) {
     var net = require('net')
     var sock = net.connect(filename)
 

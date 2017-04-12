@@ -1,4 +1,4 @@
-bus = require('../statebus.js')()
+bus = require('../statebus')()
 util = require('util')
 bus.label = 'bus'
 statelog_indent++
@@ -88,7 +88,7 @@ var tests = [
     },
 
     function auto_vars (next) {
-        var n = require('../server')()
+        var n = require('../statebus')()
         n('r/*').to_fetch = function (rest, o) {return {rest: rest, o: o}}
         log(n.fetch('r/3'))
         assert(n.fetch('r/3').rest === '3')
@@ -168,7 +168,7 @@ var tests = [
 
     // Multi-handlers
     function multiple_handlers1 (next) {
-        var cuss = require('../server')()
+        var cuss = require('../statebus')()
         cuss('foo').to_fetch = () => {log('do nothing 1')}
         cuss('foo').to_fetch = () => {log('do nothing 2')}
         cuss('foo').to_fetch = () => (log('doing something'),{b: 3})
@@ -180,7 +180,7 @@ var tests = [
     },
 
     function multiple_handlers2 (next) {
-        var cuss = require('../server')()
+        var cuss = require('../statebus')()
         cuss('foo').to_save = (o) => {log('do nothing 1')}
         cuss('foo').to_save = (o) => {log('do nothing 2')}
         cuss('foo').to_save = (o) => {log('doin something'); cuss.save.fire(o)}
@@ -512,7 +512,7 @@ var tests = [
     },
 
     function readfile (next) {
-        var b = require('../server')(),
+        var b = require('../statebus')(),
             count = 0
         fs.writeFileSync('/tmp/blah', '1')
         b(() => {
@@ -536,7 +536,7 @@ var tests = [
     },
 
     function proxies (next) {
-        var bus = require('../server')()
+        var bus = require('../statebus')()
         db = bus.sb
         db.foo.a = 3
         assert(db.foo.a == 3)
@@ -794,21 +794,37 @@ var tests = [
         next()
     },
 
+    function default_route (next) {
+        var b1 = require('../statebus')()
+        var b2 = require('../statebus')()
+        b1.shadows(b2)
+        b2.save({key: 'foo', bar: 3})
+        console.assert(b1.fetch('foo').bar)
+        log(b1.fetch('foo'))
+        log(b2.fetch('foo'))
+        b1.delete('foo')
+        log(b1.fetch('foo'))
+        log(b2.fetch('foo'))
+        console.assert(!b1.fetch('foo').bar)
+        console.assert(!b2.fetch('foo').bar)
+        next()
+    },
+
     function setup_server (next) {
         function User (client, conn) {
             user0 = client
             client.serves_auth(conn, s)
-            client.route_defaults_to (s)
+            client.shadows (s)
             s.userbus = client
         }
 
-        s = require('../server.js')()
+        s = require('../statebus')()
         s.label = 's'
         log('Saving /far on server')
         s.save({key: 'far', away:'is this'})
         s.serve({port: 3948, client_definition: User, file_store: false})
 
-        c = require('../server.js')()
+        c = require('../statebus')()
         c.label = 'c'
         c.ws_client('/*', 'state://localhost:3948')
 

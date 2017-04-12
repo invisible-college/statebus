@@ -1,4 +1,5 @@
 (function () {
+    var unique_sockjs_string = '_connect_to_statebus_'
 
     // ****************
     // Connecting over the Network
@@ -57,7 +58,8 @@
         function socket_api (url) {
             url = url.replace(/^state:\/\//, 'https://')
             url = url.replace(/^istate:\/\//, 'http://')
-            return new SockJS(url + '/statebus')
+            url = url.replace(/^statei:\/\//, 'http://')
+            return new SockJS(url + '/' + unique_sockjs_string)
         }
         function login (send_login_info) {
             // Warning:
@@ -150,7 +152,7 @@
             return old_route(key, method, arg, opts)
         }
         function get_domain(key) {
-            var m = key.match(/^i?state\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
+            var m = key.match(/^i?statei?\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
             // if (!m) throw Error('Bad url: ', key)
             return m && m[0]
         }
@@ -342,7 +344,7 @@
         var result = function (props, children) {
             props = props || {}
             if(props.key !== undefined) props['data-key'] = props.key 
-            props['data-component'] = component.displayName
+            props['data-widget'] = component.displayName
 
             return (React.version >= '0.12.'
                     ? React.createElement(react_class, props, children)
@@ -428,8 +430,10 @@
     function script_elem () {
         return document.querySelector('script[src*="client"][src$=".js"]')
     }
+    var loaded_from_file_url = window.location.href.match(/^file:\/\//)
     window.statebus_server = window.statebus_server ||
-        script_elem().getAttribute('server') || 'https://stateb.us:3005'
+        script_elem().getAttribute('server') ||
+        (loaded_from_file_url ? 'https://stateb.us:3006' : '/')
     window.statebus_backdoor = window.statebus_backdoor ||
         script_elem().getAttribute('backdoor')
     function scripts_ready () {
@@ -441,7 +445,8 @@
         improve_react()
         window.dom = window.dom || {}
         window.ignore_flashbacks = false
-        bus.sockjs_client ('/*', statebus_server)
+        if (statebus_server !== 'none')
+            bus.sockjs_client ('/*', statebus_server)
 
         if (window.statebus_backdoor) {
             window.master = statebus()
@@ -479,6 +484,10 @@
             is_css_prop[camelcase(css_props[i])] = true
 
         function better_element(el) {
+            // To do:
+            //  - Don't put all args into a children array, cause react thinks
+            //    that means they need a key.
+
             return function () {
                 var children = []
                 var attrs = {style: {}}
@@ -489,7 +498,7 @@
                     // Strings and DOM nodes and undefined become children
                     if (typeof arg === 'string'   // For "foo"
                         || arg instanceof String  // For new String()
-                        || arg && arg._isReactElement
+                        || arg && React.isValidElement(arg)
                         || arg === undefined)
                         children.push(arg)
 
@@ -562,12 +571,22 @@
         window[name] = window.React_View({
             displayName: name,
             render: function () { 
-                var c = window.dom[name].bind(this)()
+                var vdom = window.dom[name].bind(this)()
 
-                c.props['data-component'] = name
-                c.props['data-key'] = this.props['data-key']
+                // This is temporary: it automatically adds two attributes
+                // "data-key" and "data-widget" to the root node of every
+                // react component.  Let's find a better solution.
+                if (vdom.props) {
+                    vdom.props['data-widget'] = name
+                    vdom.props['data-key'] = this.props['data-key']
+                }
 
-                return c
+                // Wrap plain JS values with SPAN, so react doesn't complain
+                if (!React.isValidElement(vdom))
+                    // To do: should arrays be flattened into a SPAN's arguments?
+                    vdom = React.DOM.span(null, (typeof vdom === 'string')
+                                          ? vdom : JSON.stringify(vdom))
+                return vdom
             },
             componentDidMount: function () {
                 var refresh = window.dom[name].refresh
