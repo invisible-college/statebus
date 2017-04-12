@@ -714,10 +714,11 @@ function add_server_methods (bus)
                 users.all = users.all || []
                 for (var i=0; i<users.all.length; i++) {
                     var u = master.fetch(users.all[i])
-                    if (u.name !== 'key')
-                        result[u.name.toLowerCase()] = {user: u.key, pass: u.pass}
-                    else
-                        console.error("upass: can't have a user named key, dude.", u.key)
+                    if (result.hasOwnProperty(u.name.toLowerCase())) {
+                        console.error("upass: this user's name is bogus, dude.", u.key)
+                        continue
+                    }
+                    result[u.name.toLowerCase()] = {user: u.key, pass: u.pass}
                 }
                 return result
             }
