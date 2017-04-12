@@ -6,6 +6,10 @@ function add_server_methods (bus)
 {   var extra_methods = {
 
     serve: function serve (options) {
+        var master = bus
+        bus.honk = 'statelog'
+        master.label = 'master'
+
         // Initialize Options
         var default_options = {
             port: 3006,
@@ -20,19 +24,12 @@ function add_server_methods (bus)
         for (k in (options || {}))
             bus.options[k] = options[k]
 
-        // Now let's do more stuff...
-        var master = bus
-        bus.honk = 'statelog'
-        master.label = 'master'
-
-        console.log('bus.options is', bus.options, 'for', bus)
-
-        var on_listen = null
-        // Do extra stuff if we're root:
+        // Automatically handle root and ports
         //  - Bind to port 443 if SSL
         //    - Redirect port 80 to 443
         //  - Undo the sudo
         //  - Wait until that's finished before touching any files
+        var on_listen = null
         if (process.getuid() === 0) {
 
             // Setup handler for when we are listening
@@ -81,7 +78,8 @@ function add_server_methods (bus)
         if (bus.options.file_store)
             bus.file_store('*', {delay_activate: port <= 443})
 
-        // Create our own http server
+        // ******************************************
+        // ***** Create our own http server *********
         bus.make_http_server({port: port, on_listen: on_listen})
         bus.sockjs_server(this.http_server, c) // Serve via sockjs on it
         var express = require('express')
@@ -98,6 +96,7 @@ function add_server_methods (bus)
             // Make a temporary client bus
             var cbus = new_bus()
             cbus.label = 'client_http' + httpclient_num++
+            cbus.honk = 'statelog'
             cbus.master = master
 
             // Log in as the client
@@ -120,8 +119,8 @@ function add_server_methods (bus)
             })
         })
 
+        // Serve Client Coffee
         bus.serve_client_coffee()
-        bus.label = bus.label || 'server'
 
         // Custom route
         var OG_route = bus.route
@@ -571,7 +570,7 @@ function add_server_methods (bus)
                     result[k] = (foreign_keys[k] && row[k]
                                  ? foreign_keys[k].table + '/' + row[k]
                                  : result[k] = row[k])
-            if ('other' in result) result.other = JSON.parse(result.other || '{}')
+            if (result.hasOwnProperty('other')) result.other = JSON.parse(result.other || '{}')
             delete result.id
             return result
         }
@@ -724,6 +723,8 @@ function add_server_methods (bus)
             }
 
         }
+
+        // Authentication functions
         function authenticate (name, pass) {
             var userpass = master.fetch('users/passwords')[name.toLowerCase()]
             master.log('authenticate: we see',
@@ -746,7 +747,7 @@ function add_server_methods (bus)
                 return false
 
             var passes = master.fetch('users/passwords')
-            if (params.name.toLowerCase() in passes)
+            if (passes.hasOwnProperty(params.name.toLowerCase()))
                 return false
 
             // Hash password
@@ -754,7 +755,7 @@ function add_server_methods (bus)
 
             // Choose account key
             var key = 'user/' + params.name.toLowerCase()
-            if (key in master.cache)
+            if (master.cache.hasOwnProperty(key))
                 key = 'user/' + Math.random().toString(36).substring(7)
 
             // Make account object
@@ -773,6 +774,7 @@ function add_server_methods (bus)
             return true
         }
 
+        // Current User
         user('current_user').to_fetch = function () {
             user.log('* current_user fetching')
             if (!conn.client) return
@@ -861,74 +863,99 @@ function add_server_methods (bus)
 
             user.dirty('current_user')
         }
+        user('current_user').to_delete = function () {}
 
-        // setTimeout(function () {
-        //     log('DIRTYING!!!!!')
-        //     user.dirty('current_user')
-        //     log('DIRTIED!!!!!')
-        // }, 4000)
-
+        // User
         user('user/*').to_save = function (o) {
-            var c = user.fetch('current_user')
-            user.log(o.key + '.to_save:', o, c.logged_in, c.user)
-            if (c.logged_in && c.user.key === o.key) {
-                var u = master.fetch(o.key)
-                u.email = o.email
-                u.name = o.name
+            // Validate key only has one slash
+            if (!o.key.match(/^user\/[^\/]+$/))
+                return
 
-                // Hash password
-                o.pass = o.pass && require('bcrypt-nodejs').hashSync(o.pass)
-                u.pass = o.pass || u.pass
-
-                // user's avatar
-                if(o.pic && o.pic.indexOf('data:image') > -1) {
-                    var img_type = o.pic.match(/^data:image\/(\w+);base64,/)[1]
-                    var b64 = o.pic.replace(/^data:image\/\w+;base64,/, '')
-                    var upload_dir = 'static/'
-                    // ensure that the uploads directory exists
-                    if (!fs.existsSync(upload_dir)){
-                        fs.mkdirSync(upload_dir)
-                    }
-
-                    // bug: users with the same name can overwrite each other's files
-                    u.pic = u.name + '.' + img_type
-                    fs.writeFile(upload_dir + u.pic, b64, {encoding: 'base64'})
-                }
-
-
-                master.save(u)
-                o = user.clone(u)
-                user.log(o.key + '.to_save: saved user to master')
+            // Validate types
+            if (!user.validate(o, {name: 'string', email: 'string', '?pic': 'string',
+                                   key: 'string', '?pass': 'string'})) {
+                user.save.abort(o)
+                return
             }
 
-            user.dirty(o.key)
-        }
+            // Check permissions
+            var c = user.fetch('current_user')
+            user.log(o.key + '.to_save:', o, c.logged_in, c.user)
+            if (!(c.logged_in && c.user.key === o.key)) {
+                user.save.abort(o)
+                return
+            }
 
-        function user_obj (k, logged_in) {
-            var o = master.fetch(k)
-            if (logged_in)
-                return {key: k, name: o.name, pic: o.pic, email: o.email}
-            else
-                return {key: k, name: o.name, pic: o.pic}
+            // Update email
+            var u = master.fetch(o.key)
+            u.email = o.email
+
+            // Update name (if unique)
+            var userpass = master.fetch('users/passwords')
+            if (!userpass.hasOwnProperty(o.name.toLowerCase()))
+                // Bug: doesn't update picture's url, which is tied to name
+                u.name = o.name
+
+            // Hash password
+            o.pass = o.pass && require('bcrypt-nodejs').hashSync(o.pass)
+            u.pass = o.pass || u.pass
+
+            // Users can have pictures (remove this soon)
+            if (o.pic && o.pic.indexOf('data:image') > -1) {
+                var img_type = o.pic.match(/^data:image\/(\w+);base64,/)[1]
+                var b64 = o.pic.replace(/^data:image\/\w+;base64,/, '')
+                var upload_dir = 'static/'
+                // ensure that the uploads directory exists
+                if (!fs.existsSync(upload_dir)){
+                    fs.mkdirSync(upload_dir)
+                }
+
+                // bug: users with the same name can overwrite each other's files
+                u.pic = u.name + '.' + img_type
+                fs.writeFile(upload_dir + u.pic, b64, {encoding: 'base64'})
+            }
+
+            // For anything else, go ahead and add it to the user object
+            var protected = {key:1, name:1, email:1, admin:1, pic:1, pass:1}
+            for (k in o)
+                if (!protected.hasOwnProperty(k))
+                    u[k] = o[k]
+
+            master.save(u)
         }
         user('user/*').to_fetch = function filtered_user (k) {
             var c = user.fetch('current_user')
             return user_obj(k, c.logged_in && c.user.key === k)
         }
-        user('users').to_fetch = function () {}
-        user('users').to_save = function () {}
+        user('user/*').to_delete = function () {}
+        function user_obj (k, logged_in) {
+            var o = master.clone(master.fetch(k))
+            delete o.pass
+            delete o.admin
+            if (!logged_in) delete o.email
+            return o
+        }
+
+        // Blacklist sensitive stuff on master, in case we have a shadow set up
+        var blacklist = 'users users/passwords logged_in_clients'.split(' ')
+        for (var i=0; i<blacklist.length; i++) {
+            user(blacklist[i]).to_fetch  = function () {}
+            user(blacklist[i]).to_save   = function () {}
+            user(blacklist[i]).to_delete = function () {}
+            user(blacklist[i]).to_forget = function () {}
+        }
     },
 
-     code_restarts: function () {
-         var got = {}
-         bus('code/*').on_save = function (o) {
-             bus.log('Ok restart, we\'ll quit if ' + (got[o.key]||false))
-             if (got[o.key])
-                 process.exit(1)
-             if (o.code)
-                 got[o.key] = true
-         }
-     },
+    code_restarts: function () {
+        var got = {}
+        bus('code/*').on_save = function (o) {
+            bus.log('Ok restart, we\'ll quit if ' + (got[o.key]||false))
+            if (got[o.key])
+                process.exit(1)
+            if (o.code)
+                got[o.key] = true
+        }
+    },
 
     persist: function (prefix_to_sync, validate) {
         var client = this
@@ -955,7 +982,7 @@ function add_server_methods (bus)
                     // Delete the old
                     client.master.del(old_key)
 
-                    if (!(new_key in cache)) {
+                    if (!(cache.hasOwnProperty(new_key))) {
                         // Save the new
                         o.key = new_key
                         client.master.save(o)

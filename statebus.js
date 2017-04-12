@@ -330,7 +330,7 @@
 
                     // Then delete extra fields from cache
                     for (var k in cache[obj.key])
-                        if (!(k in obj))
+                        if (!obj.hasOwnProperty(k))
                             delete cache[obj.key][k]
                 }
                 obj = cache[obj.key]
@@ -344,8 +344,8 @@
 
     function changed (object) {
         return pending_fetches[object.key]
-            || !(object.key in cache)
-            || !(object.key in backup_cache)
+            || !       cache.hasOwnProperty(object.key)
+            || !backup_cache.hasOwnProperty(object.key)
             || !(deep_equals(object, backup_cache[object.key]))
     }
     function abort_changes (keys) {
@@ -447,7 +447,7 @@
     function dirty (key) {
         // Marks a fetcher as dirty, meaning the .to_fetch will re-run
         statelog(brown, '*', bus + ".dirty('"+key+"')")
-        if (key in fetches_out)
+        if (fetches_out.hasOwnProperty(key))
             for (var i=0; i<fetches_out[key].length; i++)
                 dirty_fetchers.add(funk_key(fetches_out[key][i]))
         clean_timer = clean_timer || setTimeout(clean)
@@ -1003,7 +1003,7 @@
 
     bus.default = function () {
         bus.deep_map(arguments, function (o) {
-            if (o.key && !(o.key in bus.cache))
+            if (o.key && !(bus.cache.hasOwnProperty(o.key)))
                 bus.cache[o.key] = o
             return o
         })
@@ -1029,7 +1029,7 @@
             }
             args.push(cb)
             f.apply({key:key}, args)
-            if (options.start_watching && !(key in watching))
+            if (options.start_watching && !(watching.hasOwnProperty(key)))
                 options.start_watching(args, function () {bus.dirty(key)})
         }
         if (options.stop_watching)
@@ -1066,7 +1066,7 @@
                 return result
             },
             has: function has(o, k) {
-                return escape_key(k) in o
+                return o.hasOwnProperty(escape_key(k))
             },
             deleteProperty: function del (o, k) {
                 delete o[escape_key(k)]
@@ -1153,7 +1153,7 @@
                     return strict_mode ? true : result  // Strict mode forces us to return true
                 },
                 has: function has(f, k) {
-                    return escape_key(k) in o
+                    return o.hasOwnProperty(escape_key(k))
                 },
                 deleteProperty: function del (f, k) {
                     delete o[escape_key(k)]
@@ -1377,8 +1377,13 @@
             }
             bus(prefix).to_forget = function (k) {
                 var d = get_domain(k)
-                if (!d in connections || !k in connections[d].fetches_out)
+
+                // Make sure we've fetched on this domain
+                if (!connections.hasOwnProperty(d)
+                    || !connections[d].fetches_out.hasOwnPropertyd(k))
                     console.error('Trying to forget', k, "that hasn't been fetched")
+
+                // Now clean up
                 delete connections[d].fetches_out[k]
                 connections[d].fetches_out_count--
                 if (connections[d].fetches_out_count == 0) {
@@ -1589,7 +1594,7 @@
                     return '.' + k + tmp
             }
             for (var k in b) {
-                if (!(k in a))
+                if (!a.hasOwnProperty(k))
                     return '.' + k +' = '+JSON.stringify(b[k])
             }
             return null
@@ -1621,9 +1626,9 @@
             if (typeof schema === 'object') {
                 for (var k in obj) {
                     var sk
-                    if (k in schema)
+                    if (schema.hasOwnProperty(k))
                         sk = k
-                    else if ('?'+k in schema)
+                    else if (schema.hasOwnProperty('?'+k))
                         sk = '?'+k
                     else return false
 
@@ -1632,7 +1637,7 @@
                 }
                 for (var k in schema)
                     if (k[0] !== '?')
-                        if (!(k in obj))
+                        if (!(obj.hasOwnProperty(k)))
                             return false
 
                 return true
