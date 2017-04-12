@@ -4,6 +4,7 @@ var unique_sockjs_string = '_connect_to_statebus_'
 
 function add_server_methods (bus)
 {   var extra_methods = {
+
     serve: function serve (options) {
         // Initialize Options
         var default_options = {
@@ -23,8 +24,6 @@ function add_server_methods (bus)
         var master = bus
         bus.honk = 'statelog'
         master.label = 'master'
-        delete global.fetch
-        delete global.save
 
         console.log('bus.options is', bus.options, 'for', bus)
 
@@ -726,16 +725,15 @@ function add_server_methods (bus)
 
         }
         function authenticate (name, pass) {
-            var userpass = master.fetch('users/passwords')[name]
+            var userpass = master.fetch('users/passwords')[name.toLowerCase()]
             master.log('authenticate: we see',
                 master.fetch('users/passwords'),
                 userpass && userpass.pass,
                 pass)
 
-
             if (!(typeof name === 'string' && typeof pass === 'string')) return false
             if (name === 'key') return false
-            if (!userpass) return null
+            if (!userpass || !userpass.pass) return null
 
             //console.log('comparing passwords', pass, userpass.pass)
             if (require('bcrypt-nodejs').compareSync(pass, userpass.pass))
@@ -748,14 +746,14 @@ function add_server_methods (bus)
                 return false
 
             var passes = master.fetch('users/passwords')
-            if ([params.name] in passes)
+            if (params.name.toLowerCase() in passes)
                 return false
 
             // Hash password
             params.pass = require('bcrypt-nodejs').hashSync(params.pass)
 
             // Choose account key
-            var key = 'user/' + params.name
+            var key = 'user/' + params.name.toLowerCase()
             if (key in master.cache)
                 key = 'user/' + Math.random().toString(36).substring(7)
 
@@ -768,8 +766,8 @@ function add_server_methods (bus)
 
             var users = master.fetch('users')
             users.all.push(new_account)
-            passes[params.name] = {user: new_account.key,
-                                   pass: new_account.pass}
+            passes[params.name.toLowerCase()] = {user: new_account.key,
+                                                 pass: new_account.pass}
             master.save(users)
             master.save(passes)
             return true
@@ -1192,7 +1190,6 @@ function add_server_methods (bus)
         return url_tree(bus.cache)
     }
 }
-    //if (!bus) bus = require('./statebus')()
     // Add methods to bus object
     for (m in extra_methods)
         bus[m] = extra_methods[m]
@@ -1202,7 +1199,6 @@ function new_bus () { return require('./statebus')() }
 
 module.exports.import_server = function (bus, options) { add_server_methods(bus) }
 module.exports.run_server = function (bus, options) { bus.serve(options) }
-
 
 // Handy repl. Invoke with node -e 'require("statebus/server").repl("/tmp/foo")'
 module.exports.repl = function (filename) {

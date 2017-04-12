@@ -147,13 +147,13 @@ var tests = [
 
     function basics (next) {
         bus('basic wait').to_fetch = function () {
-            setTimeout(function () {save.fire({key:'basic wait', a:1})},
+            setTimeout(function () {bus.save.fire({key:'basic wait', a:1})},
                        30)
         }
 
         var count = 0
         bus(function () {
-            var v = fetch('basic wait')
+            var v = bus.fetch('basic wait')
             log('On round', count, 'we see', v)
             if (count == 0)
                 assert(!v.a)
@@ -201,7 +201,7 @@ var tests = [
         function cb (o) {
             count++
             // log(bbs().length + ' bindings in cb before fetch')
-            var bar = fetch('bar')
+            var bar = bus.fetch('bar')
             log('cb called', count, 'times', 'bar is', bar, 'foo is', o)
             // log(bbs().length + ' bindings in cb after fetch')
         }
@@ -209,7 +209,7 @@ var tests = [
         // log(bbs().length+ ' bindings to start')
 
         // Fetch a foo
-        fetch('foo', cb)                             // Call 1
+        bus.fetch('foo', cb)                             // Call 1
 
         // Fire a foo
         setTimeout(function () {
@@ -265,12 +265,12 @@ var tests = [
             function (k) { setTimeout(function () {bus.save.fire({key:k})},30) }
         function cb (o) {
             count++
-            var moon = fetch('hey over there')
+            var moon = bus.fetch('hey over there')
             log('cb called', count, 'times')
         }
 
         // Fetch a moon
-        fetch('moon', cb)       // Doesn't call back yet
+        bus.fetch('moon', cb)       // Doesn't call back yet
         assert(count === 0, '0!=' + count)
 
         // There should be a moonshot by now
@@ -294,7 +294,7 @@ var tests = [
         }
 
         // Fetch a foo
-        fetch('foo', cb)                   // Call 1
+        bus.fetch('foo', cb)                   // Call 1
         assert(count === 1, '1!=' + count)
 
         // Fire a foo
@@ -327,9 +327,9 @@ var tests = [
         function cb() {
             count++
             log('cb called', count, 'times')
-            bus.save.fire(fetch('new'))
+            bus.save.fire(bus.fetch('new'))
         }
-        fetch(key, cb)
+        bus.fetch(key, cb)
 
         // Next
         setTimeout(function () {
@@ -363,7 +363,7 @@ var tests = [
             }
         }
 
-        fetch(key, cb)
+        bus.fetch(key, cb)
         setTimeout(fire, 70)
         setTimeout(fire, 80)
 
@@ -377,10 +377,10 @@ var tests = [
 
     // Can we return an object that fetches another?
     function nested_fetch (next) {
-        function outer () { return {inner: fetch('inner') } }
+        function outer () { return {inner: bus.fetch('inner') } }
         bus('outer').to_fetch = outer
         log('fetching the outer wrapper')
-        var obj = fetch('outer')
+        var obj = bus.fetch('outer')
         log('Ok, we fetched:', obj)
         assert(obj.inner.key === 'inner')
         bus.save({key: 'inner', c: 1})
@@ -398,15 +398,15 @@ var tests = [
     // Russian dolls
     function russian_doll_nesting (next) {
         var nothing = 3
-        function big () { return {middle: fetch('middle') } }
-        function middle () { return {small: fetch('small') } }
+        function big () { return {middle: bus.fetch('middle') } }
+        function middle () { return {small: bus.fetch('small') } }
         function small () { return {nothing: nothing} }
         bus('big').to_fetch = big
         bus('middle').to_fetch = middle
         bus('small').to_fetch = small
 
         log('fetching')
-        var obj = fetch('big')
+        var obj = bus.fetch('big')
         log('we got', obj)
 
         setTimeout(function () {
@@ -420,11 +420,11 @@ var tests = [
         setTimeout(function () {
             bus.fetch('big', function ruskie (o) {
                 nothing = 50
-                var small = fetch('small')
+                var small = bus.fetch('small')
                 log()
                 log('Second try.  Small starts as', small)
                 bus.save.fire({key: 'small', something: nothing})
-                log('Now it is', fetch('small'))
+                log('Now it is', bus.fetch('small'))
             })}, 15)
 
 
@@ -643,10 +643,10 @@ var tests = [
         // Now start the reactive function
         bus(function () {
             log('Reaction', ++count, 'starting with state',
-                fetch('undo me').state, 'and loading =', bus.loading())
+                bus.fetch('undo me').state, 'and loading =', bus.loading())
 
             // Fetch something that we have to wait for
-            var wait = fetch('wait')
+            var wait = bus.fetch('wait')
 
             // Save some middling state
             bus.save.fire({key: 'undo me', state: 'progressing'})
@@ -693,15 +693,15 @@ var tests = [
         // First do a del that will roll back
         bus(function () {
             log('Doing a rollback on', bus.cache['kill me'])
-            fetch('wait forever')  // Never finishes loading
-            del('kill me')         // Will roll back
+            bus.fetch('wait forever')  // Never finishes loading
+            bus.del('kill me')         // Will roll back
         })
         assert(bus.cache['kill me'].alive === true)
 
         // Now a del that goes through
         bus(function () {
             log('Doing a real delete on', bus.cache['kill me'])
-            del('kill me')         // Will not roll back
+            bus.del('kill me')         // Will not roll back
         })
         assert(!('kill me' in bus.cache))
         log('Now kill me is', bus.cache['kill me'])
@@ -719,8 +719,8 @@ var tests = [
         // First do a save that will roll back
         bus(function () { if (done) return;
             log('Doing a rollback on bananafied candy')
-            fetch('wait forever')                  // Never finishes loading
-            save({key:'candy', flavor: 'banana'})  // Will roll back
+            bus.fetch('wait forever')                  // Never finishes loading
+            bus.save({key:'candy', flavor: 'banana'})  // Will roll back
             log('...and the candy is', bus.cache['candy'])
             //forget('candy')
         })
@@ -730,13 +730,13 @@ var tests = [
         // Try rolling back another style of save
         bus(function () { if (done) return
             log("Now we'll First we licoricize the", bus.cache['candy'])
-            fetch('wait forever')                  // Never finishes loading
-            var candy = fetch('candy')
+            bus.fetch('wait forever')                  // Never finishes loading
+            var candy = bus.fetch('candy')
             candy.flavor = 'licorice'
             log('...the candy has become', bus.cache['candy'])
-            save(candy)                            // Will roll back
+            bus.save(candy)                            // Will roll back
             log('...and now it\'s rolled back to', bus.cache['candy'])
-            forget('candy')
+            bus.forget('candy')
         })
         assert(bus.cache['candy'].flavor === 'lemon')
         assert(saves.length === 0)
@@ -744,7 +744,7 @@ var tests = [
         // Now a save that goes through
         bus(function () {
             log('Doing a real save on', bus.cache['candy'])
-            save({key:'candy', flavor: 'orangina'})  // Will go through
+            bus.save({key:'candy', flavor: 'orangina'})  // Will go through
         })
         assert(bus.cache['candy'].flavor = 'orangina')
         assert(saves.length === 1, 'Saves.length 1 != '+saves.length)
@@ -769,7 +769,7 @@ var tests = [
         bus(function () {
             num_calls++
             log('called', num_calls, 'times')
-            fetch('wait a sec')
+            bus.fetch('wait a sec')
             loaded = !bus.loading()
         })
 

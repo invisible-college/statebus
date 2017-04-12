@@ -1734,11 +1734,11 @@
     bus.executing_funk = function () {return executing_funk}
 
     // Export globals
-    if (Object.keys(busses).length === 0) {
-        var globals = 'fetch save sync del forget loading clone'.split(' ')
-        for (var i=0; i<globals.length; i++)
-            this[globals[i]] = eval(globals[i])
-    }
+    var globals = 'fetch save sync del forget loading clone'.split(' ')
+    if (nodejs || Object.keys(busses).length > 0) globals = globals.slice(4)
+    for (var i=0; i<globals.length; i++)
+        this[globals[i]] = eval(globals[i])
+
     busses[bus.id] = bus
 
     if (nodejs)
