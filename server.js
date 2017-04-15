@@ -49,7 +49,7 @@ function add_server_methods (bus)
                                 + process.getuid() + '/' + process.getgid())
 
                     // Start writing to the file_store, since we aren't root
-                    bus.file_store && bus.file_store.activate()
+                    bus.options.file_store && bus.file_store.activate()
                     console.log('db is active')
                 }
             }
