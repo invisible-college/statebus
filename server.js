@@ -49,7 +49,7 @@ function add_server_methods (bus)
                                 + process.getuid() + '/' + process.getgid())
 
                     // Start writing to the file_store, since we aren't root
-                    bus.file_store.activate()
+                    bus.file_store && bus.file_store.activate()
                     console.log('db is active')
                 }
             }
@@ -872,7 +872,18 @@ function add_server_methods (bus)
         // User
         user('user/*').to_save = function (o) {
             // Handle private state
-            //if (o.key.match(/^user\/private\/[^\/]+$/))
+            var private = o.key.match(/^user\/([^\/]+)\/private\/(.*)$/)
+            if (private) {
+                // Can change only if user owns it
+                var user = private[1], thing = private[2]
+                var c = fetch('current_user')
+                if (c.user.key === 'user/' + user)
+                    user.save.fire(o)
+                else
+                    user.save.abort(o)
+                return
+            }
+
             if (!o.key.match(/^user\/[^\/]+$/))
                 return
 
@@ -949,6 +960,9 @@ function add_server_methods (bus)
         user('user/*').to_delete = function () {}
         function user_obj (k, logged_in) {
             var o = master.clone(master.fetch(k))
+            if (k.match(/^user\/([^\/]+)\/private\/(.*)$/))
+                return logged_in ? o : {key: k}
+            
             delete o.pass
             if (!logged_in) {delete o.email; delete o.login}
             return o
