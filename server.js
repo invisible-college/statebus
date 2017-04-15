@@ -96,7 +96,6 @@ function add_server_methods (bus)
             // Make a temporary client bus
             var cbus = new_bus()
             cbus.label = 'client_http' + httpclient_num++
-            cbus.honk = 'statelog'
             cbus.master = master
 
             // Log in as the client
@@ -108,6 +107,7 @@ function add_server_methods (bus)
             cbus.save({key: 'current_user', client: clientid})
 
             // Do the fetch
+            cbus.honk = 'statelog'
             var singleton = req.path.match(/^\/code\//)
             cbus.fetch_once(req.path.substr(1), (o) => {
                 var unwrap = (Object.keys(o).length === 2
@@ -714,11 +714,12 @@ function add_server_methods (bus)
                 users.all = users.all || []
                 for (var i=0; i<users.all.length; i++) {
                     var u = master.fetch(users.all[i])
-                    if (result.hasOwnProperty(u.name.toLowerCase())) {
+                    var login = (u.login || u.name).toLowerCase()
+                    if (result.hasOwnProperty(login)) {
                         console.error("upass: this user's name is bogus, dude.", u.key)
                         continue
                     }
-                    result[u.name.toLowerCase()] = {user: u.key, pass: u.pass}
+                    result[login] = {user: u.key, pass: u.pass}
                 }
                 return result
             }
@@ -726,15 +727,15 @@ function add_server_methods (bus)
         }
 
         // Authentication functions
-        function authenticate (name, pass) {
-            var userpass = master.fetch('users/passwords')[name.toLowerCase()]
+        function authenticate (login, pass) {
+            var userpass = master.fetch('users/passwords')[login.toLowerCase()]
             master.log('authenticate: we see',
                 master.fetch('users/passwords'),
                 userpass && userpass.pass,
                 pass)
 
-            if (!(typeof name === 'string' && typeof pass === 'string')) return false
-            if (name === 'key') return false
+            if (!(typeof login === 'string' && typeof pass === 'string')) return false
+            if (login === 'key') return false
             if (!userpass || !userpass.pass) return null
 
             //console.log('comparing passwords', pass, userpass.pass)
@@ -742,32 +743,36 @@ function add_server_methods (bus)
                 return master.fetch(userpass.user)
         }
         function create_account (params) {
-            if (!master.validate(params, {name: 'string', pass: 'string',
-                                          email: 'string'}))
+            var login = (params.login || params.name).toLowerCase()
+            if (!master.validate(params, {'?name': 'string', '?login': 'string',
+                                          pass: 'string', '?email': 'string'})
+                || !login)
                 return false
 
             var passes = master.fetch('users/passwords')
-            if (passes.hasOwnProperty(params.name.toLowerCase()))
+            if (passes.hasOwnProperty(login))
                 return false
 
             // Hash password
             params.pass = require('bcrypt-nodejs').hashSync(params.pass)
 
             // Choose account key
-            var key = 'user/' + params.name.toLowerCase()
-            if (master.cache.hasOwnProperty(key))
-                key = 'user/' + Math.random().toString(36).substring(7)
+            var key = 'user/' + params.name
+            if (!params.name || master.cache.hasOwnProperty(key))
+                while (master.cache.hasOwnProperty(key))
+                    key = 'user/' + Math.random().toString(36).substring(7)
 
             // Make account object
             var new_account = {key: key,
                                name: params.name,
+                               login: params.login,
                                pass: params.pass,
                                email: params.email }
+            for (k in new_account) if (!new_account[k]) delete new_account[k]
 
             var users = master.fetch('users')
             users.all.push(new_account)
-            passes[params.name.toLowerCase()] = {user: new_account.key,
-                                                 pass: new_account.pass}
+            passes[login] = {user: new_account.key, pass: new_account.pass}
             master.save(users)
             master.save(passes)
             return true
@@ -816,10 +821,10 @@ function add_server_methods (bus)
                     // Then client is trying to log in
                     user.log('current_user: trying to log in')
                     var creds = o.login_as
-
-                    if (creds.name && creds.pass) {
+                    var login = creds.login || creds.name
+                    if (login && creds.pass) {
                         // With a username and password
-                        var u = authenticate(creds.name, creds.pass)
+                        var u = authenticate(login, creds.pass)
 
                         user.log('auth said:', u)
                         if (u) {
@@ -866,13 +871,15 @@ function add_server_methods (bus)
 
         // User
         user('user/*').to_save = function (o) {
-            // Validate key only has one slash
+            // Handle private state
+            //if (o.key.match(/^user\/private\/[^\/]+$/))
             if (!o.key.match(/^user\/[^\/]+$/))
                 return
 
             // Validate types
-            if (!user.validate(o, {name: 'string', email: 'string', '?pic': 'string',
-                                   key: 'string', '?pass': 'string', '*':'*'})) {
+            if (!user.validate(o, {'?name': 'string', email: 'string', '?pic': 'string',
+                                   key: 'string', '?pass': 'string', '?login': 'string',
+                                   '*':'*'})) {
                 user.save.abort(o)
                 return
             }
@@ -885,14 +892,24 @@ function add_server_methods (bus)
                 return
             }
 
-            // Update email
+            // There must be at least a login or a name
+            var login = o.login || o.name
+            if (!login) {
+                user.save.abort(o)
+                return
+            }
+
+            // Update login
             var u = master.fetch(o.key)
-            u.email = o.email
+            var userpass = master.fetch('users/passwords')
+            if (!userpass.hasOwnProperty(o.login.toLowerCase())    // if unique
+                || u.login.toLowerCase() == o.login.toLowerCase()) // or just changing caps
+                u.login = o.login
 
             // Update name
-            var userpass = master.fetch('users/passwords')
-            if (!userpass.hasOwnProperty(o.name.toLowerCase())   // if unique
-                || u.name.toLowerCase() == o.name.toLowerCase()) // or just changing caps
+            if (o.login
+                || !userpass.hasOwnProperty(o.name.toLowerCase())  // if unique
+                || u.name.toLowerCase() == o.name.toLowerCase())   // or just changing caps
                 u.name = o.name
 
             // Hash password
@@ -915,7 +932,7 @@ function add_server_methods (bus)
             }
 
             // For anything else, go ahead and add it to the user object
-            var protected = {key:1, name:1, email:1, pic:1, pass:1}
+            var protected = {key:1, name:1, pic:1, pass:1}
             for (k in o)
                 if (!protected.hasOwnProperty(k))
                     u[k] = o[k]
@@ -933,7 +950,7 @@ function add_server_methods (bus)
         function user_obj (k, logged_in) {
             var o = master.clone(master.fetch(k))
             delete o.pass
-            if (!logged_in) delete o.email
+            if (!logged_in) {delete o.email; delete o.login}
             return o
         }
 

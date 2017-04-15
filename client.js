@@ -52,6 +52,10 @@
     function set_cookie (key, val) {
         document.cookie = key + '=' + val + '; Expires=21 Oct 2025 00:0:00 GMT;'
     }
+    function get_cookie (key) {
+        var c = document.cookie.match('(^|;)\\s*' + key + '\\s*=\\s*([^;]+)');
+        return c ? c.pop() : '';
+    }
     function sockjs_client (prefix, url) {
 	var bus = this;
 
@@ -79,9 +83,10 @@
             var me = fetch('ls/me')
             bus.log('connect: me is', me)
             if (!me.client) {
-                me.client = (Math.random().toString(36).substring(2)
-                             + Math.random().toString(36).substring(2)
-                             + Math.random().toString(36).substring(2))
+                var c = get_cookie('client')
+                me.client = c || (Math.random().toString(36).substring(2)
+                                  + Math.random().toString(36).substring(2)
+                                  + Math.random().toString(36).substring(2))
                 save(me)
             }
 
