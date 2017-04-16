@@ -704,7 +704,7 @@ function add_server_methods (bus)
     },
 
     serves_auth: function serves_auth (conn, master) {
-        var user = this // to keep me straight while programming
+        var client = this // to keep me straight while programming
 
         // Initialize master
         if (master('users/passwords').to_fetch.length === 0) {
@@ -779,28 +779,28 @@ function add_server_methods (bus)
         }
 
         // Current User
-        user('current_user').to_fetch = function () {
-            user.log('* current_user fetching')
+        client('current_user').to_fetch = function () {
+            client.log('* current_user fetching')
             if (!conn.client) return
             var u = master.fetch('logged_in_clients')[conn.client]
             u = u && user_obj(u.key, true)
             return {user: u || null, logged_in: !!u}
         }
 
-        user('current_user').to_save = function (o) {
+        client('current_user').to_save = function (o) {
             function error (msg) {
-                user.save.abort(o)
-                var c = user.fetch('current_user')
+                client.save.abort(o)
+                var c = client.fetch('current_user')
                 c.error = msg
-                user.save(c)
+                client.save(c)
             }
 
-            user.log('* Current User Saver going!')
+            client.log('* Current User Saver going!')
             if (o.client && !conn.client) {
                 // Set the client
                 conn.client = o.client
-                user.client_id = o.client
-                user.client_ip = conn.remoteAddress
+                client.client_id = o.client
+                client.client_ip = conn.remoteAddress
 
                 var connections = master.fetch('connections')
                 connections[conn.id].user = master.fetch('logged_in_clients')[conn.client]
@@ -808,9 +808,9 @@ function add_server_methods (bus)
             }
             else {
                 if (o.create_account) {
-                    user.log('current_user: creating account')
+                    client.log('current_user: creating account')
                     if (create_account(o.create_account))
-                        user.log('Success creating account!')
+                        client.log('Success creating account!')
                     else {
                         error('Cannot create that account')
                         return
@@ -819,14 +819,14 @@ function add_server_methods (bus)
 
                 if (o.login_as) {
                     // Then client is trying to log in
-                    user.log('current_user: trying to log in')
+                    client.log('current_user: trying to log in')
                     var creds = o.login_as
                     var login = creds.login || creds.name
                     if (login && creds.pass) {
                         // With a username and password
                         var u = authenticate(login, creds.pass)
 
-                        user.log('auth said:', u)
+                        client.log('auth said:', u)
                         if (u) {
                             // Success!
                             // Associate this user with this session
@@ -853,7 +853,7 @@ function add_server_methods (bus)
                 }
 
                 else if (o.logout) {
-                    user.log('current_user: logging out')
+                    client.log('current_user: logging out')
                     var clients = master.fetch('logged_in_clients')
                     var connections = master.fetch('connections')
 
@@ -865,48 +865,52 @@ function add_server_methods (bus)
                 }
             }
 
-            user.dirty('current_user')
+            client.dirty('current_user')
         }
-        user('current_user').to_delete = function () {}
+        client('current_user').to_delete = function () {}
 
         // User
-        user('user/*').to_save = function (o) {
-            // Handle private state
-            var private = o.key.match(/^user\/([^\/]+)\/private\/(.*)$/)
-            if (private) {
-                // Can change only if user owns it
-                var user = private[1], thing = private[2]
-                var c = fetch('current_user')
-                if (c.user.key === 'user/' + user)
-                    user.save.fire(o)
-                else
-                    user.save.abort(o)
+        client('user/*').to_save = function (o) {
+            // Only the current user can touch themself.
+            var c = client.fetch('current_user')
+            var user_key = o.key.match(/^user\/([^\/]+)/)
+            user_key = user_key && ('user/' + user_key[1])
+            console.log('user key', c.user.key, user_key, c.logged_in)
+            if (!c.logged_in || c.user.key !== user_key)
+                { client.save.abort(o); return }
+            
+            console.log('now', o.key.match(/^user\/[^\/]+\//))
+
+            // Users have closet space at /user/<name>/*
+            if (o.key.match(/^user\/[^\/]+\//)) {
+                console.log('closet data')
+                master.save(o)
                 return
             }
 
-            if (!o.key.match(/^user\/[^\/]+$/))
-                return
+            // Ok, then it must be a plain user
+            console.assert(o.key.match(/^user\/[^\/]+$/))
 
             // Validate types
-            if (!user.validate(o, {'?name': 'string', email: 'string', '?pic': 'string',
-                                   key: 'string', '?pass': 'string', '?login': 'string',
-                                   '*':'*'})) {
-                user.save.abort(o)
+            if (!client.validate(o, {'?name': 'string', email: 'string', '?pic': 'string',
+                                     key: 'string', '?pass': 'string', '?login': 'string',
+                                     '*':'*'})) {
+                client.save.abort(o)
                 return
             }
 
             // Check permissions
-            var c = user.fetch('current_user')
-            user.log(o.key + '.to_save:', o, c.logged_in, c.user)
+            var c = client.fetch('current_user')
+            client.log(o.key + '.to_save:', o, c.logged_in, c.user)
             if (!(c.logged_in && c.user.key === o.key)) {
-                user.save.abort(o)
+                client.save.abort(o)
                 return
             }
 
             // There must be at least a login or a name
             var login = o.login || o.name
             if (!login) {
-                user.save.abort(o)
+                client.save.abort(o)
                 return
             }
 
@@ -953,11 +957,11 @@ function add_server_methods (bus)
 
             master.save(u)
         }
-        user('user/*').to_fetch = function filtered_user (k) {
-            var c = user.fetch('current_user')
+        client('user/*').to_fetch = function filtered_user (k) {
+            var c = client.fetch('current_user')
             return user_obj(k, c.logged_in && c.user.key === k)
         }
-        user('user/*').to_delete = function () {}
+        client('user/*').to_delete = function () {}
         function user_obj (k, logged_in) {
             var o = master.clone(master.fetch(k))
             if (k.match(/^user\/([^\/]+)\/private\/(.*)$/))
@@ -971,10 +975,10 @@ function add_server_methods (bus)
         // Blacklist sensitive stuff on master, in case we have a shadow set up
         var blacklist = 'users users/passwords logged_in_clients'.split(' ')
         for (var i=0; i<blacklist.length; i++) {
-            user(blacklist[i]).to_fetch  = function () {}
-            user(blacklist[i]).to_save   = function () {}
-            user(blacklist[i]).to_delete = function () {}
-            user(blacklist[i]).to_forget = function () {}
+            client(blacklist[i]).to_fetch  = function () {}
+            client(blacklist[i]).to_save   = function () {}
+            client(blacklist[i]).to_delete = function () {}
+            client(blacklist[i]).to_forget = function () {}
         }
     },
 
