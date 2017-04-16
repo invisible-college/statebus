@@ -759,9 +759,9 @@ function add_server_methods (bus)
             // Choose account key
             var key = 'user/' + params.name
             if (!params.name)
-                key = 'user/' + Math.random().toString(36).substring(7)
+                key = 'user/' + Math.random().toString(36).substring(7,13)
             while (master.cache.hasOwnProperty(key))
-                key = 'user/' + Math.random().toString(36).substring(7)
+                key = 'user/' + Math.random().toString(36).substring(7,13)
 
             // Make account object
             var new_account = {key: key,
