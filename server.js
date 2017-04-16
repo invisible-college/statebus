@@ -758,9 +758,10 @@ function add_server_methods (bus)
 
             // Choose account key
             var key = 'user/' + params.name
-            if (!params.name || master.cache.hasOwnProperty(key))
-                while (master.cache.hasOwnProperty(key))
-                    key = 'user/' + Math.random().toString(36).substring(7)
+            if (!params.name)
+                key = 'user/' + Math.random().toString(36).substring(7)
+            while (master.cache.hasOwnProperty(key))
+                key = 'user/' + Math.random().toString(36).substring(7)
 
             // Make account object
             var new_account = {key: key,
@@ -809,9 +810,12 @@ function add_server_methods (bus)
             else {
                 if (o.create_account) {
                     client.log('current_user: creating account')
-                    if (create_account(o.create_account))
+                    if (create_account(o.create_account)) {
                         client.log('Success creating account!')
-                    else {
+                        var cu = client.fetch('current_user')
+                        cu.create_account = null
+                        client.save.fire(cu)
+                    } else {
                         error('Cannot create that account')
                         return
                     }
