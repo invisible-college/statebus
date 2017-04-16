@@ -31,7 +31,7 @@ Just make a .html file on your filesystem containing this:
 dom.BODY = ->                                                      # Your code here
   DIV 'Hello, World!'    # Return a div
 
-#</script><script src="https://stateb.us/client5.js"></script>     # Loads statebus v5
+#</script><script src="https://stateb.us/client6.js"></script>     # Loads statebus v6
 ```	
 
 Now you have a working statebus app, in a single html file!
@@ -63,7 +63,7 @@ save({
 Boom! Your post shows up.
 
 Now try reloading the page. It's still there! You saved your blog on the
-*server* hosted at `state://stateb.us:3005`.
+*server* hosted at `state://stateb.us:3006`.
 
 Try opening a new browser window. If you change the blog in one, it will
 immediately update the other. Statebus keeps the state between both browsers
@@ -90,7 +90,7 @@ Importantly, Statebus notes that `dom.BODY` depends on the state at `/your/blog`
 
 Go ahead and change the state. In the javascript console, run:
 ```javascript
-index = fetch('state://stateb.us:3005/your/blog')
+index = fetch('state://stateb.us:3006/your/blog')
 index.posts[0].body = 'universe'
 save(index)
 ```
@@ -104,7 +104,7 @@ save(index)
 You can do a lot writing Statebus web applications without a server! It is particularly useful for prototyping new interactive UIs. Every time you want a new variation of the UI, just copy the single file and modify it. It will have access to the same state.
 
 [merge below]
-In the above code, you accessed `state://stateb.us:3005`. This is long form. You can instead just do e.g. `fetch('/your/blog')`. This will access state at the default server (which is stateb.us:3005 by default). You only need the full state URL if you are 
+In the above code, you accessed `state://stateb.us:3006`. This is long form. You can instead just do e.g. `fetch('/your/blog')`. This will access state at the default server (which is stateb.us:3006 by default). You only need the full state URL if you are 
 
 
 ## Make a server
@@ -112,16 +112,16 @@ In the above code, you accessed `state://stateb.us:3005`. This is long form. You
 You can host your own state(bus) server, with permissions, authentication, and anything else you want to do server-side.
 
 ```shell
-npm install statebus@5
+npm install statebus@6
 ```
 
-The `@5` tells npm to install Statebus v5.
+The `@6` tells npm to install Statebus v6.
 
 Create a server with:
 ```javascript 
 var bus = require('statebus/server')({
     // You can pass these options to your new server:
-    port: 3005,                  // 3005 is the default port for Statebus v5 to listen on
+    port: 3006,                  // 3006 is the default port for Statebus v6 to listen on
     // backdoor: 4004,           // For testing. Direct access to master at this port. Defaults to null.
     file_store: true,            // Persists state across server restarts.  Defaults to true.
     client: function (client) {} // See "multiple users" below.  Defaults to null.
@@ -146,8 +146,8 @@ dom.BODY = ->
   DIV null,
     'Hello world!'
 
-</script><script src="https://stateb.us/client5.js"
-                 server="http://localhost:3005"></script>
+</script><script src="https://stateb.us/client6.js"
+                 server="http://localhost:3006"></script>
 ```
 
 
@@ -700,7 +700,7 @@ you are concerned with.
 * Travis asks: can we eliminate this example and just use the blog example? *
 
 ```shell
-npm install statebus@5
+npm install statebus@6
 ```
 
 Make a `demo.js`:
@@ -1163,7 +1163,4 @@ dom.BODY = ->
 # What's missing
 
 - Good SQL database adapters
-- Finalized API names (the v5 release might break your code)
 - Connect to multiple servers simultaneously
-
-
