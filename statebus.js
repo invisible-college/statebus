@@ -167,15 +167,12 @@
         var color, icon
         if (currently_saving === object.key &&
             !(object.key && !changed(object))) {
-            statelog_indent--
-            statelog(red, '•', '↵' + (t.version ? '\t\t\t[' + t.version + ']' : ''))
-            statelog_indent++
+          statelog_indent--
+          statelog(red, '•', '↵' + (t.version ? '\t\t\t[' + t.version + ']' : ''))
+          statelog_indent++
         } else {
             // Ignore if nothing happened
             if (object.key && !changed(object)) {
-                // log('fire: o|c=', deep_equals(object, cache[object.key]),
-                //     'b|c=', deep_equals(backup_cache[object.key], cache[object.key]),
-                //     'o|b=', deep_equals(backup_cache[object.key], object))
                 color = grey
                 icon = 'x'
                 if (t.to_fetch)
@@ -248,7 +245,6 @@
     }
     var id = 'bus ' + Math.random().toString(36).substring(7)
     bus.toString = function () { return bus.label || id }
-    // bus.toString = function () { return (bus.label||'') + id }
     bus.delete_bus = function () {
         // // Forget all wildcard handlers
         // for (var i=0; i<wildcard_handlers.length; i++) {
