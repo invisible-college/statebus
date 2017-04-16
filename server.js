@@ -871,15 +871,15 @@ function add_server_methods (bus)
 
         // User
         client('user/*').to_save = function (o) {
-            // Only the current user can touch themself.
             var c = client.fetch('current_user')
             var user_key = o.key.match(/^user\/([^\/]+)/)
             user_key = user_key && ('user/' + user_key[1])
-            console.log('user key', c.user.key, user_key, c.logged_in)
-            if (!c.logged_in || c.user.key !== user_key)
-                { client.save.abort(o); return }
-            
-            console.log('now', o.key.match(/^user\/[^\/]+\//))
+
+            // Only the current user can touch themself.
+            if (!c.logged_in || c.user.key !== user_key) {
+                client.save.abort(o)
+                return
+            }
 
             // Users have closet space at /user/<name>/*
             if (o.key.match(/^user\/[^\/]+\//)) {
