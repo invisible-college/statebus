@@ -348,7 +348,7 @@
         var react_class = React.createClass(component)
         var result = function (props, children) {
             props = props || {}
-            if(props.key !== undefined) props['data-key'] = props.key 
+            props['data-key'] = props.key
             props['data-widget'] = component.displayName
 
             return (React.version >= '0.12.'
@@ -483,7 +483,7 @@
         function camelcase (s) { var a = s.split(/[_-]/)
                                  return a.slice(0,1).concat(a.slice(1).map(capitalize)).join('') }
 
-        var css_props = 'background background-attachment background-color background-image background-position background-repeat border border-collapse border-color border-spacing border-style border-width bottom caption-side clear clip color content counter-increment counter-reset cursor direction display empty-cells float font font-family font-size font-style font-variant font-weight height left letter-spacing line-height list-style list-style-image list-style-position list-style-type margin max-height max-width min-height min-width orphans outline outline-color outline-style outline-width overflow padding page-break-after page-break-before page-break-inside position quotes right table-layout text-align text-decoration text-indent text-transform top unicode-bidi vertical-align visibility white-space widows width word-spacing z-index'.split(' ')
+        var css_props = 'background background-attachment background-color background-image background-position background-repeat border border-collapse border-color border-spacing border-style border-width border-left border-right border-bottom border-top bottom caption-side clear clip color content counter-increment counter-reset cursor direction display empty-cells float font font-family font-size font-style font-variant font-weight height left letter-spacing line-height list-style list-style-image list-style-position list-style-type margin margin-left margin-right margin-bottom margin-top max-height max-width min-height min-width orphans outline outline-color outline-style outline-width overflow padding padding-left padding-right padding-bottom padding-top page-break-after page-break-before page-break-inside position quotes right table-layout text-align text-decoration text-indent text-transform top unicode-bidi vertical-align visibility white-space widows width word-spacing z-index'.split(' ')
         var is_css_prop = {}
         for (var i=0; i<css_props.length; i++)
             is_css_prop[camelcase(css_props[i])] = true
@@ -523,9 +523,8 @@
                             else {
                                 attrs[k] = arg[k]          // Or be normal.
 
-                                if (k === 'key') {
+                                if (k === 'key')
                                     attrs['data-key'] = arg[k]
-                                } 
                             }
 
                     // else
@@ -567,6 +566,9 @@
 
         make_better_input("INPUT", React.DOM.input)
         make_better_input("TEXTAREA", React.DOM.textarea)
+        window['TITLE'] = function (title) {
+            return React.DOM.title({dangerouslySetInnerHTML: {__html: title}})
+        }
     }
 
     // Load the components
@@ -616,34 +618,37 @@
 
     function load_coffee () {
         var scripts = document.getElementsByTagName("script")
-        var filename = window.location.href.substring(window.location.href.lastIndexOf('/') + 1)
+        var filename = location.pathname.substring(location.pathname.lastIndexOf('/') + 1)
         for (var i=0; i<scripts.length; i++)
-            if (scripts[i].getAttribute('type') === 'statebus'
-                || scripts[i].getAttribute('type') === 'coffeedom') {
+            if (scripts[i].getAttribute('type')
+                in {'statebus':1, 'coffeedom':1,'statebus-js':1}) {
                 // Compile coffeescript to javascript
                 var compiled
-                try {
-                    compiled = CoffeeScript.compile(scripts[i].text/*.replace(/(\s[A-Z_]+)\n/g, '$1 null,\n')*/,
-                                                    {bare: true,
-                                                     sourceMap: true,
-                                                     filename: filename})
-                    var source_map = JSON.parse(compiled.v3SourceMap)
-                    source_map.sourcesContent = scripts[i].text
-                    compiled = compiled.js
+                if (scripts[i].getAttribute('type') !== 'statebus-js')
+                    try {
+                        compiled = CoffeeScript.compile(scripts[i].text/*.replace(/(\s[A-Z_]+)\n/g, '$1 null,\n')*/,
+                                                        {bare: true,
+                                                         sourceMap: true,
+                                                         filename: filename})
+                        var source_map = JSON.parse(compiled.v3SourceMap)
+                        source_map.sourcesContent = scripts[i].text
+                        compiled = compiled.js
 
-                    // Base64 encode it
-                    compiled += '\n'
-                    compiled += '//# sourceMappingURL=data:application/json;base64,'
-                    compiled += btoa(JSON.stringify(source_map)) + '\n'
-                    compiled += '//# sourceURL=' + filename
-                } catch (error) {
-                    if (error.location)
-                        console.error('Syntax error in '+ filename + ' on line',
-                                      error.location.first_line
-                                      + ', column ' + error.location.first_column + ':',
-                                      error.message)
-                    else throw error
-                }
+                        // Base64 encode it
+                        compiled += '\n'
+                        compiled += '//# sourceMappingURL=data:application/json;base64,'
+                        compiled += btoa(JSON.stringify(source_map)) + '\n'
+                        compiled += '//# sourceURL=' + filename
+                    } catch (error) {
+                        if (error.location)
+                            console.error('Syntax error in '+ filename + ' on line',
+                                          error.location.first_line
+                                          + ', column ' + error.location.first_column + ':',
+                                          error.message)
+                        else throw error
+                    }
+                else
+                    compiled = scripts[i].text
 
                 if (compiled) {
                     eval(compiled)

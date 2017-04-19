@@ -99,7 +99,7 @@ function add_server_methods (bus)
             cbus.master = master
 
             // Log in as the client
-            var clientid = require('cookie').parse(req.headers.cookie || '').client
+            var clientid = require('cookie').parse(req.headers.cookie || '').client || 'anon'
             cbus.serves_auth({client: clientid,
                               remoteAddress: req.connection.remoteAddress},
                              bus)
@@ -744,9 +744,9 @@ function add_server_methods (bus)
         }
         function create_account (params) {
             var login = (params.login || params.name).toLowerCase()
-            if (!master.validate(params, {'?name': 'string', '?login': 'string',
-                                          pass: 'string', '?email': 'string'})
-                || !login)
+            if (!login ||
+                !master.validate(params, {'?name': 'string', '?login': 'string',
+                                          pass: 'string', '?email': 'string'}))
                 return false
 
             var passes = master.fetch('users/passwords')
@@ -780,8 +780,8 @@ function add_server_methods (bus)
         }
 
         // Current User
-        client('current_user').to_fetch = function () {
-            client.log('* current_user fetching')
+        client('current_user').to_fetch = function (k) {
+            client.log('* fetching: current_user')
             if (!conn.client) return
             var u = master.fetch('logged_in_clients')[conn.client]
             u = u && user_obj(u.key, true)
@@ -796,7 +796,7 @@ function add_server_methods (bus)
                 client.save(c)
             }
 
-            client.log('* Current User Saver going!')
+            client.log('* saving: current_user!')
             if (o.client && !conn.client) {
                 // Set the client
                 conn.client = o.client
@@ -962,6 +962,7 @@ function add_server_methods (bus)
             master.save(u)
         }
         client('user/*').to_fetch = function filtered_user (k) {
+            client.log('* fetching:', k)
             var c = client.fetch('current_user')
             return user_obj(k, c.logged_in && c.user.key === k)
         }

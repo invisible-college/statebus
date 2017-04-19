@@ -827,9 +827,9 @@
             //     console.error('Two .to_fetch functions are running on the same key',
             //                   key+'!', funk_name(funck), funk_name(fetches_out[key]))
 
-            fetches_out[arg] = fetches_out[arg] || []
-            fetches_out[arg].push(f)   // Record active to_fetch handler
-            pending_fetches[arg] = f   // Record that the fetch is pending
+            fetches_out[key] = fetches_out[key] || []
+            fetches_out[key].push(f)   // Record active to_fetch handler
+            pending_fetches[key] = f   // Record that the fetch is pending
         }
 
         if (just_make_it)
