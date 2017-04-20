@@ -146,6 +146,7 @@ function add_server_methods (bus)
             bus.sockjs_server(this.backdoor_http_server)
         }
         
+        bus.universal_ws_client()
     },
 
     make_http_server: function make_http_server (options) {
@@ -359,6 +360,9 @@ function add_server_methods (bus)
 
     ws_client: function (prefix, url, account) {
         function make_sock (url) {
+            url = url.replace(/^state:\/\//, 'wss://')
+            url = url.replace(/^istate:\/\//, 'ws://')
+            url = url.replace(/^statei:\/\//, 'ws://')
             WebSocket = require('websocket').w3cwebsocket
             return new WebSocket(url+'/'+unique_sockjs_string+'/websocket')
         }

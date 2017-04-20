@@ -456,7 +456,13 @@ var tests = [
     },
 
     function uncallback (next) {
-        var chokidar = require('chokidar')
+        try {
+            var chokidar = require('chokidar')
+        } catch (e) {
+            console.warn('#### Yo!  You need to run "npm install chokidar"')
+            process.exit()
+        }
+
         var watchers = {}
         fs = require('fs')
         function read_file (filename, cb) {

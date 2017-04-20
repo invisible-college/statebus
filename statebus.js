@@ -413,10 +413,12 @@
         }
 
         log('del:', key)
-        bus.route(key, 'to_delete', key)
+        function abort () { abort.called = true }
+        bus.route(key, 'to_delete', key, {abort: abort})
         //forget(key /*, bus??*/)
 
-        delete cache[key]
+        if (!abort.called)
+            delete cache[key]
 
         // console.warn("Deleting " + key + "-- Statebus doesn't yet re-run functions subscribed to it, or update versions")
 
@@ -424,6 +426,8 @@
         //
         //  - Add transactions, so you can check permissions, abort a delete,
         //    etc.
+        //    - NOTE: I did a crappy implementation of abort just now above!
+        //      But it doesn't work if called after the to_delete handler returns.
         //    - Generalize the code across save and del with a "mutate"
         //      operation
         //
