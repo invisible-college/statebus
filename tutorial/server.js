@@ -1,1 +1,1 @@
-var bus = require('statebus/server')({port: 3005})
+var bus = require('statebus').serve({port: 3006})
