@@ -3,14 +3,14 @@
 //  • Only authors can update a message or delete it
 //  • Ensure the /chat index stays in sync with new messages added
 
-var master_bus = require('statebus/server')({       // The master bus
-  port: 3005,
+var master_bus = require('statebus').serve({        // The master bus
+  port: 3006,
 
   client: function (client_bus) {                   // The client bus defines an API for how each connected 
                                                     // user can fetch() and save() master state.
 
     client_bus('message/*').to_save = function (o) {// Only authors can update a post
-      o.key = o.key || 'message/' + random_string()    // Ensure that a message has a key
+      o.key = o.key || 'message/' + random_string() // Ensure that a message has a key
       var obj = master_bus.fetch(o.key)             // Get the version of this state stored in master, if any
 
       author_change = obj.author &&                 // Address case where a malicious client tries to 
@@ -39,7 +39,7 @@ var master_bus = require('statebus/server')({       // The master bus
       client_bus.save.abort(o)                      // Prevent save from happening!
     }
 
-    client_bus.route_defaults_to(master_bus)        // Anything not matched to the handlers above 
+    client_bus.shadows(master_bus)                  // Anything not matched to the handlers above 
                                                     // will pass through to the master bus.
   }
 

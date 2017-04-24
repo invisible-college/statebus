@@ -203,7 +203,7 @@ npm install statebus
 Now create a barebones server called server.js, and put this in it:
 
 ```javascript 
-var bus = require('statebus/server')({port: 3006})
+var bus = require('statebus').serve({port: 3006})
 ```
 
 ### Start your server
@@ -242,10 +242,10 @@ Let's get your new server serving the chat messages that you saw earlier by prox
 //  • Chat messages are taken from the stateb.us server
 //  • New messages are posted to stateb.us
 
-statebus = require('statebus/server')
+statebus = require('statebus')
 
-var upstream_bus = statebus(),                           // Create a bus for our upstream server
-    proxy_bus = statebus({port: 3006})                   // ..and our proxy server
+var upstream_bus = statebus.serve(),                     // Create a bus for our upstream server
+    proxy_bus = statebus.serve({port: 3005})             // ..and our proxy server
 
 proxy_bus('chat').to_fetch = function (k) {              // When a client fetches '/chat',
   return upstream_bus.fetch('/chat')                     // return the chat data stored at our upstream server
@@ -271,8 +271,8 @@ Now open your .html file in a browser. You can once again see all of the chat me
 Answer: State is on the bus, getting delivered. 
 
 ```javascript
-var upstream_bus = statebus(),
-    proxy_bus = statebus({port: 3006})
+var upstream_bus = statebus.serve(),
+    proxy_bus = statebus.serve({port: 3006})
 
 upstream_bus.ws_client('/*', 'state://stateb.us:3006')
 ```
@@ -285,8 +285,8 @@ You can make multiple busses anywhere, client or server, fetch and save from the
 var statebus = require('statebus')  // This is already done for you on client
 
 // Make a couple busses:
-var bus = statebus()                // This is already done for you on client
-var gus = statebus()
+var bus = statebus.serve()          // This is already done for you on client
+var gus = statebus.serve()
 
 bus.fetch('foo').bar          // ==> undefined
 bus.save({key:'foo', bar: 3})
@@ -432,7 +432,7 @@ run once the state has loaded.
 
 ## A server with authentication and access control
 
-Sometimes you want to know who is riding your bus, and make sure they're only rifling through their own luggage. 
+Sometimes you want to know who is riding your bus, and make sure they're not rifling through someone else's baggage.
 
 Let's create a different server with multiple users, authentication, and access control. Copy and paste the code below into your server.js file, entirely replacing its contents. We'll then unpack it. 
 
@@ -442,7 +442,7 @@ Let's create a different server with multiple users, authentication, and access 
 //  • Only authors can update a message or delete it
 //  • Ensure the /chat index stays in sync with new messages added
 
-var master_bus = require('statebus/server')({       // The master bus
+var master_bus = require('statebus').serve({       // The master bus
   port: 3006,
 
   client: function (client_bus) {                   // The client bus defines an API for how each connected 
@@ -478,7 +478,7 @@ var master_bus = require('statebus/server')({       // The master bus
       client_bus.save.abort(o)                      // Prevent save from happening!
     }
 
-    client_bus.route_defaults_to(master_bus)        // Anything not matched to the handlers above 
+    client_bus.shadows(master_bus)                  // Anything not matched to the handlers above 
                                                     // will pass through to the master bus.
   }
 
@@ -531,7 +531,7 @@ Before we unpack this code, also replace your .html file with [this code](tutori
 Earlier, we had a bus for our proxy server and an upstream server. In our multi-user server above, we have a client bus and a master bus:
 
 ```javascript
-var master_bus = require('statebus/server')({
+var master_bus = require('statebus').serve({
 
   client: function (client_bus) {                   
     client_bus('message/*').to_fetch = function (k) {...}
@@ -554,7 +554,7 @@ If you use the `client:` option when you create a bus, you enable multiple users
 The function you pass to the `client:` option when you create a bus defines the custom view each connected user will have of the master state. The general pattern is:
 
 ```javascript
-var master = require('statebus/server')({  // The master bus is defined here
+var master = require('statebus').serve({  // The master bus is defined here
     client: function (client) {            // Each client bus is passed as an argument here
 
         // Client-specific state definitions go here

@@ -104,7 +104,7 @@ dom.AUTH_FORM = ->
   auth = fetch 'auth'
   current_user = fetch '/current_user'
   new_user = auth.form == 'register'
-  submit_enabled = auth.name && auth.password \
+  submit_enabled = auth.name && auth.pass \
                    && (!new_user || auth.email)
     
   DIV {},                     
@@ -126,9 +126,9 @@ dom.AUTH_FORM = ->
     INPUT
       type: 'password'
       placeholder: 'password'
-      value: auth.password
+      value: auth.pass
       onChange: (e) =>
-        auth.password = e.target.value; save auth    
+        auth.pass = e.target.value; save auth    
 
 
     INPUT 
@@ -136,11 +136,12 @@ dom.AUTH_FORM = ->
       value: if new_user then 'Register' else 'Log in'
       disabled: !submit_enabled
       onClick: if submit_enabled then ->
+        cred = {name: auth.name, pass: auth.pass, email: auth.email}
         if new_user
-          current_user.create_account = auth 
-        current_user.login_as = auth
+          current_user.create_account = cred 
+        current_user.login_as = cred
         save current_user
-        auth.form = auth.name = auth.password = auth.email = null
+        auth.form = auth.name = auth.pass = auth.email = null
         save auth
 
     if current_user.error
@@ -158,4 +159,4 @@ dom.AUTH_FORM = ->
 
 random_string = -> Math.random().toString(36).substring(3)
 
-</script><script src="https://stateb.us/client5.js" server="http://localhost:3005"></script> #This is the server we'll synchronize our state with.
+</script><script src="https://stateb.us/client6.js" server="http://localhost:3006"></script> #This is the server we'll synchronize our state with.
