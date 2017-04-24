@@ -92,7 +92,8 @@
 
     if (nodejs)
         var red = '\x1b[31m', normal = '\x1b[0m', grey = '\x1b[0;38;5;245m',
-            green = '\x1b[0;38;5;46m', brown = '\x1b[0;38;5;130m'
+            green = '\x1b[0;38;5;46m', brown = '\x1b[0;38;5;130m',
+            yellow = '\x1b[0;38;5;226m'
     else
         var red = '', normal = '', grey = '',
             green = '', brown = ''
@@ -222,7 +223,7 @@
 
     save.abort = function (obj, t) {
         console.assert(obj)
-        log('Abort:', obj.key)
+        statelog(yellow, '<', 'Aborting ' + obj.key)
         mark_changed(obj.key, t)
     }
 

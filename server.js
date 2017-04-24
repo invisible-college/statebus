@@ -719,6 +719,7 @@ function add_server_methods (bus)
                 for (var i=0; i<users.all.length; i++) {
                     var u = master.fetch(users.all[i])
                     var login = (u.login || u.name).toLowerCase()
+                    console.assert(login, 'Missing login for user', u)
                     if (result.hasOwnProperty(login)) {
                         console.error("upass: this user's name is bogus, dude.", u.key)
                         continue
@@ -900,8 +901,8 @@ function add_server_methods (bus)
             console.assert(o.key.match(/^user\/[^\/]+$/))
 
             // Validate types
-            if (!client.validate(o, {'?name': 'string', email: 'string', '?pic': 'string',
-                                     key: 'string', '?pass': 'string', '?login': 'string',
+            if (!client.validate(o, {key: 'string', '?login': 'string', '?name': 'string',
+                                     '?pass': 'string', email: 'string', '?pic': 'string',
                                      '*':'*'})) {
                 client.save.abort(o)
                 return
@@ -915,6 +916,10 @@ function add_server_methods (bus)
                 return
             }
 
+            // Rules for updating "login" and "name" attributes:
+            //  • If "login" isn't specified, then we use "name" as login
+            //  • That resulting login must be unique across all users
+
             // There must be at least a login or a name
             var login = o.login || o.name
             if (!login) {
@@ -922,18 +927,29 @@ function add_server_methods (bus)
                 return
             }
 
-            // Update login
             var u = master.fetch(o.key)
             var userpass = master.fetch('users/passwords')
-            if (!userpass.hasOwnProperty(o.login.toLowerCase())    // if unique
-                || u.login.toLowerCase() == o.login.toLowerCase()) // or just changing caps
-                u.login = o.login
 
-            // Update name
-            if (o.login
-                || !userpass.hasOwnProperty(o.name.toLowerCase())  // if unique
-                || u.name.toLowerCase() == o.name.toLowerCase())   // or just changing caps
-                u.name = o.name
+            // Validate that the login/name is not changed to something clobberish
+            var old_login = u.login || u.name
+            if (old_login.toLowerCase() !== login.toLowerCase()
+                && userpass.hasOwnProperty(login)) {
+                client.log('The login', login, 'is already taken. Aborting.')
+                // client.honk = master.honk = true
+                client.save.abort(o)         // Abort
+
+                o = client.fetch(o.key)      // Add error message
+                o.error = 'That login or name is already taken'
+                client.save.fire(o)
+
+                //setTimeout(() => { console.log('now o is', client.cache[o.key]) }, 100)
+
+                return                       // And exit
+            }
+
+            // Now we can update login and name
+            u.login = o.login
+            u.name = o.name
 
             // Hash password
             o.pass = o.pass && require('bcrypt-nodejs').hashSync(o.pass)
