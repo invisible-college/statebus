@@ -935,14 +935,11 @@ function add_server_methods (bus)
             if (old_login.toLowerCase() !== login.toLowerCase()
                 && userpass.hasOwnProperty(login)) {
                 client.log('The login', login, 'is already taken. Aborting.')
-                // client.honk = master.honk = true
                 client.save.abort(o)         // Abort
 
                 o = client.fetch(o.key)      // Add error message
-                o.error = 'That login or name is already taken'
+                o.error = 'The login "' + login + '" is already taken'
                 client.save.fire(o)
-
-                //setTimeout(() => { console.log('now o is', client.cache[o.key]) }, 100)
 
                 return                       // And exit
             }
