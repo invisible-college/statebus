@@ -493,7 +493,7 @@ master_bus('message/*').to_save = function (o, t) { // When a message is saved, 
     chat.messages.push(o)                          // add it
     master_bus.save(chat)                          // and save our change to the history
   }
-  master_bus.save.fire(o)                          // Now complete the save of the message
+  t.done(o)                                        // Now complete the save of the message
 }
 
 master_bus('message/*').to_delete = function (k) { // Cleanup when a message is deleted
@@ -611,12 +611,12 @@ If they are, you can get the current user's key with `fetch('/current_user').use
 In our server code above, we use the `current_user` state to check if the client has sufficient permissions to delete the message:
 
 ```javascript
-client_bus('message/*').to_delete = function (k) {
+client_bus('message/*').to_delete = function (k, t) {
   var msg = client_bus.fetch(k)
   if (uid(client_bus) == msg.author)
     master_bus.delete(k)
   else 
-    client_bus.save.abort(o)
+    t.abort(o)
 }
 
 function uid(client) {
