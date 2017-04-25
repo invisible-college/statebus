@@ -466,9 +466,10 @@ var master_bus = require('statebus').serve({       // The master bus
                                                     // Only authors can delete a message
     client_bus('message/*').to_delete = function (k,t) { 
       var msg = client_bus.fetch(k)
-      if (uid(client_bus) == msg.author)            // Ensure current user is the author
+      if (uid(client_bus) == msg.author) {          // Ensure current user is the author
         master_bus.delete(k)                        // to delete the message
-      else {
+        t.done()
+      } else {
         t.abort()                                   // otherwise, reject the delete
       }                                             // (the abort method for delete will change soon)      
     }
@@ -496,7 +497,7 @@ master_bus('message/*').to_save = function (o, t) { // When a message is saved, 
   t.done(o)                                        // Now complete the save of the message
 }
 
-master_bus('message/*').to_delete = function (k) { // Cleanup when a message is deleted
+master_bus('message/*').to_delete = function (k, t) { // Cleanup when a message is deleted
   var chat = master_bus.fetch('chat'), 
       idx = chat.messages.findIndex(function(m){return m.key == k})
 
@@ -504,6 +505,7 @@ master_bus('message/*').to_delete = function (k) { // Cleanup when a message is 
     m = chat.messages.splice(idx, 1)               // Remove the message from the index
     master_bus.save(chat)
   }
+  t.done()
 }
 
 chat = master_bus.fetch('chat')                        
@@ -613,9 +615,10 @@ In our server code above, we use the `current_user` state to check if the client
 ```javascript
 client_bus('message/*').to_delete = function (k, t) {
   var msg = client_bus.fetch(k)
-  if (uid(client_bus) == msg.author)
+  if (uid(client_bus) == msg.author) {
     master_bus.delete(k)
-  else 
+    t.done()
+  } else
     t.abort(o)
 }
 
