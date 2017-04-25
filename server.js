@@ -793,7 +793,7 @@ function add_server_methods (bus)
             return {user: u || null, logged_in: !!u}
         }
 
-        client('current_user').to_save = function (o) {
+        client('current_user').to_save = function (o, t) {
             function error (msg) {
                 client.save.abort(o)
                 var c = client.fetch('current_user')
@@ -874,7 +874,7 @@ function add_server_methods (bus)
                 }
             }
 
-            client.dirty('current_user')
+            t.refetch()
         }
         client('current_user').to_delete = function () {}
 

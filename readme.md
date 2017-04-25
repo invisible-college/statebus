@@ -369,20 +369,20 @@ fetch('one_plus/2').result   // ==> 3
 The general form of a `to_fetch` handler is:
 
 ```javascript
-bus('the_answer').to_fetch = function (key) {
+bus('the_answer').to_fetch = function (key, t) {
    // Do some stuff...
    // ...and then fire the new state across the bus,
    // using one of these equivalent statements:
    return {key: 'the_answer', n: 42}
    return {n: 42}                                    // Statebus can infer the key in return statements
    my_async_funk( function(){
-     bus.save.fire({key: 'the_answer', n: 42})       // Use this from within callbacks
+     t.done({key: 'the_answer', n: 42})       // Use this from within callbacks
    })
 }
 ```
 
 Each .to_fetch function *must* eventually return new state, either with a
-return statement or bus.save.fire.  Until the `.to_fetch function returns,
+return statement or t.done(obj).  Until the `.to_fetch function returns,
 anything that fetches it will be *loading*.
 
 ### Handle saves with `to_save`
@@ -391,31 +391,30 @@ anything that fetches it will be *loading*.
 our proxy server will send new and updated messages to our upstream server: 
 
 ```javascript
-proxy_bus('message/*').to_save = function (o) { 
-  upstream_bus.save.fire(o)     
+proxy_bus('message/*').to_save = function (o, t) {
+  upstream_bus.save(o)
 }
 ```
 
 The general form of a `to_save` handler is:
 
 ```javascript
-bus("key_pattern").to_save = function (obj) {
+bus("key_pattern").to_save = function (obj, t) {
    // Here you can validate obj, tweak it, update a backing store...
    // And eventually, either call:
-   bus.save.abort(obj)   // To deny this save request!
+   t.abort()   // To deny this save request!
 
    // ... or:
-   bus.save.fire(obj)    // To broadcast the result across the bus!
+   t.done(obj)    // To broadcast the result across the bus!
 
    // ... or:
-   bus.dirty(obj.key)    // To re-run a to_fetch handler, if you've defined one.
+   t.refetch()    // To re-run a to_fetch handler, if you've defined one.
 }
 ```
 
-Your `to_save` handler will receive the requested new state `obj` as a
-parameter, and must either call `save.abort(obj)` to ignore the request, or
-`save.fire(obj)` to broadcast it. It doesn't matter if the `to_save` handler 
-*itself* fires the change, but the save will remain pending until *something* does.
+Your `to_save` handler will receive the requested new state `obj` and transaction `t` as
+parameters, and must either call `t.abort(obj)` to ignore the request, or
+`t.fire(obj)` to broadcast it.
 
 This lets you control:
 - Which changes to state are allowed
@@ -486,7 +485,7 @@ var master_bus = require('statebus').serve({       // The master bus
 
 // Now we can define how state on the master bus behaves.
 
-master_bus('message/*').to_save = function (o) {   // When a message is saved, put it in the chat history
+master_bus('message/*').to_save = function (o, t) { // When a message is saved, put it in the chat history
   var chat = master_bus.fetch('chat'),                 
       idx = chat.messages.findIndex(function (m) {return m.key === o.key})
 

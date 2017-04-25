@@ -785,6 +785,8 @@
                         bus.save.fire(o)
                     }
                 }
+            if (method === 'to_save')
+                t.refetch = function () { bus.dirty(arg.key) }
 
             // Then in run_handler, we'll call it with:
             var args = []
