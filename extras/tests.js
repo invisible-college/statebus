@@ -114,7 +114,7 @@ var tests = [
             assert(obj.i >= 0 && obj.i <= 4)
             assert(Object.keys(obj).length === 2)
             assert(t.version)
-            n.save.fire(obj)
+            t.done()
         }
         for (var i=0; i<4; i++)
             n.save({key: 'a/foo', i:i})
@@ -125,6 +125,83 @@ var tests = [
         n.forget('v/[3,4]')
 
         next()
+    },
+
+    function transactions (next) {
+        var bus = require('../statebus')()
+        bus.honk = 'statelog'
+        bus.label = 'tranny'
+
+        // Test to_fetch handlers with t.done()
+        bus('foo1').to_fetch = (t) => {
+            log('to_fetching foo1')
+            setTimeout(()=>{
+                log('returning something for foo1')
+                t.done({something: 'yeah'})
+            }, 0)
+        }
+        var foo1 = bus.fetch('foo1')
+        assert(!foo1.something)
+        setTimeout(() => { log('test foo1'); assert(foo1.something === 'yeah') }, 10)
+
+        // And return a value directly
+        bus('foo2').to_fetch = (t) => { return {something: 'yeah'} }
+        var foo2 = bus.fetch('foo2')
+        setTimeout(() => { log('test foo2'); assert(foo2.something === 'yeah') }, 10)
+
+
+        // Set up some rocks
+        log('Set up some rocks')
+        bus.save({key: 'rock1', a:1})
+        bus.save({key: 'rock2', a:1})
+        bus.save({key: 'softrock1', a:1})
+        bus.save({key: 'softrock2', a:1})
+
+        // Test to_save handlers with t.done(o), t.abort, 'done', 'abort'
+        bus('rock1').to_save = (t) => {setTimeout(()=>{ t.abort() }, 0)}
+        bus('rock2').to_save = ( ) => {return 'abort'}
+        bus('softrock1').to_save = (t) => {setTimeout(()=>{ t.done() }, 0)}
+        bus('softrock2').to_save = ( ) => {return 'done'}
+        
+        //bus.honk = true
+        setTimeout(() => {
+            log('Save some changes')
+            bus.save({key: 'rock1', a:2})
+            bus.save({key: 'rock2', a:2})
+            bus.save({key: 'softrock1', a:2})
+            bus.save({key: 'softrock2', a:2})
+
+            setTimeout(() => {
+                log('Check if the saves worked...')
+                assert(bus.cache.rock1.a == 1)
+                assert(bus.cache.rock2.a == 1)
+                assert(bus.cache.softrock1.a == 2)
+                assert(bus.cache.softrock2.a == 2)
+
+                // Test the delete handlers with t.done(o), t.abort, 'done', 'abort'
+                log("Now let's delete")
+                bus('rock1').to_delete = (t) => {setTimeout(()=>{ t.abort() }, 0)}
+                bus('rock2').to_delete = ( ) => {return 'abort'}
+                bus('softrock1').to_delete = (t) => {setTimeout(()=>{ t.done() }, 0)}
+                bus('softrock2').to_delete = ( ) => {return 'done'}
+                
+                log('Delete some rocks')
+                bus.delete('rock1')
+                bus.delete('rock2')
+                bus.delete('softrock1')
+                bus.delete('softrock2')
+
+                setTimeout(() => {
+                    log("Test if the deletes worked")
+                    assert(bus.cache.rock1)
+                    assert(bus.cache.rock2)
+                    assert(!bus.cache.softrock1)
+                    assert(!bus.cache.softrock2)
+                    next()
+                }, 10)
+
+            }, 10)
+        }, 20)
     },
 
     function url_translation (next) {
@@ -772,7 +849,7 @@ var tests = [
            bus.save(o)
         })
         setTimeout(() => {
-            assert(!bus.cache['foo'].bar)
+            assert(!bus.cache.foo.bar)
             next()
         }, 40)
     },

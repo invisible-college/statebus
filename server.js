@@ -1123,6 +1123,7 @@ function add_server_methods (bus)
                 else if (method == 'to_delete')
                     bus.run_handler(function delete_from_master (k, t) {
                         master_bus.delete(k)
+                        return 'done'
                     }, method, arg, {t: t})
             }
             return count

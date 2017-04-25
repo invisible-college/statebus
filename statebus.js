@@ -222,6 +222,7 @@
     }
 
     save.abort = function (obj, t) {
+        abort_changes([obj.key])
         console.assert(obj)
         statelog(yellow, '<', 'Aborting ' + obj.key)
         mark_changed(obj.key, t)
@@ -413,12 +414,11 @@
             return
         }
 
-        log('del:', key)
-        function abort () { abort.called = true }
-        bus.route(key, 'to_delete', key, {abort: abort})
-        //forget(key /*, bus??*/)
-
-        if (!abort.called)
+        statelog(yellow, 'v', 'Deleting ' + key)
+        // Call the to_delete handlers
+        var handlers_called = bus.route(key, 'to_delete', key)
+        if (handlers_called === 0)
+            // And go ahead and delete if there aren't any!
             delete cache[key]
 
         // console.warn("Deleting " + key + "-- Statebus doesn't yet re-run functions subscribed to it, or update versions")
@@ -691,6 +691,7 @@
         var t = options.t,
             just_make_it = options.dont_run,
             binding = options.binding
+
         // console.log("run_handler: ('"+(arg.key||arg)+"').on_"
         //             +method+' = f^'+funk_key(funck))
         // if (funck.statebus_name === undefined || funck.statebus_name === 'undefined')
@@ -762,10 +763,34 @@
             }
         }
         var f = reactive(function () {
+
+            // Initialize transaction
+            t = clone(t || {})
+            if (!(method in {to_fetch:1, to_forget:1}))
+                t.abort = function () {
+                    var key = method === 'to_save' ? arg.key : arg
+                    if (f.loading()) return
+                    bus.save.abort(bus.cache[key])
+                }
+            if (method !== 'to_forget')
+                t.done = function (o) {
+                    var key = method === 'to_save' ? arg.key : arg
+                    bus.log('We are DONE()ing', method, key, o||arg)
+                    if (method === 'to_delete')
+                        delete bus.cache[key]
+                    else if (method === 'to_save')
+                        bus.save.fire(o || arg)
+                    else { // Then method === to_fetch
+                        o.key = key
+                        bus.save.fire(o)
+                    }
+                }
+
             // Then in run_handler, we'll call it with:
             var args = []
             args[0] = arg
             args[1] = t
+
             //console.log('This funcs args are', func.args)
             for (var k in (func.args||{})) {
                 switch (k) {
@@ -790,6 +815,7 @@
             }
             //console.log('args is', args)
 
+            // Call the raw function here!
             var result = func.apply(null, args)
 
             // We will wanna add in the fancy arg stuff here, with:
@@ -797,6 +823,12 @@
             // for (var k of func.args || {})
             //    arr[func.args[k]] = <compute_blah(k)>
 
+            // Trigger done() or abort() by return value
+            console.assert(!(result === 'to_fetch' &&
+                             (result === 'done' || result === 'abort')),
+                           'Returning "done" or "abort" is not allowed from to_fetch handlers')
+            if (result === 'done')  t.done()
+            if (result === 'abort') t.abort()
 
             // For fetch
             if (method === 'to_fetch' && result instanceof Object
