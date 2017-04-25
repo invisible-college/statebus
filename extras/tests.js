@@ -763,6 +763,20 @@ var tests = [
         next()
     },
 
+    function rollback_abort (next) {
+        var bus = require('../statebus')()
+        bus('foo').to_save = (o, t) => {t.abort()}
+        bus(()=> {
+           var o = bus.fetch('foo')
+           o.bar = 3
+           bus.save(o)
+        })
+        setTimeout(() => {
+            assert(!bus.cache['foo'].bar)
+            next()
+        }, 40)
+    },
+
     function loading_quirk (next) {
         // Make sure a function that called loading() gets re-run even
         // if the return from a fetch didn't actually change state
@@ -820,22 +834,14 @@ var tests = [
     },
 
     function setup_server (next) {
-        function User (client, conn) {
-            user0 = client
-            client.serves_auth(conn, s)
-            client.shadows (s)
-            s.userbus = client
-        }
-
-        s = require('../statebus')()
+        s = require('../statebus').serve({port: 3948, file_store: false})
         s.label = 's'
         log('Saving /far on server')
         s.save({key: 'far', away:'is this'})
-        s.serve({port: 3948, client_definition: User, file_store: false})
 
         c = require('../statebus')()
         c.label = 'c'
-        c.ws_client('/*', 'state://localhost:3948')
+        c.ws_client('/*', 'statei://localhost:3948')
 
         // s.honk = true
         // c.honk = true
