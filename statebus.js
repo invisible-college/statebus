@@ -785,6 +785,7 @@
                         bus.save.fire(o)
                     }
                 }
+            t.return = t.done
             if (method === 'to_save')
                 t.refetch = function () { bus.dirty(arg.key) }
 
