@@ -3,52 +3,6 @@
 
     // ****************
     // Connecting over the Network
-    function socketio_client (bus, prefix, url) {
-        bus.log('socketio to', url)
-        var socket = io(url)
-        var fetched_keys = new Set()
-
-        bus(prefix).to_fetch = function (key) {
-            bus.log('fetching', key, 'from', url)
-            // Error check
-            // if (pending_fetches[key]) {
-            //     console.error('Duplicate request for '+key)
-            //     return
-            // }
-            // pending_fetches[key] = true
-            fetched_keys.add(key)
-            socket.emit('fetch', key)
-        }
-
-        var saver = bus(prefix).to_save = function (object) {
-            bus.log('sending save', object)
-            socket.emit('save', object)
-            bus.save.fire(object)
-        }
-        bus(prefix).to_delete = function (key)    { socket.emit('delete', key) }
-        bus(prefix).to_forget = function (key) {
-            socket.emit('forget', key)
-            fetched_keys.delete(key)
-        }
-
-        // Receive stuff
-        socket.on('save', function(message) {
-            bus.log('socketio_client: received SAVE', message.obj.key)
-            var obj = message.obj
-            //delete pending_fetches[obj.key]
-            save(obj, saver)
-        })
-
-        socket.on('delete', del)
-
-        // Reconnect needs to re-establish dependencies
-        socket.on('reconnect', function() {
-            var keys = fetched_keys.values()
-            for (var i=0; i<keys.length; i++)
-                socket.emit('fetch', keys[i])
-        })
-    }
-
     function set_cookie (key, val) {
         document.cookie = key + '=' + val + '; Expires=21 Oct 2025 00:0:00 GMT;'
     }
@@ -395,7 +349,7 @@
     // ###
 
     function make_client_statebus_maker () {
-        var extra_stuff = ['socketio_client sockjs_client localstorage_client',
+        var extra_stuff = ['sockjs_client localstorage_client',
                            'universal_sockjs url_store components live_reload_from'].join(' ').split(' ')
         if (window.statebus) {
             var orig_statebus = statebus
@@ -448,7 +402,7 @@
         window.sb = bus.sb
 
         improve_react()
-        window.dom = window.dom || {}
+        window.dom = window.ui = window.dom || window.ui || {}
         window.ignore_flashbacks = false
         if (statebus_server !== 'none')
             bus.sockjs_client ('/*', statebus_server)
@@ -469,6 +423,9 @@
             bus.save(o)
         }
         load_coffee()
+
+        statebus.compile_coffee = compile_coffee
+        statebus.load_client_code = load_client_code
 
         if (window.statebus_ready)
             for (var i=0; i<statebus_ready.length; i++)
@@ -572,18 +529,26 @@
     }
 
     // Load the components
-    function make_component(name) {
+    function make_component(name, safe_renders) {
         // Define the component
 
         window[name] = window.React_View({
             displayName: name,
-            render: function () { 
-                var vdom = window.dom[name].bind(this)()
+            render: function () {
+                var vdom
+                if (safe_renders)
+                    try {
+                        vdom = window.dom[name].bind(this)()
+                    } catch (error) {
+                        console.error(error)
+                    }
+                else
+                    vdom = window.dom[name].bind(this)()
 
-                // This is temporary: it automatically adds two attributes
-                // "data-key" and "data-widget" to the root node of every
-                // react component.  Let's find a better solution.
-                if (vdom.props) {
+                // This automatically adds two attributes "data-key" and
+                // "data-widget" to the root node of every react component.
+                // I think we might wanna find a better solution.
+                if (vdom && vdom.props) {
                     vdom.props['data-widget'] = name
                     vdom.props['data-key'] = this.props['data-key']
                 }
@@ -616,6 +581,44 @@
         })
     }
 
+    function compile_coffee (coffee, filename) {
+        var compiled
+        try {
+            compiled = CoffeeScript.compile(coffee,
+                                            {bare: true,
+                                             sourceMap: true,
+                                             filename: filename})
+            var source_map = JSON.parse(compiled.v3SourceMap)
+            source_map.sourcesContent = coffee
+            compiled = compiled.js
+
+            // Base64 encode it
+            compiled += '\n'
+            compiled += '//# sourceMappingURL=data:application/json;base64,'
+            compiled += btoa(JSON.stringify(source_map)) + '\n'
+            compiled += '//# sourceURL=' + filename
+        } catch (error) {
+            if (error.location)
+                console.error('Syntax error in '+ filename + ' on line',
+                              error.location.first_line
+                              + ', column ' + error.location.first_column + ':',
+                              error.message)
+            else throw error
+        }
+        return compiled
+    }
+    function load_client_code (code, safe) {
+        var dom = {}, ui = {}
+        eval(code)
+        for (var k in ui) {
+            console.log('adding', k, 'into dom', dom[k])
+            dom[k] = dom[k] || ui[k]
+        }
+        for (var view in dom) {
+            window.dom[view] = dom[view]
+            make_component(view, safe)
+        }
+    }
     function load_coffee () {
         var scripts = document.getElementsByTagName("script")
         var filename = location.pathname.substring(location.pathname.lastIndexOf('/') + 1)
@@ -623,41 +626,11 @@
             if (scripts[i].getAttribute('type')
                 in {'statebus':1, 'coffeedom':1,'statebus-js':1}) {
                 // Compile coffeescript to javascript
-                var compiled
+                var compiled = scripts[i].text
                 if (scripts[i].getAttribute('type') !== 'statebus-js')
-                    try {
-                        compiled = CoffeeScript.compile(scripts[i].text/*.replace(/(\s[A-Z_]+)\n/g, '$1 null,\n')*/,
-                                                        {bare: true,
-                                                         sourceMap: true,
-                                                         filename: filename})
-                        var source_map = JSON.parse(compiled.v3SourceMap)
-                        source_map.sourcesContent = scripts[i].text
-                        compiled = compiled.js
-
-                        // Base64 encode it
-                        compiled += '\n'
-                        compiled += '//# sourceMappingURL=data:application/json;base64,'
-                        compiled += btoa(JSON.stringify(source_map)) + '\n'
-                        compiled += '//# sourceURL=' + filename
-                    } catch (error) {
-                        if (error.location)
-                            console.error('Syntax error in '+ filename + ' on line',
-                                          error.location.first_line
-                                          + ', column ' + error.location.first_column + ':',
-                                          error.message)
-                        else throw error
-                    }
-                else
-                    compiled = scripts[i].text
-
-                if (compiled) {
-                    eval(compiled)
-                    for (var view in dom) {
-                        window.dom[view] = dom[view]
-                        make_component(view)
-
-                    }
-                }
+                    compiled = compile_coffee(scripts[i].text, filename)
+                if (compiled)
+                    load_client_code(compiled)
             }
     }
 })()
