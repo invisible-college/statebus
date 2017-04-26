@@ -1,5 +1,5 @@
-<script type="statebus">
-name = location.pathname.replace(/^\/edit\//, '')
+exports.code = `<script type="statebus">
+name = location.pathname.replace(/^\\/edit\\//, '')
 ui.BODY = ->
   code = fetch('/code/' + name)._ or ''
   empty = not code.match(/^(dom|UI).BODY /i)
@@ -33,4 +33,4 @@ document.addEventListener('keydown', (e) ->
     e.open = not e.open
     save(e)
 , false)
-#</script><script src="/client.js"></script>
+#</script><script src="/client.js"></script>`

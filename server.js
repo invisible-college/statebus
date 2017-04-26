@@ -1215,7 +1215,7 @@ function add_server_methods (bus)
 
     serve_wiki: () => {
         bus('edit/*').to_fetch = (k, rest) => {
-            return {_: bus.read_file('extras/wiki.coffee')}
+            return {_: require('./extras/wiki.coffee').code}
         }
     },
 
