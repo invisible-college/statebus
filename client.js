@@ -610,10 +610,7 @@
     function load_client_code (code, safe) {
         var dom = {}, ui = {}
         eval(code)
-        for (var k in ui) {
-            console.log('adding', k, 'into dom', dom[k])
-            dom[k] = dom[k] || ui[k]
-        }
+        for (var k in ui) dom[k] = dom[k] || ui[k]
         for (var view in dom) {
             window.dom[view] = dom[view]
             make_component(view, safe)

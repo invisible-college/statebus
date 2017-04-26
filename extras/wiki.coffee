@@ -33,4 +33,4 @@ document.addEventListener('keydown', (e) ->
     e.open = not e.open
     save(e)
 , false)
-#</script><script src="/client.js"></script>`
+#</script><script src="https://stateb.us/client6.js"></script>`
