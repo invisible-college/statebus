@@ -603,11 +603,14 @@
             source_map.sourcesContent = coffee
             compiled = compiled.js
 
-            // Base64 encode it
-            compiled += '\n'
-            compiled += '//# sourceMappingURL=data:application/json;base64,'
-            compiled += btoa(JSON.stringify(source_map)) + '\n'
-            compiled += '//# sourceURL=' + filename
+            // Base64 encode the source map
+            try {
+                compiled += '\n'
+                compiled += '//# sourceMappingURL=data:application/json;base64,'
+                compiled += btoa(JSON.stringify(source_map)) + '\n'
+                compiled += '//# sourceURL=' + filename
+            } catch (e) {}  // btoa() fails on unicode. Give up for now.
+
         } catch (error) {
             if (error.location)
                 console.error('Syntax error in '+ filename + ' on line',
