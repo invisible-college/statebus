@@ -523,8 +523,19 @@
 
         make_better_input("INPUT", React.DOM.input)
         make_better_input("TEXTAREA", React.DOM.textarea)
-        window['TITLE'] = function (title) {
-            return React.DOM.title({dangerouslySetInnerHTML: {__html: title}})
+
+        // Unfortunately, React's default STYLE and TITLE tags are useless
+        // unless you "dangerously set inner html" because they wrap strings
+        // inside useless spans.
+        function escape_html (s) {
+            // TODO: this will fail on '<' and '>' in CSS selectors
+            return s.replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        }
+        window.STYLE = function (s) {
+            return React.DOM.style({dangerouslySetInnerHTML: {__html: escape_html(s)}})
+        }
+        window.TITLE = function (s) {
+            return React.DOM.title({dangerouslySetInnerHTML: {__html: escape_html(s)}})
         }
     }
 
