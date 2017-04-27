@@ -414,7 +414,7 @@ bus("key_pattern").to_save = function (obj, t) {
 
 Your `to_save` handler will receive the requested new state `obj` and transaction `t` as
 parameters, and must either call `t.abort(obj)` to ignore the request, or
-`t.fire(obj)` to broadcast it.
+`t.done(obj)` to broadcast it.
 
 This lets you control:
 - Which changes to state are allowed
