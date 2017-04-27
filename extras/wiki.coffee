@@ -19,6 +19,8 @@ ui.EDITABLE_BODY = ->
   DIV {},
     if editor.open
       TEXTAREA
+        id: 'wiki-editor'
+        autoFocus: true
         rows: 20
         cols: 100
         value: code._ or ''
@@ -40,6 +42,8 @@ toggle_editor = (e) ->
     editor = fetch('editor')
     editor.open = not editor.open
     save(editor)
+    if editor.open
+      setTimeout((-> document.getElementByID('wiki-editor').focus()), 10)
 
 document.addEventListener('keydown', toggle_editor, false)
 #</script><script src="https://stateb.us/client6.js"></script>`
