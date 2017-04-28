@@ -1201,6 +1201,7 @@ function add_server_methods (bus)
             var source_map = JSON.parse(compiled.v3SourceMap)
             source_map.sourcesContent = source
             compiled = 'window.dom = window.dom || {}\n' + compiled.js
+            compiled = 'window.ui = window.ui || {}\n' + compiled.js
 
             function btoa(s) { return new Buffer(s.toString(),'binary').toString('base64') }
 
