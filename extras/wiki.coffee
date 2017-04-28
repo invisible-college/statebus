@@ -43,7 +43,7 @@ toggle_editor = (e) ->
     editor.open = not editor.open
     save(editor)
     if editor.open
-      setTimeout((-> document.getElementByID('wiki-editor').focus()), 10)
+      setTimeout((-> document.getElementById('wiki-editor').focus()), 10)
 
 document.addEventListener('keydown', toggle_editor, false)
 #</script><script src="https://stateb.us/client6.js"></script>`

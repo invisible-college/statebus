@@ -623,7 +623,8 @@
     }
     function load_client_code (code, safe) {
         var dom = {}, ui = {}
-        eval(code)
+        if (code) eval(code)
+        else { dom = window.dom; ui = window.ui }
         for (var k in ui) dom[k] = dom[k] || ui[k]
         for (var view in dom) {
             window.dom[view] = dom[view]
@@ -631,6 +632,7 @@
         }
     }
     function load_coffee () {
+        load_client_code()
         var scripts = document.getElementsByTagName("script")
         var filename = location.pathname.substring(location.pathname.lastIndexOf('/') + 1)
         for (var i=0; i<scripts.length; i++)
