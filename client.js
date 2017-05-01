@@ -431,8 +431,9 @@
             for (var i=0; i<statebus_ready.length; i++)
                 statebus_ready[i]()
 
+        var render = React.version >= '0.12.' ? ReactDOM.render : React.render
         if (dom.Body || dom.body || dom.BODY)
-            React.render((window.Body || window.body || window.BODY)(), document.body)
+            render((window.Body || window.body || window.BODY)(), document.body)
     }
 
     function improve_react() {
