@@ -395,7 +395,9 @@
         (loaded_from_file_url ? 'https://stateb.us:3006' : '/')
     window.statebus_backdoor = window.statebus_backdoor ||
         script_elem().getAttribute('backdoor')
+    var react_render
     function scripts_ready () {
+        react_render = React.version >= '0.14.' ? ReactDOM.render : React.render
         make_client_statebus_maker()
         window.bus = window.statebus()
         window.bus.label = 'bus'
@@ -423,6 +425,7 @@
             bus.save(o)
         }
         load_coffee()
+        load_widgets()
 
         statebus.compile_coffee = compile_coffee
         statebus.load_client_code = load_client_code
@@ -430,10 +433,8 @@
         if (window.statebus_ready)
             for (var i=0; i<statebus_ready.length; i++)
                 statebus_ready[i]()
-
-        var render = React.version >= '0.14.' ? ReactDOM.render : React.render
         if (dom.Body || dom.body || dom.BODY)
-            render((window.Body || window.body || window.BODY)(), document.body)
+            react_render((window.Body || window.body || window.BODY)(), document.body)
     }
 
     function improve_react() {
@@ -541,10 +542,11 @@
     }
 
     // Load the components
+    var widgets = {}
     function make_component(name, safe_renders) {
         // Define the component
 
-        window[name] = window.React_View({
+        window[name] = widgets[name] = window.React_View({
             displayName: name,
             render: function () {
                 var vdom
@@ -646,5 +648,35 @@
                 if (compiled)
                     load_client_code(compiled)
             }
+    }
+
+    function dom_to_widget (node) {
+        if (node.nodeName === '#text') return node.textContent
+
+        node.seen = true
+        var children = [], props = {}
+        // Recursively convert children
+        for (var i=0; i<node.childNodes.length; i++)
+            children.push(dom_to_widget(node.childNodes[i]))  // recurse
+
+        // Convert attributes to props
+        var props = {}
+        for (var i=0; node.attributes && i<node.attributes.length; i++)
+            props[node.attributes[i].name] = node.attributes[i].value
+
+        console.assert(widgets.hasOwnProperty(node.nodeName.toUpperCase()),
+                       node.nodeName + ' has not been defined as a UI widget.')
+
+        return widgets[node.nodeName](props, children)
+    }
+
+    function load_widgets () {
+        for (var w in widgets) {
+            if (React.DOM.hasOwnProperty(w.toLowerCase())) continue
+            var nodes = document.getElementsByTagName(w)
+            for (var i=0; i<nodes.length; i++)
+                if (!nodes[i].seen)
+                    react_render(dom_to_widget(nodes[i]), nodes[i])
+        }
     }
 })()
