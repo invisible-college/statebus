@@ -561,10 +561,13 @@
             displayName: name,
             render: function () {
                 var args = [], func = window.dom[name]
+
+                // Parse the function's args, and pass props into them directly
                 autodetect_args(func)
                 for (var i=0; i<func.args.length; i++)
                     args.push(this.props[func.args[i]])
 
+                // Now run the function.
                 var vdom
                 if (safe_renders)
                     try {
@@ -572,7 +575,7 @@
                     } catch (error) {
                         console.error(error)
                     }
-                else
+                else  // TODO: kill support for this safe_renders = false branch?
                     vdom = func.apply(this, args)
 
                 // This automatically adds two attributes "data-key" and
@@ -656,7 +659,8 @@
         var filename = location.pathname.substring(location.pathname.lastIndexOf('/') + 1)
         for (var i=0; i<scripts.length; i++)
             if (scripts[i].getAttribute('type')
-                in {'statebus':1, 'coffeedom':1,'statebus-js':1}) {
+                in {'statebus':1, 'coffeedom':1,'statebus-js':1,
+                    'coffee':1, 'coffeescript':1}) {
                 // Compile coffeescript to javascript
                 var compiled = scripts[i].text
                 if (scripts[i].getAttribute('type') !== 'statebus-js')

@@ -83,7 +83,7 @@
     }
     function fetch_once (key, cb) {
         function cb2 (o) { cb(o); forget(key, cb2) }
-        fetch(key)
+        // fetch(key)   // This prevents key from being forgotten
         fetch(key, cb2)
     }
     var pending_fetches = {}
