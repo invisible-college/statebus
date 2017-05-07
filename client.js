@@ -541,6 +541,17 @@
         }
     }
 
+    function autodetect_args (func) {
+        if (func.args) return
+
+        // Get an array of the func's params
+        var comments = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg,
+            params = /([^\s,]+)/g,
+            s = func.toString().replace(comments, '')
+        func.args = s.slice(s.indexOf('(')+1, s.indexOf(')')).match(params) || []
+    }
+
+
     // Load the components
     var widgets = {}
     function make_component(name, safe_renders) {
@@ -549,15 +560,20 @@
         window[name] = widgets[name] = window.React_View({
             displayName: name,
             render: function () {
+                var args = [], func = window.dom[name]
+                autodetect_args(func)
+                for (var i=0; i<func.args.length; i++)
+                    args.push(this.props[func.args[i]])
+
                 var vdom
                 if (safe_renders)
                     try {
-                        vdom = window.dom[name].bind(this)()
+                        vdom = func.apply(this, args)
                     } catch (error) {
                         console.error(error)
                     }
                 else
-                    vdom = window.dom[name].bind(this)()
+                    vdom = func.apply(this, args)
 
                 // This automatically adds two attributes "data-key" and
                 // "data-widget" to the root node of every react component.
@@ -664,12 +680,16 @@
         for (var i=0; node.attributes && i<node.attributes.length; i++)
             props[node.attributes[i].name] = node.attributes[i].value
 
-        console.assert(widgets.hasOwnProperty(node.nodeName.toUpperCase()),
-                       node.nodeName + ' has not been defined as a UI widget.')
+        var w = (widgets[node.nodeName]
+                 || widgets[node.nodeName.toLowerCase()]
+                 || widgets[node.nodeName.toUpperCase()]
+                 || widgets[node.nodeName.capitalize()])
+        console.assert(w, node.nodeName + ' has not been defined as a UI widget.')
 
-        return widgets[node.nodeName](props, children)
+        return w(props, children)
     }
 
+    window.widgets = widgets
     function load_widgets () {
         for (var w in widgets) {
             if (React.DOM.hasOwnProperty(w.toLowerCase())) continue
