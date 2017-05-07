@@ -696,7 +696,7 @@
     window.widgets = widgets
     function load_widgets () {
         for (var w in widgets) {
-            if (React.DOM.hasOwnProperty(w.toLowerCase())) continue
+            // if (React.DOM.hasOwnProperty(w.toLowerCase())) continue
             var nodes = document.getElementsByTagName(w)
             for (var i=0; i<nodes.length; i++)
                 if (!nodes[i].seen)
