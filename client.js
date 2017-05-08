@@ -553,17 +553,18 @@
 
 
     // Load the components
-    var widgets = {}
+    var users_widgets = {}
     function make_component(name, safe_renders) {
         // Define the component
 
-        window[name] = widgets[name] = window.React_View({
+        window[name] = users_widgets[name] = window.React_View({
             displayName: name,
             render: function () {
                 var args = [], func = window.dom[name]
 
                 // Parse the function's args, and pass props into them directly
                 autodetect_args(func)
+                this.props.kids = this.props.kids || this.props.children
                 for (var i=0; i<func.args.length; i++)
                     args.push(this.props[func.args[i]])
 
@@ -684,19 +685,16 @@
         for (var i=0; node.attributes && i<node.attributes.length; i++)
             props[node.attributes[i].name] = node.attributes[i].value
 
-        var w = (widgets[node.nodeName]
-                 || widgets[node.nodeName.toLowerCase()]
-                 || widgets[node.nodeName.toUpperCase()]
-                 || widgets[node.nodeName.capitalize()])
-        console.assert(w, node.nodeName + ' has not been defined as a UI widget.')
+        var widge = (window[node.nodeName.toUpperCase()]
+                    || window[node.nodeName.toLowerCase()])
+        console.assert(widge, node.nodeName + ' has not been defined as a UI widget.')
 
-        return w(props, children)
+        return widge(props, children)
     }
 
-    window.widgets = widgets
+    window.users_widgets = users_widgets
     function load_widgets () {
-        for (var w in widgets) {
-            // if (React.DOM.hasOwnProperty(w.toLowerCase())) continue
+        for (var w in users_widgets) {
             var nodes = document.getElementsByTagName(w)
             for (var i=0; i<nodes.length; i++)
                 if (!nodes[i].seen)
