@@ -395,9 +395,7 @@
         (loaded_from_file_url ? 'https://stateb.us:3006' : '/')
     window.statebus_backdoor = window.statebus_backdoor ||
         script_elem().getAttribute('backdoor')
-    var react_render
     function scripts_ready () {
-        react_render = React.version >= '0.14.' ? ReactDOM.render : React.render
         make_client_statebus_maker()
         window.bus = window.statebus()
         window.bus.label = 'bus'
@@ -425,7 +423,6 @@
             bus.save(o)
         }
         load_coffee()
-        load_widgets()
 
         statebus.compile_coffee = compile_coffee
         statebus.load_client_code = load_client_code
@@ -433,8 +430,10 @@
         if (window.statebus_ready)
             for (var i=0; i<statebus_ready.length; i++)
                 statebus_ready[i]()
+
+        var render = React.version >= '0.14.' ? ReactDOM.render : React.render
         if (dom.Body || dom.body || dom.BODY)
-            react_render((window.Body || window.body || window.BODY)(), document.body)
+            render((window.Body || window.body || window.BODY)(), document.body)
     }
 
     function improve_react() {
@@ -541,43 +540,22 @@
         }
     }
 
-    function autodetect_args (func) {
-        if (func.args) return
-
-        // Get an array of the func's params
-        var comments = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg,
-            params = /([^\s,]+)/g,
-            s = func.toString().replace(comments, '')
-        func.args = s.slice(s.indexOf('(')+1, s.indexOf(')')).match(params) || []
-    }
-
-
     // Load the components
-    var users_widgets = {}
     function make_component(name, safe_renders) {
         // Define the component
 
-        window[name] = users_widgets[name] = window.React_View({
+        window[name] = window.React_View({
             displayName: name,
             render: function () {
-                var args = [], func = window.dom[name]
-
-                // Parse the function's args, and pass props into them directly
-                autodetect_args(func)
-                this.props.kids = this.props.kids || this.props.children
-                for (var i=0; i<func.args.length; i++)
-                    args.push(this.props[func.args[i]])
-
-                // Now run the function.
                 var vdom
                 if (safe_renders)
                     try {
-                        vdom = func.apply(this, args)
+                        vdom = window.dom[name].bind(this)()
                     } catch (error) {
                         console.error(error)
                     }
-                else  // TODO: kill support for this safe_renders = false branch?
-                    vdom = func.apply(this, args)
+                else
+                    vdom = window.dom[name].bind(this)()
 
                 // This automatically adds two attributes "data-key" and
                 // "data-widget" to the root node of every react component.
@@ -660,8 +638,7 @@
         var filename = location.pathname.substring(location.pathname.lastIndexOf('/') + 1)
         for (var i=0; i<scripts.length; i++)
             if (scripts[i].getAttribute('type')
-                in {'statebus':1, 'coffeedom':1,'statebus-js':1,
-                    'coffee':1, 'coffeescript':1}) {
+                in {'statebus':1, 'coffeedom':1,'statebus-js':1}) {
                 // Compile coffeescript to javascript
                 var compiled = scripts[i].text
                 if (scripts[i].getAttribute('type') !== 'statebus-js')
@@ -669,36 +646,5 @@
                 if (compiled)
                     load_client_code(compiled)
             }
-    }
-
-    function dom_to_widget (node) {
-        if (node.nodeName === '#text') return node.textContent
-
-        node.seen = true
-        var children = [], props = {}
-        // Recursively convert children
-        for (var i=0; i<node.childNodes.length; i++)
-            children.push(dom_to_widget(node.childNodes[i]))  // recurse
-
-        // Convert attributes to props
-        var props = {}
-        for (var i=0; node.attributes && i<node.attributes.length; i++)
-            props[node.attributes[i].name] = node.attributes[i].value
-
-        var widge = (window[node.nodeName.toUpperCase()]
-                    || window[node.nodeName.toLowerCase()])
-        console.assert(widge, node.nodeName + ' has not been defined as a UI widget.')
-
-        return widge(props, children)
-    }
-
-    window.users_widgets = users_widgets
-    function load_widgets () {
-        for (var w in users_widgets) {
-            var nodes = document.getElementsByTagName(w)
-            for (var i=0; i<nodes.length; i++)
-                if (!nodes[i].seen)
-                    react_render(dom_to_widget(nodes[i]), nodes[i])
-        }
     }
 })()
