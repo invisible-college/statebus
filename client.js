@@ -687,8 +687,8 @@
         for (var i=0; node.attributes && i<node.attributes.length; i++)
             props[node.attributes[i].name] = node.attributes[i].value
 
-        var widge = (window[node.nodeName.toUpperCase()]
-                    || window[node.nodeName.toLowerCase()])
+        var widge = (window[node.nodeName.toLowerCase()]
+                     || window[node.nodeName.toUpperCase()])
         console.assert(widge, node.nodeName + ' has not been defined as a UI widget.')
 
         return widge(props, children)
