@@ -1416,7 +1416,7 @@
 
                 // Make sure we've fetched on this domain
                 if (!connections.hasOwnProperty(d)
-                    || !connections[d].fetches_out.hasOwnPropertyd(k))
+                    || !connections[d].fetches_out.hasOwnProperty(k))
                     console.error('Trying to forget', k, "that hasn't been fetched")
 
                 // Now clean up
