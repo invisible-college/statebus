@@ -403,6 +403,7 @@
         window.bus = window.statebus()
         window.bus.label = 'bus'
         window.sb = bus.sb
+        statebus.widget = React_View
 
         improve_react()
         window.dom = window.ui = window.dom || window.ui || {}

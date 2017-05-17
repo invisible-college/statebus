@@ -1130,7 +1130,7 @@ function add_server_methods (bus)
         }
     },
 
-    read_file: function init (filename) {
+    read_file: function init () {
         // The first time this is run, we initialize it by loading some
         // libraries
         var chokidar = require('chokidar')
@@ -1147,17 +1147,20 @@ function add_server_methods (bus)
             },
             {
                 start_watching: (args, dirty) => {
+                    var filename = args[0]
+                    //console.log('## starting to watch', filename)
                     watchers[filename] = chokidar.watch(filename)
                     watchers[filename].on('change', () => { dirty() })
                 },
                 stop_watching: (json) => {
-                    filename = json[0]
+                    var filename = json[0]
+                    //console.log('## stopping to watch', filename)
                     // log('unwatching', filename)
                     watchers[filename].close()
                     delete watchers[filename]
                 }
             })
-        return bus.read_file(filename)
+        return bus.read_file(arguments[0])
     },
 
     http_serve: function http_serve (route, fetcher) {

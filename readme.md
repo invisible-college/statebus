@@ -1303,7 +1303,24 @@ dom.BODY = ->
 ```
 
 
-# What's missing
+# Websocket Network Protocol
 
-- Good SQL database adapters
-- Connect to multiple servers simultaneously
+You can connect to a statebus server by just opening a websocket to `ws://<domain>/_connect_to_statebus_` (e.g. `new WebSocket('wss://stateb.us:3006/_connect_to_statebus_')`)
+Then you can send these messages (e.g. `sock.send(JSON.stringify(...))`:
+
+```javascript
+{fetch: <key>}
+{save: <obj>}
+{forget: <key>}  // To stop receiving objects that you've fetched
+{delete: <key>}
+```
+
+If you fetch, the server will send you back objects with `{save: <obj>}`.
+
+There is also a backwards-compatible HTTP version of the network protocol.
+
+# What's missing
+- Widgets re-render when their props change, or when statebus state changes,
+  but not when their children change.  We haven't figured out a good way to
+  determine when children change.  Luckily, we have rarely encountered
+  children changing in practice without state or props changing.
