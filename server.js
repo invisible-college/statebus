@@ -1197,23 +1197,25 @@ function add_server_methods (bus)
             filename = /\/client\/(.*)/.exec(filename)[0]
             var source_filename = filename.substr(1)
             var source = bus.read_file(source_filename)
-            var compiled = require('coffee-script').compile(source, {filename,
-                                                                     bare: true,
-                                                                     sourceMap: true})
+            if (filename.match(/\.coffee$/)) {
+                var compiled = require('coffee-script').compile(source, {filename,
+                                                                         bare: true,
+                                                                         sourceMap: true})
+                var source_map = JSON.parse(compiled.v3SourceMap)
+                source_map.sourcesContent = source
+                compiled = 'window.dom = window.dom || {}\n' + compiled.js
+                compiled = 'window.ui = window.ui || {}\n' + compiled
 
-            var source_map = JSON.parse(compiled.v3SourceMap)
-            source_map.sourcesContent = source
-            compiled = 'window.dom = window.dom || {}\n' + compiled.js
-            compiled = 'window.ui = window.ui || {}\n' + compiled
+                function btoa(s) { return new Buffer(s.toString(),'binary').toString('base64') }
 
-            function btoa(s) { return new Buffer(s.toString(),'binary').toString('base64') }
-
-            // Base64 encode it
-            compiled += '\n'
-            compiled += '//# sourceMappingURL=data:application/json;base64,'
-            compiled += btoa(JSON.stringify(source_map)) + '\n'
-            compiled += '//# sourceURL=' + source_filename
-            return compiled
+                // Base64 encode it
+                compiled += '\n'
+                compiled += '//# sourceMappingURL=data:application/json;base64,'
+                compiled += btoa(JSON.stringify(source_map)) + '\n'
+                compiled += '//# sourceURL=' + source_filename
+                return compiled
+            }
+            else return source
         })
     },
 
