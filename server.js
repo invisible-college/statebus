@@ -17,6 +17,7 @@ function add_server_methods (bus)
             client: (c) => {c.shadows(bus)},
             file_store: {save_delay: 250},
             serve: true,
+            certs: 'certs',
             __secure: false
         }
         bus.options = default_options
@@ -30,6 +31,7 @@ function add_server_methods (bus)
         //  - Undo the sudo
         //  - Wait until that's finished before touching any files
         var on_listen = null
+
         if (process.getuid() === 0) {
 
             // Setup handler for when we are listening
@@ -56,7 +58,8 @@ function add_server_methods (bus)
 
             // Add a redirect server if we have SSL
             var port = 80
-            if (require('fs').existsSync('certs')) {
+
+            if (require('fs').existsSync(bus.options.certs)) {
                 port = 443
                 num_servers_desired = 2
 
@@ -154,16 +157,16 @@ function add_server_methods (bus)
         var port = options.port || 3000
         var fs = require('fs')
 
-        if (fs.existsSync('certs')) {
+        if (fs.existsSync(this.options.certs)) {
             // Load with TLS/SSL
             console.log('Encryption ON')
             var http = require('https')
             var protocol = 'https'
             var ssl_options = {
-                ca: (fs.existsSync('certs/certificate-bundle')
-                     && require('split-ca')('certs/certificate-bundle')),
-                key:  fs.readFileSync('certs/private-key'),
-                cert: fs.readFileSync('certs/certificate'),
+                ca: (fs.existsSync(this.options.certs + '/certificate-bundle')
+                     && require('split-ca')(this.options.certs + '/certificate-bundle')),
+                key:  fs.readFileSync(this.options.certs + '/private-key'),
+                cert: fs.readFileSync(this.options.certs + '/certificate'),
                 ciphers: "ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384"
                     + ":ECDHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA256"
                     + ":ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256"
@@ -397,8 +400,12 @@ function add_server_methods (bus)
         var pending_save = null
         var active
         function file_store (prefix, options) {
-            filename = (options && options.filename) || filename
-            backup_dir = (options && options.backup_dir) || backup_dir
+            filename = ((options && options.filename) 
+                          || (bus.options.file_store && bus.options.file_store.filename)            
+                          || filename)
+            backup_dir = ((options && options.backup_dir) 
+                          || (bus.options.file_store && bus.options.file_store.backup_dir)      
+                          || backup_dir)
             save_delay = ((options && options.save_delay)
                           || (bus.options.file_store && bus.options.file_store.save_delay)
                           || 250)
