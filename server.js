@@ -415,7 +415,7 @@ function add_server_methods (bus)
                 db_is_ok = true
                 // If we save before anything else is connected, we'll get this
                 // into the cache but not affect anything else
-                bus.save.fire(db)
+                bus.save.fire(inline_pointers(db))
                 bus.log('Read db')
             } catch (e) {
                 console.error(e)
@@ -449,8 +449,24 @@ function add_server_methods (bus)
                 pending_save = pending_save || setTimeout(save_db, bus.options.file_store.save_delay)
             }
             active = !delay_activate
+            function abstract_pointers (o) {
+                var result = {}
+                for (k in o)
+                    result[k] = bus.deep_map(o[k], (o) => {
+                        if (o.key) return {_key: o.key}
+                        else return o
+                    })
+                return result
+            }
+            function inline_pointers (db) {
+                return bus.deep_map(db, (o) => {
+                    if (o._key)
+                        return db[o._key]
+                    else return o
+                })
+            }
             function on_save (obj) {
-                db[obj.key]=obj
+                db[obj.key] = abstract_pointers(obj)
                 if (active) save_later()
             }
             on_save.priority = true
@@ -487,7 +503,7 @@ function add_server_methods (bus)
             setInterval(
                 // This copies the current db over backups/db.<curr_date> every minute
                 function backup_db() {
-                    if (!db_is_ok) return
+                    if (!db_is_ok || !backup_dir) return
                     if (fs.existsSync && !fs.existsSync(backup_dir))
                         fs.mkdirSync(backup_dir)
 
