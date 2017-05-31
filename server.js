@@ -16,7 +16,6 @@ function add_server_methods (bus)
             backdoor: null,
             client: (c) => {c.shadows(bus)},
             file_store: {save_delay: 250},
-            upload_dir: '/static',
             serve: true,
             certs: 'certs',
             __secure: false
@@ -910,7 +909,7 @@ function add_server_methods (bus)
 
             // Validate types
             if (!client.validate(o, {key: 'string', '?login': 'string', '?name': 'string',
-                                     '?pass': 'string', email: 'string', '?pic': 'string',
+                                     '?pass': 'string', email: 'string', /*'?pic': 'string',*/
                                      '*':'*'})) {
                 client.save.abort(o)
                 return
@@ -960,23 +959,23 @@ function add_server_methods (bus)
             o.pass = o.pass && require('bcrypt-nodejs').hashSync(o.pass)
             u.pass = o.pass || u.pass
 
-            // Users can have pictures (remove this soon)
-            // Bug: if user changes name, this picture's url doesn't change.
-            if (o.pic && o.pic.indexOf('data:image') > -1) {
-                var img_type = o.pic.match(/^data:image\/(\w+);base64,/)[1]
-                var b64 = o.pic.replace(/^data:image\/\w+;base64,/, '')
-                var upload_dir = bus.options.upload_dir
-                // ensure that the uploads directory exists
-                if (!fs.existsSync(upload_dir))
-                    fs.mkdirSync(upload_dir)
+            // // Users can have pictures (remove this soon)
+            // // Bug: if user changes name, this picture's url doesn't change.
+            // if (o.pic && o.pic.indexOf('data:image') > -1) {
+            //     var img_type = o.pic.match(/^data:image\/(\w+);base64,/)[1]
+            //     var b64 = o.pic.replace(/^data:image\/\w+;base64,/, '')
+            //     var upload_dir = bus.options.upload_dir
+            //     // ensure that the uploads directory exists
+            //     if (!fs.existsSync(upload_dir))
+            //         fs.mkdirSync(upload_dir)
 
-                // bug: users with the same name can overwrite each other's files
-                u.pic = u.name + '.' + img_type
-                fs.writeFile(upload_dir + u.pic, b64, {encoding: 'base64'})
-            }
+            //     // bug: users with the same name can overwrite each other's files
+            //     u.pic = u.name + '.' + img_type
+            //     fs.writeFile(upload_dir + u.pic, b64, {encoding: 'base64'})
+            // }
 
             // For anything else, go ahead and add it to the user object
-            var protected = {key:1, name:1, pic:1, pass:1}
+            var protected = {key:1, name:1, /*pic:1,*/ pass:1}
             for (k in o)
                 if (!protected.hasOwnProperty(k))
                     u[k] = o[k]
