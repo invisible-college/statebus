@@ -1,5 +1,6 @@
 bus = require('../statebus')()
 util = require('util')
+fs = require('fs')
 bus.label = 'bus'
 statelog_indent++
 
@@ -125,6 +126,38 @@ var tests = [
         n.forget('v/[3,4]')
 
         next()
+    },
+
+    function serve_options (next) {
+        var filename = 'test1.db', backups = 'test1.backups', certs = 'testcerts'
+
+        // Remove old stuff if there
+        try {
+            // rm db
+            fs.unlinkSync(filename)
+
+            // rm -r backups
+            fs.readdirSync(backups).forEach((f) => {
+                fs.unlinkSync(backups + "/" + f);
+            })
+            fs.rmdirSync(backups)
+            
+            // // rm -r certs
+            // fs.readdirSync(certs).forEach((f) => {
+            //     fs.unlinkSync(certs + "/" + f);
+            // })
+            // fs.rmdirSync(certs)
+        } catch (e) {log(e)}
+
+        var b = require('../statebus').serve({
+            port: 31829,
+            file_store: false,
+            //file_store: {filename: filename, save_delay: 0, backup_dir: backups},
+            certs: {private_key: certs+'/pk', certificate: certs+'/cert'},
+        })
+
+        b.save({key: 'foo', body: 'is this on disk?'})
+        setTimeout(() => next(), 60)
     },
 
     function transactions (next) {
@@ -541,7 +574,6 @@ var tests = [
         }
 
         var watchers = {}
-        fs = require('fs')
         function read_file (filename, cb) {
             fs.readFile(filename, function (err, result) {
                 if (err) throw err

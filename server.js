@@ -15,15 +15,23 @@ function add_server_methods (bus)
             port: 3006,
             backdoor: null,
             client: (c) => {c.shadows(bus)},
-            file_store: {save_delay: 250},
+            file_store: {save_delay: 250, filename: 'db', backup_dir: 'backups'},
             serve: true,
-            certs: 'certs',
+            certs: {private_key: 'certs/private-key',
+                    certificate: 'certs/certificate',
+                    certificate_bundle: 'certs/certificate-bundle'},
             __secure: false
         }
         bus.options = default_options
         options = options || {}
         for (k in (options || {}))
             bus.options[k] = options[k]
+
+        bus.options.use_ssl = (
+               require('fs').existsSync(bus.options.certs.private_key)
+            || require('fs').existsSync(bus.options.certs.certificate
+            || require('fs').existsSync(bus.options.certs.certificate_bundle)))
+
 
         // Automatically handle root and ports
         //  - Bind to port 443 if SSL
@@ -58,8 +66,7 @@ function add_server_methods (bus)
 
             // Add a redirect server if we have SSL
             var port = 80
-
-            if (require('fs').existsSync(bus.options.certs)) {
+            if (bus.options.use_ssl) {
                 port = 443
                 num_servers_desired = 2
 
@@ -79,7 +86,7 @@ function add_server_methods (bus)
         }
         
         if (bus.options.file_store)
-            bus.file_store('*', {delay_activate: port <= 443})
+            bus.file_store('*', port <= 443)
 
         // ******************************************
         // ***** Create our own http server *********
@@ -157,16 +164,16 @@ function add_server_methods (bus)
         var port = options.port || 3000
         var fs = require('fs')
 
-        if (fs.existsSync(this.options.certs)) {
+        if (bus.options.use_ssl) {
             // Load with TLS/SSL
             console.log('Encryption ON')
             var http = require('https')
             var protocol = 'https'
             var ssl_options = {
-                ca: (fs.existsSync(this.options.certs + '/certificate-bundle')
-                     && require('split-ca')(this.options.certs + '/certificate-bundle')),
-                key:  fs.readFileSync(this.options.certs + '/private-key'),
-                cert: fs.readFileSync(this.options.certs + '/certificate'),
+                ca: (fs.existsSync(this.options.certs.certificate_bundle)
+                     && require('split-ca')(this.options.certs.certificate_bundle)),
+                key:  fs.readFileSync(this.options.certs.private_key),
+                cert: fs.readFileSync(this.options.certs.certificate),
                 ciphers: "ECDHE-RSA-AES256-SHA384:DHE-RSA-AES256-SHA384"
                     + ":ECDHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA256"
                     + ":ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256"
@@ -391,24 +398,14 @@ function add_server_methods (bus)
 
     file_store: (function () {
         // Make a database
-        var filename = 'db'
-        var backup_dir = 'backups'
-
         var fs = require('fs')
         var db = {}
         var db_is_ok = false
         var pending_save = null
         var active
-        function file_store (prefix, options) {
-            filename = ((options && options.filename) 
-                          || (bus.options.file_store && bus.options.file_store.filename)            
-                          || filename)
-            backup_dir = ((options && options.backup_dir) 
-                          || (bus.options.file_store && bus.options.file_store.backup_dir)      
-                          || backup_dir)
-            save_delay = ((options && options.save_delay)
-                          || (bus.options.file_store && bus.options.file_store.save_delay)
-                          || 250)
+        function file_store (prefix, delay_activate) {
+            var filename = bus.options.file_store.filename,
+                backup_dir = bus.options.file_store.backup_dir
 
             // Loading db
             try {
@@ -449,9 +446,9 @@ function add_server_methods (bus)
             }
 
             function save_later() {
-                pending_save = pending_save || setTimeout(save_db, save_delay)
+                pending_save = pending_save || setTimeout(save_db, bus.options.file_store.save_delay)
             }
-            active = !options || !options.delay_activate
+            active = !delay_activate
             function on_save (obj) {
                 db[obj.key]=obj
                 if (active) save_later()
