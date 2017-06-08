@@ -22,11 +22,28 @@ function add_server_methods (bus)
                     certificate_bundle: 'certs/certificate-bundle'},
             __secure: false
         }
-        bus.options = default_options
+        bus.options = bus.clone(default_options)
         options = options || {}
         for (k in (options || {}))
             bus.options[k] = options[k]
 
+        // Fill in defaults of nested options too
+        for (k in {file_store:1, certs:1}) {
+            //console.log('testing', k, 'in', bus.options)
+            if (bus.options[k]) {
+                console.log('it has it, as', bus.options[k], typeof bus.options[k])
+                if (typeof bus.options[k] !== 'object' || bus.options[k] === null)
+                    bus.options[k] = {}
+
+                //console.log('iterating through', default_options[k])
+                for (k2 in default_options[k]) {
+                    //console.log('now trying', k2, 'for', bus.options[k].hasOwnProperty(k2))
+                    if (!bus.options[k].hasOwnProperty(k2))
+                        bus.options[k][k2] = default_options[k][k2]
+                }
+                console.log('And now it is', bus.options[k])
+            }
+        }
         bus.options.use_ssl = (
                require('fs').existsSync(bus.options.certs.private_key)
             || require('fs').existsSync(bus.options.certs.certificate
@@ -415,7 +432,8 @@ function add_server_methods (bus)
                 db_is_ok = true
                 // If we save before anything else is connected, we'll get this
                 // into the cache but not affect anything else
-                bus.save.fire(inline_pointers(db))
+                bus.save.fire(db // inline_pointers(db)
+                             )
                 bus.log('Read db')
             } catch (e) {
                 console.error(e)
@@ -453,20 +471,20 @@ function add_server_methods (bus)
                 var result = {}
                 for (k in o)
                     result[k] = bus.deep_map(o[k], (o) => {
-                        if (o.key) return {_key: o.key}
+                        if (o && o.key) return {_key: o.key}
                         else return o
                     })
                 return result
             }
             function inline_pointers (db) {
                 return bus.deep_map(db, (o) => {
-                    if (o._key)
+                    if (o && o._key)
                         return db[o._key]
                     else return o
                 })
             }
             function on_save (obj) {
-                db[obj.key] = abstract_pointers(obj)
+                db[obj.key] = obj // abstract_pointers(obj)
                 if (active) save_later()
             }
             on_save.priority = true

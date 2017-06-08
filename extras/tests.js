@@ -151,8 +151,8 @@ var tests = [
 
         var b = require('../statebus').serve({
             port: 31829,
-            file_store: false,
-            //file_store: {filename: filename, save_delay: 0, backup_dir: backups},
+            //file_store: false,
+            file_store: {filename: filename, save_delay: 0, backup_dir: backups},
             certs: {private_key: certs+'/pk', certificate: certs+'/cert'},
         })
 
@@ -166,7 +166,7 @@ var tests = [
         bus.label = 'tranny'
 
         // Test to_fetch handlers with t.done()
-        bus('foo1').to_fetch = (t) => {
+        bus('foo1').to_fetch = function (t) {
             log('to_fetching foo1')
             setTimeout(()=>{
                 log('returning something for foo1')
