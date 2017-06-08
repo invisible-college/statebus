@@ -28,22 +28,16 @@ function add_server_methods (bus)
             bus.options[k] = options[k]
 
         // Fill in defaults of nested options too
-        for (k in {file_store:1, certs:1}) {
-            //console.log('testing', k, 'in', bus.options)
+        for (k in {file_store:1, certs:1})
             if (bus.options[k]) {
-                console.log('it has it, as', bus.options[k], typeof bus.options[k])
                 if (typeof bus.options[k] !== 'object' || bus.options[k] === null)
                     bus.options[k] = {}
 
-                //console.log('iterating through', default_options[k])
-                for (k2 in default_options[k]) {
-                    //console.log('now trying', k2, 'for', bus.options[k].hasOwnProperty(k2))
+                for (k2 in default_options[k])
                     if (!bus.options[k].hasOwnProperty(k2))
                         bus.options[k][k2] = default_options[k][k2]
-                }
-                console.log('And now it is', bus.options[k])
             }
-        }
+
         bus.options.use_ssl = (
                require('fs').existsSync(bus.options.certs.private_key)
             || require('fs').existsSync(bus.options.certs.certificate
