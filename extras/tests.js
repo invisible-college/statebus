@@ -1045,6 +1045,13 @@ var tests = [
                 break
             case 2: break
             case 3:
+                // These are triggering a weird race condition bug, where the
+                // server sends a duplicate {user: {key: 'user/bob', name:
+                // 'bob', email: 'b@o.b'}, logged_in: true, key:
+                // 'current_user'} event, triggering a re-render at 7 before
+                // the logout has transpired.
+                // c.honk = true
+                // s.honk = true
                 log('In 3   -    Creating bob, logging in as bob')
                 assert(!u.logged_in, '3 logged in')
                 u.create_account = {name: 'bob', email: 'b@o.b', pass: 'boob'}
@@ -1073,7 +1080,7 @@ var tests = [
             case 6: break
             case 7:
                 log('In 7   -    Logging back in as boob')
-                assert(!u.logged_in, '7. still logged in')
+                assert(!u.logged_in, '7. still logged in, as', u)
                 u.login_as = {name: 'bob', pass:'boob'}
                 c.save(u)
                 break
