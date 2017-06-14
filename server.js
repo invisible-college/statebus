@@ -251,7 +251,14 @@ function add_server_methods (bus)
             var our_fetches_in = {}  // Every key that every client has fetched.
             log('sockjs_s: New connection from', conn.remoteAddress)
             function sockjs_pubber (obj) {
-                conn.write(JSON.stringify({save: obj}))
+                if (global.network_delay) {
+                    console.log('>>>> DELAYING!!!', global.network_delay)
+                    obj = bus.clone(obj)
+                    setTimeout(() => {conn.write(JSON.stringify({save: obj}))},
+                               global.network_delay)
+                } else
+                    conn.write(JSON.stringify({save: obj}))
+
                 log('sockjs_s: SENT a', obj, 'to client')
             }
             conn.on('data', function(message) {
@@ -301,9 +308,7 @@ function add_server_methods (bus)
                     // sockjs_pubber.has_seen(user, message.save.key, message.version)
                     user.save(message.save,
                               {version: message.version,
-                               parents: message.parents,
-                               // Remove the peer thing, cause we'll use has_seen instead
-                               peer: sockjs_pubber})
+                               parents: message.parents})
                     if (our_fetches_in[message.save.key]) {  // Store what we've seen if we
                                                              // might have to publish it later
                         user.log('Adding', message.save.key+'#'+message.version,
