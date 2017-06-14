@@ -779,10 +779,10 @@
                     if (method === 'to_delete')
                         delete bus.cache[key]
                     else if (method === 'to_save')
-                        bus.save.fire(o || arg)
+                        bus.save.fire(o || arg, t)
                     else { // Then method === to_fetch
                         o.key = key
-                        bus.save.fire(o)
+                        bus.save.fire(o, t)
                     }
                 }
             t.return = t.done
@@ -1254,7 +1254,7 @@
         var sock
         var attempts = 0
         var outbox = []
-        var fetched_keys = new bus.Set()
+        var client_fetched_keys = new bus.Set()
         var heartbeat
         if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
         function nlog (s) {
@@ -1266,7 +1266,7 @@
             var m = message_method(o)
             if (m == 'fetch' || m == 'delete' || m == 'forget')
                 o[m] = rem_prefix(o[m])
-            bus.log('sockjs.send:', JSON.stringify(o))
+            bus.log('net_client.send:', JSON.stringify(o))
             outbox[pushpop](JSON.stringify(o))
             flush_outbox()
         }
@@ -1287,11 +1287,12 @@
         function rem_prefixes (obj) { return bus.translate_keys(bus.clone(obj), rem_prefix) }
 
         bus(prefix).to_save   = function (obj) { bus.save.fire(obj)
-                                                 send({save: obj}) }
+                                                 send({save: obj/*,
+                                                       version: bus.versions[obj.key]*/})}
         bus(prefix).to_fetch  = function (key) { send({fetch: key}),
-                                                 fetched_keys.add(key) }
+                                                 client_fetched_keys.add(key) }
         bus(prefix).to_forget = function (key) { send({forget: key}),
-                                                 fetched_keys.delete(key) }
+                                                 client_fetched_keys.delete(key) }
         bus(prefix).to_delete = function (key) { send({'delete': key}) }
 
         function connect () {
@@ -1315,7 +1316,7 @@
                 if (attempts > 0) {
                     // Then we need to refetch everything, cause it
                     // might have changed
-                    var keys = fetched_keys.values()
+                    var keys = client_fetched_keys.values()
                     for (var i=0; i<keys.length; i++)
                         send({fetch: keys[i]})
                 }
@@ -1358,10 +1359,10 @@
 
                     // We only take saves from the server for now
                     if (method !== 'save' && method !== 'pong') throw 'barf'
-                    bus.log('sockjs_client received', message.save)
+                    bus.log('net_client received', message.save)
                     bus.save.fire(add_prefixes(message.save))
                 } catch (err) {
-                    console.error('Received bad sockjs message from '
+                    console.error('Received bad network message from '
                                   +url+': ', event.data, err)
                     return
                 }
