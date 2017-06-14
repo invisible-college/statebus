@@ -131,10 +131,10 @@
 
         // Ignore if nothing happened
         if (obj.key && !changed(obj)) {
-            statelog(grey, 'x', message)
+            statelog(obj.key, grey, 'x', message)
             return
         } else
-            statelog(red, 'o', message)
+            statelog(obj.key, red, 'o', message)
 
         try {
             statelog_indent++
@@ -157,50 +157,50 @@
         // earlier ones.
     }
     save.fire = fire
-    function fire (object, t) {
+    function fire (obj, t) {
         t = t || {}
         // Make sure it has a version.
         t.version = t.version || new_version()
 
         // First, let's print out the statelog entry.
         // (And abort if there's no change.)
-        var message = save_msg(object, t, 'save.fire')
+        var message = save_msg(obj, t, 'save.fire')
         var color, icon
-        if (currently_saving === object.key &&
-            !(object.key && !changed(object))) {
+        if (currently_saving === obj.key &&
+            !(obj.key && !changed(obj))) {
           statelog_indent--
-          statelog(red, '•', '↵' + (t.version ? '\t\t\t[' + t.version + ']' : ''))
+          statelog(obj.key, red, '•', '↵' + (t.version ? '\t\t\t[' + t.version + ']' : ''))
           statelog_indent++
         } else {
             // Ignore if nothing happened
-            if (object.key && !changed(object)) {
+            if (obj.key && !changed(obj)) {
                 color = grey
                 icon = 'x'
                 if (t.to_fetch)
-                    message = (t.m) || 'Fetched ' + bus + "('"+object.key+"')"
+                    message = (t.m) || 'Fetched ' + bus + "('"+obj.key+"')"
                 if (t.version) message += ' [' + t.version + ']'
-                statelog(color, icon, message)
+                statelog(obj.key, color, icon, message)
                 return
             }
 
             color = red, icon = '•'
-            if (t.to_fetch || pending_fetches[object.key]) {
+            if (t.to_fetch || pending_fetches[obj.key]) {
                 color = green
                 icon = '^'
-                message = add_diff_msg((t.m)||'Fetched '+bus+"('"+object.key+"')",
-                                       object)
+                message = add_diff_msg((t.m)||'Fetched '+bus+"('"+obj.key+"')",
+                                       obj)
                 if (t.version) message += ' [' + t.version + ']'
             }
 
-            statelog(color, icon, message)
+            statelog(obj.key, color, icon, message)
         }
 
         // Then we're gonna fire!
 
-        // Recursively add all of object, and its sub-objects, into the cache
-        var modified_keys = update_cache(object, cache)
+        // Recursively add all of obj, and its sub-objects, into the cache
+        var modified_keys = update_cache(obj, cache)
 
-        delete pending_fetches[object.key]
+        delete pending_fetches[obj.key]
 
         if ((executing_funk !== global_funk) && executing_funk.loading()) {
             abort_changes(modified_keys)
@@ -208,7 +208,7 @@
             // Let's publish these changes!
 
             // These objects must replace their backups
-            update_cache(object, backup_cache)
+            update_cache(obj, backup_cache)
 
             // And we mark each changed key as changed so that
             // reactions happen to them
@@ -224,7 +224,7 @@
     save.abort = function (obj, t) {
         abort_changes([obj.key])
         console.assert(obj)
-        statelog(yellow, '<', 'Aborting ' + obj.key)
+        statelog(obj.key, yellow, '<', 'Aborting ' + obj.key)
         mark_changed(obj.key, t)
     }
 
@@ -414,7 +414,7 @@
             return
         }
 
-        statelog(yellow, 'v', 'Deleting ' + key)
+        statelog(key, yellow, 'v', 'Deleting ' + key)
         // Call the to_delete handlers
         var handlers_called = bus.route(key, 'to_delete', key)
         if (handlers_called === 0)
@@ -447,7 +447,7 @@
     var dirty_fetchers = new Set()
     function dirty (key) {
         // Marks a fetcher as dirty, meaning the .to_fetch will re-run
-        statelog(brown, '*', bus + ".dirty('"+key+"')")
+        statelog(key, brown, '*', bus + ".dirty('"+key+"')")
         if (fetches_out.hasOwnProperty(key))
             for (var i=0; i<fetches_out[key].length; i++)
                 dirty_fetchers.add(funk_key(fetches_out[key][i]))
@@ -1749,9 +1749,10 @@
             console.log.apply(console, arguments)
     }
 
-    function statelog (color, icon, message) {
+    function statelog (key, color, icon, message) {
         var old_honk = bus.honk
         if (bus.honk) bus.honk = true
+        if (old_honk instanceof RegExp) bus.honk = old_honk.test(key)
         log(color + icon + ' ' + message + normal)
         //log.apply(null, arguments)
         bus.honk = old_honk
