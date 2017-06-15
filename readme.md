@@ -1,9 +1,10 @@
 # Statebus Tutorial
 
-Statebus is a new version of HTTP that synchronizes state.
-  - All state has a URL, with `state://`
+Statebus is a new version of HTTP that *synchronizes* state.
+  - All state in your website gets a URL, with `state://`
   - State can be a function of other state
   - Statebus guarantees all state is synchronized automatically.
+
 
 Let's see how to make a chat app.
 
