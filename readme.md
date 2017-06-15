@@ -1,21 +1,23 @@
 # Statebus
-Statebus is a new web protocol where every piece of state has a URL. It provides a unified API for accessing state on clients and servers, and automatically handles synchronization. In contrast to how HTTP provides State Transfer, Statebus provides State *Synchronization*.
 
-This repository is a Javascript implementation of the Statebus protocol. You can use it right now to build web applications. It builds from [Reactjs](http://reactjs.org) to provide reactive re-rendering, but extends the reactivity through the whole web stack.
+Statebus is a replacement for HTTP that synchronizes state
+  - Each state has a URL
+  - All state can be accessed uniformly, throughout the app, via URLs
+  - State can be a function of other state
+  - Statebus guarantees all state is synchronized automatically
 
-This implementation is great for prototyping. You can see some prototypes and applications [here](https://invisible.college). We welcome contributions, and are excited to help you build your own Statebus applications.
 
 # Tutorial
-Hello future bus drivers, welcome to your training!
 
-Today we are going to make a basic chat widget. It's a public chat that anyone can post to. We hope you'll post a message on it - it's a guestbook for anyone who visits this tutorial!
+Let's make a chat app.
 
-We've broken the training into two parts: Making a client and Making a server. Most of the logic is in the client, because Statebus [collapses time and space](https://github.com/invisible-college/statebus/blob/v6/readme.md#fetch-and-save-are-reactive-functions). The server handles basic privacy and data filtering features.
+We've broken the training into two parts: Making a client and Making a server. Most of the logic is in the client, because Statebus [collapses time and space](https://github.com/invisible-college/statebus/blob/v6/readme.md#fetch-and-save-are-reactive-functions). The server implements access control.
 
 ## Making a client
-To write client code, you don't need to download anything. Instead, you'll just edit a single .html file locally on your computer. However, you'll be writing in [Coffeescript](http://coffeescript.org) and creating [React](http://reactjs.org) web components, so make sure you're familiar with both of these tools. Aside from Coffeescript and React, there are really only two methods that you will need to learn: `fetch` and `save`. To get a sense of how they work, let's make something!
 
-Here's the chat you'll be making. Copy and paste this into your .html file.
+You don't need to download anything.  You don't need to run a server.  You can
+make a full-fledged app with just a single .html file on your computer.
+Here's a chat app:
 
 ```coffeescript
 <script type="statebus">                          # Scripts with this tag are interpreted by statebus
@@ -58,9 +60,9 @@ random_string = -> Math.random().toString(36).substring(3)
 </script><script src="https://stateb.us/client6.js"></script>
 ```	
 
-Now you have a working statebus app, in a single html file! 
-Double-click to open it in your web browser with a `file:///` url.
-You should be able to see everyone's messages.
+Now you have a working statebus chat app, in a single html file!  Double-click
+to open it in your web browser with a `file:///` url.  You should be able to
+see everyone's messages.
 
 ### Reactive Functions
 This code is built using reactive functions. 
