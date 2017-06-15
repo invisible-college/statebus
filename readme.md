@@ -1,8 +1,7 @@
 # Statebus
 
-Statebus is a replacement for HTTP that synchronizes state
-  - Each state has a URL
-  - All state can be accessed uniformly, throughout the app, via URLs
+Statebus is a replacement for HTTP that synchronizes state.
+  - All state has a URL, and can be accessed uniformly throughout the app
   - State can be a function of other state
   - Statebus guarantees all state is synchronized automatically
 
