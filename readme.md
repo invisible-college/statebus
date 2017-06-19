@@ -13,7 +13,7 @@ Let's see how to make a chat app.
 
 No server needed!
 
-Just put the following code into a .html file on your computer, and double-click it to get a working chat that's synchronized with all Statebus users:
+Just put the following code into a .html file on your computer, and double-click it to get a working chat that's synchronized with all users:
 
 ```coffeescript
 <script type="statebus">                          # Scripts with this tag are interpreted by statebus
@@ -21,12 +21,12 @@ Just put the following code into a .html file on your computer, and double-click
 dom.BODY = ->                                     # Define the webpage with dom.BODY = ->
   messages = fetch('/chat').messages or []        # Get the current state of the chat!
   DIV {},
-    for message in messages
+    for message in messages                       # Print each message in the chat
       DIV(message.content)
-    NEW_MESSAGE()
+    NEW_MESSAGE()                                 # ... and a textbox for writing new messages
 
-dom.NEW_MESSAGE = ->
-  new_message = fetch('new_message')              # The state of the message as it is being written
+dom.NEW_MESSAGE = ->                              # So let's define the "new message" widget
+  new_message = fetch('new_message')              # We fetch the text written so far
 
   DIV {},
     INPUT
