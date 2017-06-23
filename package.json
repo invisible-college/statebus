@@ -10,11 +10,11 @@
   "repository": "invisible-college/statebus",
   "dependencies": {
     "bcrypt-nodejs": "0.0.3",
-    "chokidar": "^1.6.1",
+    "chokidar": "^1.7.0",
     "coffee-script": "^1.11.1",
     "cookie": "^0.3.1",
-    "express": "^4.14.0",
-    "sockjs": "^0.3.17",
-    "websocket": "^1.0.22"
+    "express": "^4.15.3",
+    "sockjs": "^0.3.18",
+    "websocket": "^1.0.24"
   }
 }
