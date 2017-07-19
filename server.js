@@ -51,7 +51,7 @@ function add_server_methods (bus)
         //  - Wait until that's finished before touching any files
         var on_listen = null
 
-        if (process.getuid() === 0) {
+        if (process.getuid() === 0 && !options.port) {
 
             // Setup handler for when we are listening
             var num_servers_listening = 0
@@ -1041,17 +1041,6 @@ function add_server_methods (bus)
         }
     },
 
-    code_restarts: function () {
-        var got = {}
-        bus('code/*').on_save = function (o) {
-            bus.log('Ok restart, we\'ll quit if ' + (got[o.key]||false))
-            if (got[o.key])
-                process.exit(1)
-            if (o.code)
-                got[o.key] = true
-        }
-    },
-
     persist: function (prefix_to_sync, validate) {
         var client = this
         var was_logged_in = false
@@ -1257,9 +1246,7 @@ function add_server_methods (bus)
     },
 
     serve_wiki: () => {
-        bus('edit/*').to_fetch = (k, rest) => {
-            return {_: require('./extras/wiki.coffee').code}
-        }
+        bus('edit/*').to_fetch = () => ({_: require('./extras/wiki.coffee').code})
     },
 
     unix_socket_repl: function (filename) {
