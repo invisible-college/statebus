@@ -1245,6 +1245,18 @@ function add_server_methods (bus)
         })
     },
 
+    serve_clientjs: function serve_clientjs (path) {
+        path = path || 'client.js'
+        // bus.http_serve('/client.js', () =>
+
+        bus(path).to_fetch = () =>
+            ({_:
+              ['extras/coffee.js', 'extras/sockjs.js', 'extras/react.js',
+               'statebus.js', 'client.js']
+              .map((f) => bus.read_file('node_modules/statebus/' + f))
+              .join(';\n')})
+    },
+
     serve_wiki: () => {
         bus('edit/*').to_fetch = () => ({_: require('./extras/wiki.coffee').code})
     },
