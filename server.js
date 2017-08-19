@@ -785,6 +785,7 @@ function add_server_methods (bus)
                 return master.fetch(userpass.user)
         }
         function create_account (params) {
+            if (typeof (params.login || params.name) !== 'string') return false
             var login = (params.login || params.name).toLowerCase()
             if (!login ||
                 !master.validate(params, {'?name': 'string', '?login': 'string',
