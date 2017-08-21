@@ -7024,7 +7024,20 @@ var ReactDOM = mapObject({
   stop: 'stop',
   svg: 'svg',
   text: 'text',
-  tspan: 'tspan'
+  tspan: 'tspan',
+  feColorMatrix: 'feColorMatrix',
+  feGaussianBlur: 'feGaussianBlur',
+  feOffset: 'feOffset',
+  feFlood: 'feFlood',
+  feComposite: 'feComposite',
+  feMerge: 'feMerge',
+  feMergeNode: 'feMergeNode',
+  filter: 'filter',
+  image: 'image',
+  clipPath: 'clipPath',
+
+
+
 
 }, createDOMFactory);
 
@@ -13857,6 +13870,7 @@ var MUST_USE_ATTRIBUTE = DOMProperty.injection.MUST_USE_ATTRIBUTE;
 
 var SVGDOMPropertyConfig = {
   Properties: {
+    clipPath: MUST_USE_ATTRIBUTE,
     cx: MUST_USE_ATTRIBUTE,
     cy: MUST_USE_ATTRIBUTE,
     d: MUST_USE_ATTRIBUTE,
@@ -13864,15 +13878,28 @@ var SVGDOMPropertyConfig = {
     dy: MUST_USE_ATTRIBUTE,
     fill: MUST_USE_ATTRIBUTE,
     fillOpacity: MUST_USE_ATTRIBUTE,
+    filter: MUST_USE_ATTRIBUTE,
     fontFamily: MUST_USE_ATTRIBUTE,
     fontSize: MUST_USE_ATTRIBUTE,
+    fontWeight: MUST_USE_ATTRIBUTE,
     fx: MUST_USE_ATTRIBUTE,
     fy: MUST_USE_ATTRIBUTE,
     gradientTransform: MUST_USE_ATTRIBUTE,
     gradientUnits: MUST_USE_ATTRIBUTE,
+    k2: MUST_USE_ATTRIBUTE,
+    k3: MUST_USE_ATTRIBUTE,
+    in: MUST_USE_ATTRIBUTE,
+    in2: MUST_USE_ATTRIBUTE,
+    operator: MUST_USE_ATTRIBUTE,
+    floodColor: MUST_USE_ATTRIBUTE,
+    floodOpacity: MUST_USE_ATTRIBUTE,
+    stdDeviation: MUST_USE_ATTRIBUTE,
+    result: MUST_USE_ATTRIBUTE,
+    out: MUST_USE_ATTRIBUTE,
     markerEnd: MUST_USE_ATTRIBUTE,
     markerMid: MUST_USE_ATTRIBUTE,
     markerStart: MUST_USE_ATTRIBUTE,
+    mask: MUST_USE_ATTRIBUTE,
     offset: MUST_USE_ATTRIBUTE,
     opacity: MUST_USE_ATTRIBUTE,
     patternContentUnits: MUST_USE_ATTRIBUTE,
@@ -13892,8 +13919,12 @@ var SVGDOMPropertyConfig = {
     strokeWidth: MUST_USE_ATTRIBUTE,
     textAnchor: MUST_USE_ATTRIBUTE,
     transform: MUST_USE_ATTRIBUTE,
+    values: MUST_USE_ATTRIBUTE,
     version: MUST_USE_ATTRIBUTE,
     viewBox: MUST_USE_ATTRIBUTE,
+    'xlink:href': MUST_USE_ATTRIBUTE,
+    x0: MUST_USE_ATTRIBUTE,
+    y0: MUST_USE_ATTRIBUTE,
     x1: MUST_USE_ATTRIBUTE,
     x2: MUST_USE_ATTRIBUTE,
     x: MUST_USE_ATTRIBUTE,
