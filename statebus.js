@@ -1076,6 +1076,15 @@
         }
     }
 
+    function unpromise (f) {
+        // Doesn't work yet!  In progress.
+        return uncallback(function () {
+            var args = [].slice.call(arguments)
+            var cb = args.pop()
+            f.apply(null, args).then(cb)
+        })
+    }
+
     function sb () {
     // I have the cache behind the scenes
     // Each proxy has a target object -- the raw data on cache
