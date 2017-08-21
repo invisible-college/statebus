@@ -488,7 +488,8 @@
         // 3. Re-run the functions
         for (var i=0; i<dirty_funks.length; i++) {
             log('Clean:', funk_name(funks[dirty_funks[i]]))
-            funks[dirty_funks[i]].react()
+            if (bus.render_when_loading || !funks[dirty_funks[i]].loading())
+                funks[dirty_funks[i]].react()
         }
         // log('We just cleaned up', dirty_funks.length, 'funks!')
     }
@@ -1798,7 +1799,8 @@
 
     if (nodejs)
         require('./server').import_server(bus, options)
-
+    
+    bus.render_when_loading = true
     return bus
 }
 
