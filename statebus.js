@@ -1316,11 +1316,14 @@
         }
 
         // Follow symlinks
-        if (typeof o == 'object' && 'key' in o && '_' in o)
+        if (typeof o == 'object' && 'key' in o && '_' in o) {
             // Note: I don't actually need this recursion here, because
             // recursively linked state cannot be created by the proxy API.
             // So it can be undefined behavior.
-            [base, o] = pget(base, o, '_')
+            var tmp = pget(base, o, '_')
+            base = tmp[0]
+            o = tmp[1]
+        }
 
         return [base, o]
     }
@@ -1406,7 +1409,7 @@
         // is a function.  So we make a dummy target, and don't use it.
         var dummy_obj = function () {}
         return new Proxy(dummy_obj, {
-            get: (dummy_obj, k) => {
+            get: function (dummy_obj, k) {
                 // console.log('get:', k, '::'+typeof k, 'on', o)
 
                 // Print something nice for Node console inspector
@@ -1429,11 +1432,14 @@
                     return undefined
                 }
 
-                var [base2, o2] = pget(base, o, encode_field(k))
+                var tmp2 = pget(base, o, encode_field(k))
+                var base2 = tmp2[0]
+                var o2 = tmp2[1]
+
                 // console.log('returning proxy on', base2, o2)
                 return make_proxy(base2, o2)
             },
-            set: (dummy_obj, k, v) => {
+            set: function (dummy_obj, k, v) {
                 // console.log('set:', {base, o, k, v})
 
                 if (base) {
