@@ -51,7 +51,7 @@ function add_server_methods (bus)
         //  - Wait until that's finished before touching any files
         var on_listen = null
 
-        if (process.getuid() === 0) {
+        if (process.getuid() === 0 && !options.port) {
 
             // Setup handler for when we are listening
             var num_servers_listening = 0
@@ -431,8 +431,7 @@ function add_server_methods (bus)
                 db_is_ok = true
                 // If we save before anything else is connected, we'll get this
                 // into the cache but not affect anything else
-                bus.save.fire(db // inline_pointers(db)
-                             )
+                bus.save.fire(global.pointerify ? inline_pointers(db) : db)
                 bus.log('Read db')
             } catch (e) {
                 console.error(e)
@@ -466,7 +465,10 @@ function add_server_methods (bus)
                 pending_save = pending_save || setTimeout(save_db, bus.options.file_store.save_delay)
             }
             active = !delay_activate
+
+            // Replaces every nested keyed object with {_key: <key>}
             function abstract_pointers (o) {
+                o = bus.clone(o)
                 var result = {}
                 for (k in o)
                     result[k] = bus.deep_map(o[k], (o) => {
@@ -475,6 +477,7 @@ function add_server_methods (bus)
                     })
                 return result
             }
+            // ...and the inverse
             function inline_pointers (db) {
                 return bus.deep_map(db, (o) => {
                     if (o && o._key)
@@ -483,7 +486,7 @@ function add_server_methods (bus)
                 })
             }
             function on_save (obj) {
-                db[obj.key] = obj // abstract_pointers(obj)
+                db[obj.key] = global.pointerify ? abstract_pointers(obj) : obj
                 if (active) save_later()
             }
             on_save.priority = true
@@ -785,6 +788,7 @@ function add_server_methods (bus)
                 return master.fetch(userpass.user)
         }
         function create_account (params) {
+            if (typeof (params.login || params.name) !== 'string') return false
             var login = (params.login || params.name).toLowerCase()
             if (!login ||
                 !master.validate(params, {'?name': 'string', '?login': 'string',
@@ -1041,17 +1045,6 @@ function add_server_methods (bus)
         }
     },
 
-    code_restarts: function () {
-        var got = {}
-        bus('code/*').on_save = function (o) {
-            bus.log('Ok restart, we\'ll quit if ' + (got[o.key]||false))
-            if (got[o.key])
-                process.exit(1)
-            if (o.code)
-                got[o.key] = true
-        }
-    },
-
     persist: function (prefix_to_sync, validate) {
         var client = this
         var was_logged_in = false
@@ -1269,9 +1262,7 @@ function add_server_methods (bus)
     },
 
     serve_wiki: () => {
-        bus('edit/*').to_fetch = (k, rest) => {
-            return {_: require('./extras/wiki.coffee').code}
-        }
+        bus('edit/*').to_fetch = () => ({_: require('./extras/wiki.coffee').code})
     },
 
     unix_socket_repl: function (filename) {

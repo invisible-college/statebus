@@ -496,7 +496,8 @@
         // 3. Re-run the functions
         for (var i=0; i<dirty_funks.length; i++) {
             log('Clean:', funk_name(funks[dirty_funks[i]]))
-            funks[dirty_funks[i]].react()
+            if (bus.render_when_loading || !funks[dirty_funks[i]].loading())
+                funks[dirty_funks[i]].react()
         }
         // log('We just cleaned up', dirty_funks.length, 'funks!')
     }
@@ -1085,6 +1086,15 @@
             var args = [].slice.call(arguments)
             return bus.fetch(prefix + '/' + JSON.stringify(args))._
         }
+    }
+
+    function unpromise (f) {
+        // Doesn't work yet!  In progress.
+        return uncallback(function () {
+            var args = [].slice.call(arguments)
+            var cb = args.pop()
+            f.apply(null, args).then(cb)
+        })
     }
 
     function sb () {
@@ -2107,7 +2117,8 @@
 
     if (nodejs)
         require('./server').import_server(bus, options)
-
+    
+    bus.render_when_loading = true
     return bus
 }
 
