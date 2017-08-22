@@ -1960,6 +1960,7 @@
         if (typeof obj === 'string')     return schema === 'string'
         if (typeof obj === 'number')     return schema === 'number'
         if (typeof obj === 'boolean')    return schema === 'boolean'
+        if (       obj === null)         return schema === 'null'
 
         if (Array.isArray(obj))          return schema === 'array'
 
