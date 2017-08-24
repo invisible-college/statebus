@@ -418,9 +418,8 @@ function add_server_methods (bus)
         // Load the db on startup
         try {
             var db = new (require('better-sqlite3'))('db.sqlite')
-            db.prepare('create table if not exists cache (key text, obj text)').run()
+            db.prepare('create table if not exists cache (key text primary key, obj text)').run()
             var rows = db.prepare('select * from cache').each([], (row) => {
-                console.log(row)
                 var obj = JSON.parse(row.obj)
                 if (global.pointerify) obj = inline_pointers(obj)
                 bus.save.fire(obj)
@@ -436,7 +435,7 @@ function add_server_methods (bus)
             if (global.pointerify)
                 obj = abstract_pointers(obj)
 
-            db.prepare('insert into cache (key, obj) values (?, ?)').run(
+            db.prepare('replace into cache (key, obj) values (?, ?)').run(
                 [obj.key, JSON.stringify(obj)])
         }
         on_save.priority = true
