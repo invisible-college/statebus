@@ -717,6 +717,11 @@ var tests = [
                   + JSON.stringify(bus.cache.bar) + '\n\t'
                   + JSON.stringify(bus.cache.array))
 
+        state.undefining = undefined
+        state.undefining = {a: undefined}
+        state.undefining = {}
+        state.undefining.a = undefined
+
         // state.array = {}
 
         return next()
