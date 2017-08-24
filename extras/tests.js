@@ -15,6 +15,16 @@ function delay (time, f) {
 }   var delay_so_far = 0
 delay.init = () => {delay_so_far = 0}
 
+try {
+    var reqs = 'sockjs chokidar websocket bcrypt-nodejs'.split(' ')
+    for (var i=0; i<reqs.length; i++) require(reqs[i])
+} catch (e) {
+    console.log(e)
+    console.warn('#### Yo!  You need to run "npm install sockjs chokidar websocket bcrypt-nodejs"')
+    process.exit()
+}
+
+
 // Each test is a function in this array
 var tests = [
 
@@ -679,6 +689,83 @@ var tests = [
         next()
     },
 
+    function proxies2 (next) {
+        var bus = require('../statebus')()
+        var state = bus.state
+
+           assert(state.array === undefined)
+           assert(state.bar === undefined)
+
+        state.array = []
+           log('array:', state.array)
+           assert(state.array.length === 0)
+        state.array[0] = 1
+           log('array:', state.array)
+           assert(state.array.length === 1)
+        state.bar = {}
+           log('bar:', state.bar)
+        state.bar = {a: 1}
+           log('bar:', state.bar)
+           assert(state.bar.a === 1)
+        state.bar.a = state.array
+           log('bar:', state.bar)
+        state.array[1] = 2
+           log('array:', state.array)
+           log('bar:', state.bar)
+           assert(state.bar.a[1] === 2,
+                  "Array ref didn't link.\n\t"
+                  + JSON.stringify(bus.cache.bar) + '\n\t'
+                  + JSON.stringify(bus.cache.array))
+
+        // state.array = {}
+
+        return next()
+
+        /*
+           Things I want to test:
+
+           - Setting nested items
+           - Escaping their fields
+           - Calling fetch on them
+           - Converting state[..] to keyed objects internally
+           - has() potentially doing a fetch, or loading()
+           - set() returning a proxy object
+           - console output
+             - node AND chrome
+             - having nice colors and distinctions and shit
+         */
+
+        state.foo = 3
+        // This should set into _
+        console.assert(bus.validate(bus.cache.foo,
+                                    {key: 'foo', _: 3}))
+
+
+        state.foo = {a: 5}
+        // This should set directly on it
+        console.assert(bus.validate(bus.cache.foo,
+                                    {key: 'foo', a: 5}))
+        state.foo.b = 6
+        console.assert(bus.validate(bus.cache.foo,
+                                    {key: 'foo', b: 6}))
+
+        state.bar = [3]
+        state.foo = {a: 3, bar: state.bar}
+
+        bus(() => {
+            state.foo      // foo triggers re-render
+            state.foo.bar  // bar triggers re-render
+            state.foo.a    // triggers re-render too
+        })
+
+        // Getting a linked item should do a fetch
+        bus(() => {
+            state.bar
+        })
+
+        // Getting a normal property should do a fetch
+    },
+
     function only_one (next) {
         bus('only_one/*').to_fetch = function (k) {
             var id = k[k.length-1]
@@ -1223,15 +1310,21 @@ var tests = [
     }
 ]
 
-// Run all tests
-function run_next () {
-    if (tests.length > 0) {
-        var f = tests.shift()
-        console.log('\nTesting:', f.name)
-        f(function () {setTimeout(run_next)})
-    } else
-        (console.log('\nDone with all tests.'), process.exit())
+// Either run the test specified at command line
+if (process.argv[2])
+    tests.find((f) => f.name == process.argv[2])(
+        ()=>process.exit()
+    )
 
-    
+// Or run all tests
+else {
+    function run_next () {
+        if (tests.length > 0) {
+            var f = tests.shift()
+            console.log('\nTesting:', f.name)
+            f(function () {setTimeout(run_next)})
+        } else
+            (console.log('\nDone with all tests.'), process.exit())
+    }
+    run_next()
 }
-run_next()

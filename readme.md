@@ -60,6 +60,7 @@ Now you have a working statebus app!  Double-click
 to open it in your web browser with a `file:///` url.  You should be able to
 see everyone's messages.
 
+
 ### Reactive Functions
 This code is built using reactive functions.
 Statebus provides a distributed key/value store for
@@ -91,7 +92,7 @@ If there isn't a messages field defined on that state,
 Statebus returns undefined, and we so we set messages to be an empty list.
 
 ```javascript
-> console.log(fetch('/chat'))
+> fetch('/chat')
 > {
     key: '/chat',
     messages: [{content: 'hello world!'}]

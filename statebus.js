@@ -3,23 +3,18 @@
     if (typeof module != 'undefined') module.exports = definition()
     else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
     else this[name] = definition()
-}('statebus', function() {statelog_indent = 0; var busses = {}, executing_funk, global_funk, funks = {}, clean_timer, nodejs = typeof window === 'undefined'; function make_bus (options) {
+}('statebus', function() {statelog_indent = 0; var busses = {}, executing_funk, global_funk, funks = {}, clean_timer, symbols, nodejs = typeof window === 'undefined'; function make_bus (options) {
     
 
     // ****************
     // Fetch, Save, Forget, Delete
 
-    function sync () {
-        return (typeof arguments[0] === 'string') ?
-            fetch.apply(this, arguments) : save.apply(this, arguments)
-    }
-
     function fetch (key, callback) {
         key = key.key || key    // You can pass in an object instead of key
                                 // We should probably disable this in future
-
         if (typeof key !== 'string')
             throw ('Error: fetch(key) called with a non-string key: '+key)
+        bogus_check(key)
 
         var called_from_reactive_funk = !callback
         var funk = callback || executing_funk
@@ -117,6 +112,7 @@
     function save (obj, t) {
         if (!('key' in obj) || typeof obj.key !== 'string')
             console.error('Error: save(obj) called on object without a key: ', obj)
+        bogus_check(obj.key)
 
         t = t || {}
         // Make sure it has a version.
@@ -309,6 +305,8 @@
 
             // Fold cacheable objects into cache
             if (obj && obj.key) {
+                bogus_check(obj.key)
+
                 if (cache !== backup_cache)
                     if (changed(obj))
                         modified_keys.add(obj.key)
@@ -360,6 +358,7 @@
             executing_funk.forget()
             return
         }
+        bogus_check(key)
 
         //log('forget:', key, funk_name(save_handler), funk_name(executing_funk))
         save_handler = save_handler || executing_funk
@@ -408,6 +407,7 @@
     }
     function del (key) {
         key = key.key || key   // Prolly disable this in future
+        bogus_check(key)
 
         if ((executing_funk !== global_funk) && executing_funk.loading()) {
             abort_changes([key])
@@ -445,13 +445,21 @@
 
     var changed_keys = new Set()
     var dirty_fetchers = new Set()
-    function dirty (key) {
-        // Marks a fetcher as dirty, meaning the .to_fetch will re-run
+    function dirty (key, t) {
         statelog(key, brown, '*', bus + ".dirty('"+key+"')")
+        bogus_check(key)
+
+        // Find any .to_fetch, and mark as dirty so that it re-runs
+        var found = false
         if (fetches_out.hasOwnProperty(key))
-            for (var i=0; i<fetches_out[key].length; i++)
+            for (var i=0; i<fetches_out[key].length; i++) {
                 dirty_fetchers.add(funk_key(fetches_out[key][i]))
+                found = true
+            }
         clean_timer = clean_timer || setTimeout(clean)
+
+        // If none found, then just mark the key changed
+        if (!found) mark_changed(key, t)
     }
 
     function mark_changed (key, t) {
@@ -488,7 +496,8 @@
         // 3. Re-run the functions
         for (var i=0; i<dirty_funks.length; i++) {
             log('Clean:', funk_name(funks[dirty_funks[i]]))
-            funks[dirty_funks[i]].react()
+            if (bus.render_when_loading || !funks[dirty_funks[i]].loading())
+                funks[dirty_funks[i]].react()
         }
         // log('We just cleaned up', dirty_funks.length, 'funks!')
     }
@@ -607,6 +616,7 @@
     // A set of timers, for keys to send forgets on
     var to_be_forgotten = {}
     function bind (key, method, func, allow_wildcards) {
+        bogus_check(key)
         if (allow_wildcards && key[key.length-1] === '*')
             wildcard_handlers.push({prefix: key,
                                     method: method,
@@ -618,6 +628,7 @@
         // key in this space, and if so call the handler.
     }
     function unbind (key, method, funk, allow_wildcards) {
+        bogus_check(key)
         if (allow_wildcards && key[key.length-1] === '*')
             // Delete wildcard connection
             for (var i=0; i<wildcard_handlers.length; i++) {
@@ -636,6 +647,7 @@
     }
 
     function bindings(key, method) {
+        bogus_check(key)
         if (typeof key !== 'string') {
             console.error('Error:', key, 'is not a string', method)
             console.trace()
@@ -1076,77 +1088,87 @@
         }
     }
 
+    function unpromise (f) {
+        // Doesn't work yet!  In progress.
+        return uncallback(function () {
+            var args = [].slice.call(arguments)
+            var cb = args.pop()
+            f.apply(null, args).then(cb)
+        })
+    }
+
     function sb () {
-    // I have the cache behind the scenes
-    // Each proxy has a target object -- the raw data on cache
-    // If we're proxying a {_: ...} singleton then ...
+        // I have the cache behind the scenes
+        // Each proxy has a target object -- the raw data on cache
+        // If we're proxying a {_: ...} singleton then ...
 
-    function item_proxy (base, o) {
-        if (typeof o === 'number'
-            || typeof o === 'string'
-            || typeof o === 'boolean'
-            || o === undefined
-            || o === null
-            || typeof o === 'function') return o
+        function item_proxy (base, o) {
+            if (typeof o === 'number'
+                || typeof o === 'string'
+                || typeof o === 'boolean'
+                || o === undefined
+                || o === null
+                || typeof o === 'function') return o
 
-        return new Proxy(o, {
+            return new Proxy(o, {
+                get: function get(o, k) {
+                    if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
+                        return undefined
+                    k = encode_field(k)
+                    return item_proxy(base, o[k])
+                },
+                set: function set(o, k, v) {
+                    var result = o[encode_field(k)] = v
+                    bus.save(base)
+                    return result
+                },
+                has: function has(o, k) {
+                    return o.hasOwnProperty(encode_field(k))
+                },
+                deleteProperty: function del (o, k) {
+                    delete o[encode_field(k)]
+                },
+                apply: function apply (o, This, args) {
+                    return o
+                }
+            })}
+
+        return new Proxy(bus.cache, {
             get: function get(o, k) {
+                if (k in bogus_keys) return o[k]
                 if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
                     return undefined
-                k = escape_key(k)
-                return item_proxy(base, o[k])
+                var raw = bus.fetch(k),
+                    obj = raw
+                while (typeof obj == 'object' && '_' in obj) obj = obj._
+                return item_proxy(raw, obj)
             },
             set: function set(o, k, v) {
-                var result = o[escape_key(k)] = v
-                bus.save(base)
-                return result
+                if (typeof v === 'number'
+                    || typeof v === 'string'
+                    || typeof v === 'boolean'
+                    || v === undefined
+                    || v === null
+                    || typeof v === 'function'
+                    || Array.isArray(v))
+                    v = {_:v}
+                else
+                    v = bus.clone(v)
+                v.key = k
+                bus.save(v)
             },
-            has: function has(o, k) {
-                return o.hasOwnProperty(escape_key(k))
-            },
+            // In future, this might check if there's a .to_fetch function OR
+            // something in the cache:
+            //
+            // has: function has(o, k) {
+            //     return k in o
+            // },
+            // ... but I haven't had a need yet.
             deleteProperty: function del (o, k) {
-                delete o[escape_key(k)]
-            },
-            apply: function apply (o, This, args) {
-                return o
+                bus.delete(encode_field(k))
             }
-        })}
-
-    return new Proxy(bus.cache, {
-        get: function get(o, k) {
-            if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
-                return undefined
-            var raw = bus.fetch(k),
-                obj = raw
-            while (typeof obj == 'object' && '_' in obj) obj = obj._
-            return item_proxy(raw, obj)
-        },
-        set: function set(o, k, v) {
-            if (typeof v === 'number'
-                || typeof v === 'string'
-                || typeof v === 'boolean'
-                || v === undefined
-                || v === null
-                || typeof v === 'function'
-                || Array.isArray(v))
-                v = {_:v}
-            else
-                v = bus.clone(v)
-            v.key = k
-            bus.save(v)
-        },
-        // In future, this might check if there's a .to_fetch function OR
-        // something in the cache:
-        //
-        // has: function has(o, k) {
-        //     return k in o
-        // },
-        // ... but I haven't had a need yet.
-        deleteProperty: function del (o, k) {
-            bus.delete(escape_key(k))
-        }
-    })
-}
+        })
+    }
 
     // Proxy2
     function sb2 () {
@@ -1177,22 +1199,22 @@
                     }
                     if (typeof k === 'symbol')
                         return function () {return JSON.stringify(o)}
-                    k = escape_key(k)
+                    k = encode_field(k)
                     return item_proxy(base, o[k])
                 },
                 set: function set(f, k, v) {
                     // todo warning XXX: this doesn't yet encode v.  For
                     // instance, you can do bus.sb.foo.boo = {key: 'bar'}, and
                     // it won't encode it into {key_: 'bar'} like it should.
-                    var result = o[escape_key(k)] = v
+                    var result = o[encode_field(k)] = v
                     bus.save(base)
                     return strict_mode ? true : result  // Strict mode forces us to return true
                 },
                 has: function has(f, k) {
-                    return o.hasOwnProperty(escape_key(k))
+                    return o.hasOwnProperty(encode_field(k))
                 },
                 deleteProperty: function del (f, k) {
-                    delete o[escape_key(k)]
+                    delete o[encode_field(k)]
                 },
                 apply: function apply (f, This, args) {
                     return o
@@ -1227,24 +1249,291 @@
             // },
             // ... but I haven't had a need yet.
             deleteProperty: function del (o, k) {
-                bus.delete(escape_key(k))
+                bus.delete(encode_field(k))
             }
         })
     }
 
-    if ((nodejs?global:window).Proxy)
-        Object.defineProperty(bus, 'sb', { get: sb })
-    else
-        bus.sb = "Your javascript doesn't support ES6 Proxy"
+    // ******** State (Proxy) API *********
+    //
+    // The top-level state[..] object translates pointers of the
+    // special form:
+    //
+    //    {key: <s>, _: *}
+    //
+    // Examples:
+    //
+    //    state['uninitialized']
+    //    >> undefined
+    //
+    //    state['uninitialized'] = {}
+    //    >> {key: 'uninitialized'}
+    //
+    //    state['uninitialized'] = {a: 3}
+    //    >> {key: 'uninitialized', a: 3}
+    //
+    //    state['uninitialized'] = []
+    //    >> {key: 'uninitialized', _: []}
+    //
+    //    delete state['uninitialized']
+    //    state['uninitialized']
+    //    >> undefined
+    //
+    // ** Rules
+    //  Setting:
+    //    - Escape-translate each field recursively
+    //    - If setting an object, put each field directly on it
+    //    - If setting anything else, put it into ._
+    //
+    //  Getting:
+    //    - If it has unescaped fields other than ._, return object with them
+    //    - Otherwise, return ._
+    //    - Unescape all fields
 
+    var strict_mode = (function () {return !this})()
+    function pget (base, o, k) {
+        // console.log('pget:', {base, o, k})
+
+        if (base) {
+            o = o[k]
+
+            // If new base, update and subscribe
+            if (typeof o == 'object' && 'key' in o) {
+                base = o
+                bus.fetch(o.key)
+            }
+        } else {
+            // We are getting from the Root
+            o = bus.fetch(k)
+            // console.log('pget: fetched', k, 'and got', o)
+            base = o
+            if (bus.validate(o, {key: '*', '?_': '*'})) {
+                // console.log('pget: jumping into the _')
+                o = o._
+            }
+            if (typeof o === 'object' && o.key)
+                base = o
+        }
+
+        // Follow symlinks
+        if (typeof o == 'object' && 'key' in o && '_' in o) {
+            // Note: I don't actually need this recursion here, because
+            // recursively linked state cannot be created by the proxy API.
+            // So it can be undefined behavior.
+            var tmp = pget(base, o, '_')
+            base = tmp[0]
+            o = tmp[1]
+        }
+
+        return [base, o]
+    }
+
+    function proxy_encode_val (x) {
+        // Arrays
+        if (Array.isArray(x)) {
+            var result = []
+            for (var i=0; i < x.length; i++)
+                result[i] = proxy_encode_val(x[i])
+            return result
+        }
+
+        // Objects
+        else if (typeof x === 'object') {
+            // Actual objects need their keys translated
+            var result = {}
+            for (var k in x)
+                result[encode_field(k)] = proxy_encode_val(x[k])
+            return result
+        }
+
+        // Proxieds: already have JSON, stored inside. Return it.
+        else if (typeof x === 'function' && x[symbols.is_proxy]) {
+            return x()
+        }
+
+        // Everything else return
+        return x
+    }
+    function proxy_decode_json (json) {
+        // Returns data for proxies
+        //  - Remove keys
+        //  - Translate 
+
+        // Root objects of special form
+        if (bus.validate(json, {key: '*', '_': '*'}))
+            return proxy_decode_json(json._)
+
+        // Arrays
+        if (Array.isArray(json)) {
+            var arr = json.slice()
+            for (var i=0; i<arr.length; i++)
+                arr[i] = proxy_decode_json(arr[i])
+            return arr
+        }
+
+        // Objects
+        if (typeof json === 'object' && json !== null) {
+            var obj = {}
+            for (var k in json)
+                if (k !== 'key')
+                    obj[decode_field(k)] = proxy_decode_json(json[k])
+            return obj
+        }
+
+        // Other primitives just return
+        return json
+    }
+
+    if (nodejs) var util = require('util')
+    function make_proxy (base, o) {
+        if (!symbols)
+            symbols = {is_proxy: Symbol('is_proxy'),
+                       get_json: Symbol('get_json'),
+                       get_base: Symbol('get_base')}
+
+        if (typeof o !== 'object' || o === null) return o
+
+        function get_json() {
+            // Pop up to parent if this is a singleton array.
+            // We know it's a singleton array if base._ === x(), and base is
+            // of the form {key: *, _: x}
+            if (base && base._ && Object.keys(base).length === 2
+                && base._ === o)
+                return base
+
+            // Otherwise return x's JSON.
+            return o
+        }
+
+        // Javascript won't let us function call a proxy unless the "target"
+        // is a function.  So we make a dummy target, and don't use it.
+        var dummy_obj = function () {}
+        return new Proxy(dummy_obj, {
+            get: function (dummy_obj, k) {
+                // console.log('get:', k, '::'+typeof k, 'on', o)
+
+                // Print something nice for Node console inspector
+                if (nodejs && k === util.inspect.custom) {
+                    if (o == bus.cache)
+                        return function () {return 'state'+bus.toString().substr(3)}
+                    return function () {return 'p: '+util.format(proxy_decode_json(o))}
+                }
+                if (k in bogus_keys) return o[k]
+                // Proxies distinguish themselves via proxy.is_proxy == true
+                if (k === symbols.is_proxy) return true
+                if (k === symbols.get_json) return get_json()
+                if (k === symbols.get_base) return base
+                if (k === Symbol.isConcatSpreadable) return Array.isArray(o)
+                if (k === Symbol.toPrimitive) return function () {
+                    return JSON.stringify(proxy_decode_json(o))
+                }
+                if (typeof k === 'symbol') {
+                    console.warn('Got request for weird symbol', k)
+                    return undefined
+                }
+
+                var tmp2 = pget(base, o, encode_field(k))
+                var base2 = tmp2[0]
+                var o2 = tmp2[1]
+
+                // console.log('returning proxy on', base2, o2)
+                return make_proxy(base2, o2)
+            },
+            set: function (dummy_obj, k, v) {
+                // console.log('set:', {base, o, k, v})
+
+                if (base) {
+                    var encoded_v = o[encode_field(k)] = proxy_encode_val(v)
+                    // console.log('set: saving', encoded_v)
+
+                    // Collapse state of the form:
+                    //    {key: '*', _: {foo: bar, ...}}
+                    // down to:
+                    //    {key: '*', foo: bar}
+                    if (base._
+                        && Object.keys(base).length === 2
+                        && typeof base._ === 'object'
+                        && base._ !== null
+                        && !Array.isArray(base._)
+                        && !base._.key
+                        && Object.keys(base._).length !== 0) {
+                        // console.log('Collapsing', JSON.stringify(base))
+                        for (k2 in base._)
+                            base[k2] = base._[k2]
+                        delete base._
+                    }
+                        
+                    bus.save(base)
+                }
+
+                // Saving into top-level state
+                else {
+                    var encoded_v = proxy_encode_val(v)
+                    // console.log('set top-level:', {v, encoded_v})
+
+                    // Setting a top-level object to undefined wipes it out
+                    if (v === undefined)
+                        encoded_v = {key: k}
+
+                    // Prefix with _: anything that is:
+                    else if (// A proxy to another state
+                        (typeof v === 'object' && v[symbols.is_proxy])
+                        // An empty {} object
+                        || (typeof v === 'object' && Object.keys(v).length === 0)
+                        // A number, bool, string, function, etc
+                        || typeof v !== 'object' || v === null
+                        // An array
+                        || Array.isArray(v))
+                        encoded_v = {_: encoded_v}
+                    encoded_v.key = k
+
+                    // console.log('set top-level: now encoded_v is', encoded_v)
+                    bus.save(encoded_v)
+                }
+
+                var newbase = encoded_v.key ? encoded_v : base
+                return true
+            },
+            has: function has(O, k) {
+                // XXX QUESTIONS:
+                //
+                //  - Do I want this to return true if there's a .to_fetch()
+                //    function for this o, k?
+                //
+                //  - Does this need to do a fetch as well?
+                //
+                //  - For a keyed object, should this do a loading() check?
+                return o.hasOwnProperty(encode_field(k))
+            },
+            deleteProperty: function del (o, k) {
+                if (base) {
+                    delete o[encode_field(k)]   // Deleting innards
+                    bus.save(base)
+                }
+                else
+                    bus.delete(encode_field(k)) // Deleting top-level
+            },
+            apply: function apply (f, This, args) { return get_json() }
+        })
+    }
+    // So chrome can print out proxy objects decently
+    if (!nodejs)
+        window.devtoolsFormatters = [{
+            header: function (x) {
+                return x[symbols.is_proxy] &&
+                    ['span', {style: 'background-color: #feb; padding: 3px;'},
+                     JSON.stringify(proxy_decode_json(x()))]
+            },
+            hasBody: function (x) {return false}
+        }]
 
     // ******************
     // Network client
     function message_method (m) {
-        return ((m.fetch && 'fetch')
-                || (m.save && 'save')
-                || (m['delete'] && 'delete')
-                || (m.forget && 'forget'))
+        return (m.fetch && 'fetch')
+            || (m.save && 'save')
+            || (m['delete'] && 'delete')
+            || (m.forget && 'forget')
     }
     function net_client(prefix, url, socket_api, login) {
         var preprefix = prefix.slice(0,-1)
@@ -1454,12 +1743,25 @@
             }
         return obj
     }
-    function escape_key(k) {
+    function encode_field(k) {
         return k.replace(/(_(keys?|time)?$|^key$)/, '$1_')
     }
-    function unescape_key (k) {
+    function decode_field (k) {
         return k.replace(/(_$)/, '')
     }
+
+
+    // ******************
+    // JSON encoding
+    //  - Does both escape/unescape keys, and wraps/unwraps pointers
+    //  - Will use in both network communication and file_store
+    function json_encode (highlevel_obj) {
+        // Encodes fields, and converts {_key: 's'} to pointer to {key: 's'...}
+    }
+    function json_decode (lowlevel_obj) {
+        // Decodes fields, and converts pointer to {key: 's'...} to {_key: 's'}
+    }
+
 
     function key_id(string) { return string.match(/\/?[^\/]+\/(\d+)/)[1] }
     function key_name(string) { return string.match(/\/?([^\/]+).*/)[1] }
@@ -1642,23 +1944,34 @@
     }
 
     function validate (obj, schema) {
+        // XXX Warning:
+        //
+        // If the programmer plugs a variable in as validation schema type,
+        // thinking it's ok cause he'll be seeking an exact match:
+        //
+        //    var thing // manipulable via user input
+        //    bus.validate(obj, {a: thing})
+        //
+        // An attacker could set `thing' to 'string', 'number', or '*', and
+        // suddenly get it to validate anything he wants.
+        //
+        // I *only* imagine this a tempting way to program if you are seeking
+        // an exact match on schema.  So we should consider removing this
+        // feature, 3 lines below.
+
         var optional = false
-        if (schema === '*') return true
-        if (obj === schema) return true
+        if (schema === '*')              return true
+        if (obj === schema)              return true  // DANGEROUS API!!!
 
-        if (typeof obj === 'string')
-            return schema === 'string'
-        if (typeof obj === 'number')
-            return schema === 'number'
-        if (typeof obj === 'boolean')
-            return schema === 'boolean'
+        if (typeof obj === 'string')     return schema === 'string'
+        if (typeof obj === 'number')     return schema === 'number'
+        if (typeof obj === 'boolean')    return schema === 'boolean'
+        if (       obj === null)         return schema === 'null'
 
-        if (Array.isArray(obj))
-            return schema === 'array'
+        if (Array.isArray(obj))          return schema === 'array'
 
         if (typeof obj === 'object') {
-            if (schema === 'object')
-                return true
+            if (schema === 'object')     return true
 
             if (typeof schema === 'object') {
                 for (var k in obj) {
@@ -1669,16 +1982,15 @@
                         sk = '?'+k
                     else if (schema.hasOwnProperty('*'))
                         sk = '*'
-                    else
-                        return false
+                    else                 return false
 
                     if (!validate(obj[k], schema[sk]))
-                        return false
+                                         return false
                 }
                 for (var k in schema)
                     if (k[0] !== '?' && k !== '*')
                         if (!(obj.hasOwnProperty(k)))
-                            return false
+                                         return false
 
                 return true
             }
@@ -1686,7 +1998,9 @@
             return false
         }
 
-        throw "You hit a Statebus bug!"
+        if (typeof obj == 'function')
+            throw 'bus.validate() cannot validate functions'
+        throw "You hit a Statebus bug! Tell the developers!"
     }
 
     function funk_key (funk) {
@@ -1758,18 +2072,32 @@
         bus.honk = old_honk
     }
 
+    var bogus_keys = {constructor:1, hasOwnProperty:1, isPrototypeOf:1,
+                      propertyIsEnumerable:1, toLocaleString:1, toString:1, valueOf:1,
+                      __defineGetter__:1, __defineSetter__:1,
+                      __lookupGetter__:1, __lookupSetter__:1, __proto__:1}
+    function bogus_check (key) {
+        if (!(key in bogus_keys))
+            return
+
+        var msg = "Sorry, statebus.js currently prohibits use of the key \""+key+"\", and in fact all of these keys: " + Object.keys(bogus_keys).join(', ') + ".  This is because Javascript is kinda lame, and even empty objects like \"{}\" have the \""+key+"\" field defined on them.  Try typing this in your Javascript console: \"({}).constructor\" -- it returns a function instead of undefined!  We could work around it by meticulously replacing every \"obj[key]\" with \"obj.hasOwnProperty(key) && obj[key]\" in the statebus code, but that will make the source more difficult to understand.  So please contact us if this use-case is important for you, and we'll consider doing it.  We're hoping that, for now, our users don't need to use these keys."
+        console.error(msg)
+        throw 'Invalid key'
+    }
+
     // #######################################
     // ########### Browser Code ##############
     // #######################################
 
     // Make these private methods accessible
-    var api = ['cache backup_cache fetch save forget del fire sync dirty fetch_once',
+    var api = ['cache backup_cache fetch save forget del fire dirty fetch_once',
                'subspace bindings run_handler bind unbind reactive uncallback',
                'versions new_version',
+               'make_proxy',
                'funk_key funk_name funks key_id key_name id',
                'pending_fetches fetches_in loading_keys loading',
                'global_funk busses rerunnable_funks',
-               'escape_key unescape_key translate_keys',
+               'encode_field decode_field translate_keys',
                'net_client go_net message_method',
                'Set One_To_Many clone extend deep_map deep_equals validate sorta_diff log deps'
               ].join(' ').split(' ')
@@ -1779,9 +2107,16 @@
     bus.delete = bus.del
     bus.executing_funk = function () {return executing_funk}
 
+    if ((nodejs ? global : window).Proxy) {
+        bus.sb = sb()
+        bus.state = make_proxy(null, bus.cache)
+        this.state = bus.state // make 'state' global
+    }
+
     // Export globals
-    var globals = 'fetch save sync del forget loading clone'.split(' ')
-    if (nodejs || Object.keys(busses).length > 0) globals = globals.slice(4)
+    var globals = ['loading', 'clone', 'forget']
+    if (!nodejs && Object.keys(busses).length == 0)
+        globals = globals.concat('fetch save del'.split(' '))
     for (var i=0; i<globals.length; i++)
         this[globals[i]] = eval(globals[i])
 
@@ -1789,7 +2124,8 @@
 
     if (nodejs)
         require('./server').import_server(bus, options)
-
+    
+    bus.render_when_loading = true
     return bus
 }
 
