@@ -412,59 +412,6 @@ function add_server_methods (bus)
         bus.go_net(make_sock)
     },
 
-    sqlite_store: function sqlite_store (cb) {
-        var prefix = '*'
-
-        // Load the db on startup
-        try {
-            var db = new (require('better-sqlite3'))('db.sqlite')
-            db.prepare('create table if not exists cache (key text primary key, obj text)').run()
-            var rows = db.prepare('select * from cache').each([], (row) => {
-                var obj = JSON.parse(row.obj)
-                if (global.pointerify) obj = inline_pointers(obj)
-                bus.save.fire(obj)
-            })
-            bus.log('Read db.sqlite')
-        } catch (e) {
-            console.error(e)
-            console.error('Bad sqlite db')
-        }
-
-        // Add save handlers
-        function on_save (obj) {
-            if (global.pointerify)
-                obj = abstract_pointers(obj)
-
-            db.prepare('replace into cache (key, obj) values (?, ?)').run(
-                [obj.key, JSON.stringify(obj)])
-        }
-        on_save.priority = true
-        bus(prefix).on_save = on_save
-        bus(prefix).to_delete = function (key) {
-            db.prepare('delete from cache where key = ?').run([key])
-        }
-
-        // Replaces every nested keyed object with {_key: <key>}
-        function abstract_pointers (o) {
-            o = bus.clone(o)
-            var result = {}
-            for (k in o)
-                result[k] = bus.deep_map(o[k], (o) => {
-                    if (o && o.key) return {_key: o.key}
-                    else return o
-                })
-            return result
-        }
-        // ...and the inverse
-        function inline_pointers (db) {
-            return bus.deep_map(db, (o) => {
-                if (o && o._key)
-                    return db[o._key]
-                else return o
-            })
-        }
-    },
-
     file_store: (function () {
         // Make a database
         var fs = require('fs')
@@ -600,6 +547,117 @@ function add_server_methods (bus)
         return file_store
     })(),
 
+
+    sqlite_store: function sqlite_store () {
+        var prefix = '*'
+
+        // Load the db on startup
+        try {
+            var db = new (require('better-sqlite3'))('db.sqlite')
+            db.prepare('create table if not exists cache (key text primary key, obj text)').run()
+            db.pragma('journal_mode = WAL')
+            var rows = db.prepare('select * from cache').each([], (row) => {
+                var obj = JSON.parse(row.obj)
+                if (global.pointerify) obj = inline_pointers(obj)
+                bus.save.fire(obj)
+            })
+            bus.log('Read db.sqlite')
+        } catch (e) {
+            console.error(e)
+            console.error('Bad sqlite db')
+        }
+
+
+        // Add save handlers
+        var save_stmt = db.prepare('replace into cache (key, obj) values (?, ?)')
+        function on_save (obj) {
+            if (global.pointerify)
+                obj = abstract_pointers(obj)
+
+            save_stmt.run(obj.key, JSON.stringify(obj))
+        }
+        on_save.priority = true
+        bus(prefix).on_save = on_save
+        var del_stmt = db.prepare('delete from cache where key = ?')
+        bus(prefix).to_delete = function (key) {
+            del_stmt.run(key)
+        }
+
+        // Replaces every nested keyed object with {_key: <key>}
+        function abstract_pointers (o) {
+            o = bus.clone(o)
+            var result = {}
+            for (k in o)
+                result[k] = bus.deep_map(o[k], (o) => {
+                    if (o && o.key) return {_key: o.key}
+                    else return o
+                })
+            return result
+        }
+        // ...and the inverse
+        function inline_pointers (db) {
+            return bus.deep_map(db, (o) => {
+                if (o && o._key)
+                    return db[o._key]
+                else return o
+            })
+        }
+    },
+
+    rocks_store: function rocks_store () {
+        var prefix = '*'
+
+        // Load the db on startup
+        try {
+            var db = require('rocksdb-node').open({create_if_missing: true},
+                                                  'db.rocks')
+            var i = db.newIterator()
+            for (i.seekToFirst(); i.valid(); i.next()) {
+                var obj = JSON.parse(i.value())
+                if (global.pointerify) obj = inline_pointers(obj)
+                bus.save.fire(obj)
+            }
+            bus.log('Read db.rocks')
+        } catch (e) {
+            console.error(e)
+            console.error('Bad rocks db')
+        } finally {
+            db.releaseIterator()
+        }
+
+        // Add save handlers
+        function on_save (obj) {
+            if (global.pointerify)
+                obj = abstract_pointers(obj)
+
+            db.put(obj.key, JSON.stringify(obj))
+        }
+        on_save.priority = true
+        bus(prefix).on_save = on_save
+        bus(prefix).to_delete = function (key) {
+            db.del(key)
+        }
+
+        // Replaces every nested keyed object with {_key: <key>}
+        function abstract_pointers (o) {
+            o = bus.clone(o)
+            var result = {}
+            for (k in o)
+                result[k] = bus.deep_map(o[k], (o) => {
+                    if (o && o.key) return {_key: o.key}
+                    else return o
+                })
+            return result
+        }
+        // ...and the inverse
+        function inline_pointers (db) {
+            return bus.deep_map(db, (o) => {
+                if (o && o._key)
+                    return db[o._key]
+                else return o
+            })
+        }
+    },
 
     sqlite_query_server: function sqlite_query_server (db) {
         var fetch = bus.fetch
