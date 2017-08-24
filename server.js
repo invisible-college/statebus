@@ -412,6 +412,60 @@ function add_server_methods (bus)
         bus.go_net(make_sock)
     },
 
+    sqlite_store: function sqlite_store (cb) {
+        var prefix = '*'
+
+        // Load the db on startup
+        try {
+            var db = new (require('better-sqlite3'))('db.sqlite')
+            db.prepare('create table if not exists cache (key text, obj text)').run()
+            var rows = db.prepare('select * from cache').each([], (row) => {
+                console.log(row)
+                var obj = JSON.parse(row.obj)
+                if (global.pointerify) obj = inline_pointers(obj)
+                bus.save.fire(obj)
+            })
+            bus.log('Read db.sqlite')
+        } catch (e) {
+            console.error(e)
+            console.error('Bad sqlite db')
+        }
+
+        // Add save handlers
+        function on_save (obj) {
+            if (global.pointerify)
+                obj = abstract_pointers(obj)
+
+            db.prepare('insert into cache (key, obj) values (?, ?)').run(
+                [obj.key, JSON.stringify(obj)])
+        }
+        on_save.priority = true
+        bus(prefix).on_save = on_save
+        bus(prefix).to_delete = function (key) {
+            db.prepare('delete from cache where key = ?').run([key])
+        }
+
+        // Replaces every nested keyed object with {_key: <key>}
+        function abstract_pointers (o) {
+            o = bus.clone(o)
+            var result = {}
+            for (k in o)
+                result[k] = bus.deep_map(o[k], (o) => {
+                    if (o && o.key) return {_key: o.key}
+                    else return o
+                })
+            return result
+        }
+        // ...and the inverse
+        function inline_pointers (db) {
+            return bus.deep_map(db, (o) => {
+                if (o && o._key)
+                    return db[o._key]
+                else return o
+            })
+        }
+    },
+
     file_store: (function () {
         // Make a database
         var fs = require('fs')
