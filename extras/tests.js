@@ -718,11 +718,24 @@ var tests = [
                   + JSON.stringify(bus.cache.array))
 
         state.undefining = undefined
+           assert(state.undefining === undefined)
         state.undefining = {a: undefined}
+           log('state.undefining =', state.undefining)
+           // assert(state.undefining.a === undefined)
+           // TODO: fix https://github.com/invisible-college/statebus/issues/34
         state.undefining = {}
+           assert(!('a' in state.undefining))
         state.undefining.a = undefined
+           assert('a' in state.undefining)
+           assert(state.undefining.a === undefined)
 
-        // state.array = {}
+        state.b = {a: undefined}
+           assert('a' in state.b)
+           assert(state.b.a === undefined)
+        delete state.b.a
+           // TODO: https://github.com/invisible-college/statebus/issues/34
+           assert(!('a' in state.b))
+           assert(state.b.a === undefined)
 
         return next()
 

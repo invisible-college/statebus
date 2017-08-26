@@ -303,8 +303,15 @@
                 var tmp = {}; for (var k in obj) tmp[k] = obj[k]; obj = tmp
             }
 
+            // Inline pointers
+            if ((nodejs ? global : window).pointerify && obj && obj._key) {
+                if (Object.keys(obj).length > 1)
+                    console.error('Got a {_key: ...} object with additional fields')
+                obj = bus.cache[obj._key] = bus.cache[obj._key] || {key: obj._key}
+            }
+
             // Fold cacheable objects into cache
-            if (obj && obj.key) {
+            else if (obj && obj.key) {
                 bogus_check(obj.key)
 
                 if (cache !== backup_cache)
@@ -1444,7 +1451,7 @@
 
                 if (base) {
                     var encoded_v = o[encode_field(k)] = proxy_encode_val(v)
-                    // console.log('set: saving', encoded_v)
+                    // console.log('  set: saving', encoded_v, 'into', base)
 
                     // Collapse state of the form:
                     //    {key: '*', _: {foo: bar, ...}}
@@ -1469,7 +1476,7 @@
                 // Saving into top-level state
                 else {
                     var encoded_v = proxy_encode_val(v)
-                    // console.log('set top-level:', {v, encoded_v})
+                    // console.log('  set top-level:', {v, encoded_v})
 
                     // Setting a top-level object to undefined wipes it out
                     if (v === undefined)
@@ -1487,11 +1494,11 @@
                         encoded_v = {_: encoded_v}
                     encoded_v.key = k
 
-                    // console.log('set top-level: now encoded_v is', encoded_v)
+                    // console.log('  set top-level: now encoded_v is', encoded_v)
                     bus.save(encoded_v)
                 }
 
-                var newbase = encoded_v.key ? encoded_v : base
+                var newbase = (encoded_v && encoded_v.key) ? encoded_v : base
                 return true
             },
             has: function has(O, k) {
@@ -1505,9 +1512,12 @@
                 //  - For a keyed object, should this do a loading() check?
                 return o.hasOwnProperty(encode_field(k))
             },
-            deleteProperty: function del (o, k) {
+            deleteProperty: function del (O, k) {
                 if (base) {
+                    // console.log('  deleting:', encode_field(k), 'of', o)
                     delete o[encode_field(k)]   // Deleting innards
+                    if (Object.keys(o).length === 1 && o.key)
+                        o._ = {}
                     bus.save(base)
                 }
                 else
@@ -1967,6 +1977,7 @@
         if (typeof obj === 'number')     return schema === 'number'
         if (typeof obj === 'boolean')    return schema === 'boolean'
         if (       obj === null)         return schema === 'null'
+        if (       obj === undefined)    return schema === 'undefined'
 
         if (Array.isArray(obj))          return schema === 'array'
 
@@ -2000,6 +2011,7 @@
 
         if (typeof obj == 'function')
             throw 'bus.validate() cannot validate functions'
+        console.trace()
         throw "You hit a Statebus bug! Tell the developers!"
     }
 
