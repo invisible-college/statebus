@@ -554,6 +554,7 @@ function add_server_methods (bus)
         // Load the db on startup
         try {
             var db = new (require('better-sqlite3'))('db.sqlite')
+	    db.pragma('journal_mode = WAL')
             db.prepare('create table if not exists cache (key text primary key, obj text)').run()
             var temp_db = {}
             var rows = db.prepare('select * from cache').each([], (row) => {
