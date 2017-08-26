@@ -555,12 +555,18 @@ function add_server_methods (bus)
         try {
             var db = new (require('better-sqlite3'))('db.sqlite')
             db.prepare('create table if not exists cache (key text primary key, obj text)').run()
-            db.pragma('journal_mode = WAL')
+            var temp_db = {}
             var rows = db.prepare('select * from cache').each([], (row) => {
                 var obj = JSON.parse(row.obj)
-                if (global.pointerify) obj = inline_pointers(obj)
-                bus.save.fire(obj)
+                temp_db[obj.key] = obj 
             })
+            if (global.pointerify) 
+                temp_db = inline_pointers(temp_db)
+
+            for (var key in temp_db)
+                if (temp_db.hasOwnProperty(key))
+                    bus.save.fire(temp_db[key])
+
             bus.log('Read db.sqlite')
         } catch (e) {
             console.error(e)
