@@ -40,8 +40,8 @@ function add_server_methods (bus)
 
         bus.options.use_ssl = (
                require('fs').existsSync(bus.options.certs.private_key)
-            || require('fs').existsSync(bus.options.certs.certificate
-            || require('fs').existsSync(bus.options.certs.certificate_bundle)))
+            || require('fs').existsSync(bus.options.certs.certificate)
+            || require('fs').existsSync(bus.options.certs.certificate_bundle))
 
 
         // Automatically handle root and ports
