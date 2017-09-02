@@ -38,7 +38,7 @@ function add_server_methods (bus)
                         bus.options[k][k2] = default_options[k][k2]
             }
 
-        bus.options.use_ssl = (
+        var use_ssl = (
                require('fs').existsSync(bus.options.certs.private_key)
             || require('fs').existsSync(bus.options.certs.certificate)
             || require('fs').existsSync(bus.options.certs.certificate_bundle))
@@ -77,7 +77,7 @@ function add_server_methods (bus)
 
             // Add a redirect server if we have SSL
             var port = 80
-            if (bus.options.use_ssl) {
+            if (use_ssl) {
                 port = 443
                 num_servers_desired = 2
 
@@ -101,7 +101,7 @@ function add_server_methods (bus)
 
         // ******************************************
         // ***** Create our own http server *********
-        bus.make_http_server({port: port, on_listen: on_listen})
+        bus.make_http_server({port, on_listen, use_ssl})
         bus.sockjs_server(this.http_server, c) // Serve via sockjs on it
         var express = require('express')
         bus.express = express()
@@ -162,7 +162,8 @@ function add_server_methods (bus)
         if (bus.options.backdoor) {
             bus.make_http_server({
                 port: bus.options.backdoor,
-                name: 'backdoor_http_server'
+                name: 'backdoor_http_server',
+                use_ssl: use_ssl
             })
             bus.sockjs_server(this.backdoor_http_server)
         }
@@ -175,7 +176,7 @@ function add_server_methods (bus)
         var port = options.port || 3000
         var fs = require('fs')
 
-        if (bus.options.use_ssl) {
+        if (options.use_ssl) {
             // Load with TLS/SSL
             console.log('Encryption ON')
             var http = require('https')
@@ -274,7 +275,7 @@ function add_server_methods (bus)
                           ||
                           (method === 'save'
                            && master.validate(message, {save: 'object',
-                                                        '?parents': 'array', '?version': 'string'})
+                                                        '?parents': 'array', '?version': 'string', '?patch': 'string'})
                            && typeof(message.save.key === 'string'))
                           ||
                           (method === 'forget'
@@ -308,7 +309,8 @@ function add_server_methods (bus)
                     // sockjs_pubber.has_seen(user, message.save.key, message.version)
                     user.save(message.save,
                               {version: message.version,
-                               parents: message.parents})
+                               parents: message.parents,
+                               patch: message.patch})
                     if (our_fetches_in[message.save.key]) {  // Store what we've seen if we
                                                              // might have to publish it later
                         user.log('Adding', message.save.key+'#'+message.version,

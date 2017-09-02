@@ -1585,9 +1585,14 @@
         function add_prefixes (obj) { return bus.translate_keys(bus.clone(obj), add_prefix) }
         function rem_prefixes (obj) { return bus.translate_keys(bus.clone(obj), rem_prefix) }
 
-        bus(prefix).to_save   = function (obj) { bus.save.fire(obj)
-                                                 send({save: obj/*,
-                                                       version: bus.versions[obj.key]*/})}
+        bus(prefix).to_save   = function (obj, t) {
+            bus.save.fire(obj)
+            var x = {save: obj}
+            if (t.version) x.version = t.version
+            if (t.parents) x.parents = t.parents
+            if (t.patch)   x.patch =   t.patch
+            send(x)
+        }
         bus(prefix).to_fetch  = function (key) { send({fetch: key}),
                                                  client_fetched_keys.add(key) }
         bus(prefix).to_forget = function (key) { send({forget: key}),
