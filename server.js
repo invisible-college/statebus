@@ -251,16 +251,22 @@ function add_server_methods (bus)
 
             var our_fetches_in = {}  // Every key that every client has fetched.
             log('sockjs_s: New connection from', conn.remoteAddress)
-            function sockjs_pubber (obj) {
+            function sockjs_pubber (obj, t) {
+                // log('sockjs_pubber:', obj, t)
+                var msg = {save: obj}
+                if (t.version) msg.version = t.version
+                if (t.parents) msg.parents = t.parents
+                if (t.patch)   msg.patch =   t.patch
+                msg = JSON.stringify(msg)
+
                 if (global.network_delay) {
                     console.log('>>>> DELAYING!!!', global.network_delay)
                     obj = bus.clone(obj)
-                    setTimeout(() => {conn.write(JSON.stringify({save: obj}))},
-                               global.network_delay)
+                    setTimeout(() => {conn.write(msg)}, global.network_delay)
                 } else
-                    conn.write(JSON.stringify({save: obj}))
+                    conn.write(msg)
 
-                log('sockjs_s: SENT a', obj, 'to client')
+                log('sockjs_s: SENT a', msg, 'to client')
             }
             conn.on('data', function(message) {
                 log('sockjs_s:', message)

@@ -1663,8 +1663,13 @@
 
                     // We only take saves from the server for now
                     if (method !== 'save' && method !== 'pong') throw 'barf'
-                    bus.log('net_client received', message.save)
-                    bus.save.fire(add_prefixes(message.save))
+                    bus.log('net_client received', message)
+                    var t = {version: message.version,
+                             parents: message.parents,
+                             patch: message.patch}
+                    if (!(t.version||t.parents||t.patch))
+                        t = undefined
+                    bus.save.fire(add_prefixes(message.save), t)
                 } catch (err) {
                     console.error('Received bad network message from '
                                   +url+': ', event.data, err)
