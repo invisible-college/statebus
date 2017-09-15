@@ -188,7 +188,7 @@ function add_server_methods (bus)
             // Load with TLS/SSL
             console.log('Encryption ON')
 	    
-	    # use http2 compatible library if available
+	        // use http2 compatible library if available
             try {
                 var http = require('spdy')
             } catch (e) {
