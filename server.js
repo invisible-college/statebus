@@ -187,7 +187,15 @@ function add_server_methods (bus)
         if (options.use_ssl) {
             // Load with TLS/SSL
             console.log('Encryption ON')
-            var http = require('https')
+	    
+	    # use http2 compatible library if available
+            try {
+                var http = require('spdy')
+            } catch (e) {
+                console.error('Could not load spdy library for http2 support. Falling back to https library.')
+                var http = require('https')
+            }	    
+	    
             var protocol = 'https'
             var ssl_options = {
                 ca: (fs.existsSync(this.options.certs.certificate_bundle)
