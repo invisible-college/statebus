@@ -575,46 +575,79 @@ function add_server_methods (bus)
     })(),
 
 
-    sqlite_store: function sqlite_store () {
+    sqlite_store: function sqlite_store (opts) {
         var prefix = '*'
+        var open_transaction = null
+
+        if (!opts) opts = {}
+
+        if (!opts.filename) opts.filename = 'db.sqlite'
 
         // Load the db on startup
         try {
-            var db = new (require('better-sqlite3'))('db.sqlite')
-	    db.pragma('journal_mode = WAL')
+            var db = new (require('better-sqlite3'))(opts.filename)
+            db.pragma('journal_mode = WAL')
             db.prepare('create table if not exists cache (key text primary key, obj text)').run()
             var temp_db = {}
-            var rows = db.prepare('select * from cache').each([], (row) => {
+
+            for (var row of db.prepare('select * from cache').iterate()) {
                 var obj = JSON.parse(row.obj)
                 temp_db[obj.key] = obj 
-            })
-            if (global.pointerify) 
+            }
+
+            if (global.pointerify)
                 temp_db = inline_pointers(temp_db)
 
             for (var key in temp_db)
-                if (temp_db.hasOwnProperty(key))
+                if (temp_db.hasOwnProperty(key)){
                     bus.save.fire(temp_db[key])
-
-            bus.log('Read db.sqlite')
+                    temp_db[key] = undefined
+                }
+            bus.log('Read ' + opts.filename)
         } catch (e) {
             console.error(e)
             console.error('Bad sqlite db')
         }
 
-
         // Add save handlers
-        var save_stmt = db.prepare('replace into cache (key, obj) values (?, ?)')
         function on_save (obj) {
             if (global.pointerify)
                 obj = abstract_pointers(obj)
 
-            save_stmt.run(obj.key, JSON.stringify(obj))
+            if (opts.use_transactions && !open_transaction){
+                console.time('save db')
+                db.prepare('BEGIN TRANSACTION').run()
+            }
+
+            db.prepare('replace into cache (key, obj) values (?, ?)').run(
+                [obj.key, JSON.stringify(obj)])
+
+            if (opts.use_transactions && !open_transaction) {
+
+                open_transaction = setTimeout(function(){
+                    console.log('Committing transaction to database')
+                    db.prepare('COMMIT').run()
+                    open_transaction = false
+                    console.timeEnd('save db')
+                })
+            }
+
         }
         on_save.priority = true
         bus(prefix).on_save = on_save
-        var del_stmt = db.prepare('delete from cache where key = ?')
         bus(prefix).to_delete = function (key) {
-            del_stmt.run(key)
+            if (opts.use_transactions && !open_transaction){
+                console.time('save db')
+                db.prepare('BEGIN TRANSACTION').run()
+            }
+            db.prepare('delete from cache where key = ?').run([key])
+            if (opts.use_transactions && !open_transaction)
+                open_transaction = setTimeout(function(){
+                    console.log('committing')                    
+                    db.prepare('COMMIT').run()
+                    open_transaction = false
+                    console.timeEnd('save db')
+                })
         }
 
         // Replaces every nested keyed object with {_key: <key>}
@@ -631,7 +664,7 @@ function add_server_methods (bus)
         // ...and the inverse
         function inline_pointers (db) {
             return bus.deep_map(db, (o) => {
-                if (o && o._key)
+                if (o && o._key) 
                     return db[o._key]
                 else return o
             })
