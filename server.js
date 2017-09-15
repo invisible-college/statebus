@@ -112,6 +112,13 @@ function add_server_methods (bus)
         // User will put their routes in here
         bus.express.use('/', bus.http)
 
+	// use gzip compression if available
+        try {
+            bus.http.use(require('compression')())
+        } catch (e) {
+            console.error('Could not load compression library for gzipping http responses. Skipping.')
+        }
+
         // Add a fallback that goes to state
         var httpclient_num = 0
         bus.express.get('*', function (req, res) {
