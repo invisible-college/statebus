@@ -1406,9 +1406,16 @@ function add_server_methods (bus)
             var source_filename = filename.substr(1)
             var source = bus.read_file(source_filename)
             if (filename.match(/\.coffee$/)) {
-                var compiled = require('coffee-script').compile(source, {filename,
-                                                                         bare: true,
-                                                                         sourceMap: true})
+		    
+                try {
+                    var compiled = require('coffee-script').compile(source, {filename,
+                                                                             bare: true,
+                                                                             sourceMap: true})
+                } catch (e) {
+                    console.error('Could not compile ' + filename + ': ', e)
+                    return ''
+                }
+		    
                 var source_map = JSON.parse(compiled.v3SourceMap)
                 source_map.sourcesContent = source
                 compiled = 'window.dom = window.dom || {}\n' + compiled.js
