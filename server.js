@@ -244,7 +244,10 @@ function add_server_methods (bus)
             var connections = master.fetch('connections')
         }
         var s = require('sockjs').createServer({
-            sockjs_url: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js' })
+              sockjs_url: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js',
+              disconnect_delay: 600 * 1000,
+              heartbeat_delay: 6000 * 1000	
+	    })
         s.on('connection', function(conn) {
             if (user_bus_func) {
                 // To do for pooling client busses:
