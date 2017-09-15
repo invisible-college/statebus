@@ -95,7 +95,8 @@ function add_server_methods (bus)
             client.serves_auth(conn, master)
             bus.options.client && bus.options.client(client)
         }
-        
+        if (!bus.options.client) c = undefined // no client bus when programmer explicitly says so 
+	    
         if (bus.options.file_store)
             bus.file_store('*', port <= 443)
 
