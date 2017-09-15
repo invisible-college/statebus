@@ -1176,7 +1176,7 @@ function add_server_methods (bus)
             // if (o.pic && o.pic.indexOf('data:image') > -1) {
             //     var img_type = o.pic.match(/^data:image\/(\w+);base64,/)[1]
             //     var b64 = o.pic.replace(/^data:image\/\w+;base64,/, '')
-            //     var upload_dir = bus.options.upload_dir
+            //     var upload_dir = global.upload_dir
             //     // ensure that the uploads directory exists
             //     if (!fs.existsSync(upload_dir))
             //         fs.mkdirSync(upload_dir)
