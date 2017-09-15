@@ -38,7 +38,7 @@ function add_server_methods (bus)
                         bus.options[k][k2] = default_options[k][k2]
             }
 
-        var use_ssl = (
+        var use_ssl = bus.options.certs && (
                require('fs').existsSync(bus.options.certs.private_key)
             || require('fs').existsSync(bus.options.certs.certificate)
             || require('fs').existsSync(bus.options.certs.certificate_bundle))
