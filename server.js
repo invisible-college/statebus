@@ -244,10 +244,10 @@ function add_server_methods (bus)
             var connections = master.fetch('connections')
         }
         var s = require('sockjs').createServer({
-              sockjs_url: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js',
-              disconnect_delay: 600 * 1000,
-              heartbeat_delay: 6000 * 1000	
-	    })
+            sockjs_url: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js',
+            disconnect_delay: 600 * 1000,
+            heartbeat_delay: 6000 * 1000
+	})
         s.on('connection', function(conn) {
             if (user_bus_func) {
                 // To do for pooling client busses:
@@ -1516,6 +1516,9 @@ function add_server_methods (bus)
     // Add methods to bus object
     for (m in extra_methods)
         bus[m] = extra_methods[m]
+
+    // Automatically make state:// fetch over a websocket
+    bus.handle_state_urls()
     return bus
 }
 function new_bus () { return require('./statebus')() }
@@ -1523,7 +1526,7 @@ function new_bus () { return require('./statebus')() }
 module.exports.import_server = function (bus, options) { add_server_methods(bus) }
 module.exports.run_server = function (bus, options) { bus.serve(options) }
 
-// Handy repl. Invoke with node -e 'require("statebus/server").repl("/tmp/foo")'
+// Handy repl. Invoke with node -e 'require("statebus").repl("/tmp/foo")'
 module.exports.repl = function (filename) {
     var net = require('net')
     var sock = net.connect(filename)

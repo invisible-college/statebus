@@ -1740,6 +1740,25 @@
         }
     }
 
+    function handle_state_urls () {
+        var bus = this
+        var old_route = bus.route
+        var connections = {}
+        bus.route = function (key, method, arg, opts) {
+            var d = get_domain(key)
+            if (d && !connections[d]) {
+                (bus.sockjs_client || bus.ws_client)(d + '*', d)
+                connections[d] = true
+            }
+
+            return old_route(key, method, arg, opts)
+        }
+        function get_domain(key) {
+            var m = key.match(/^statei?\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
+            return m && m[0]
+        }
+    }
+
     // ******************
     // Key translation
     function translate_keys (obj, f) {
@@ -2120,7 +2139,7 @@
                'pending_fetches fetches_in loading_keys loading',
                'global_funk busses rerunnable_funks',
                'encode_field decode_field translate_keys',
-               'net_client go_net message_method',
+               'net_client go_net message_method handle_state_urls',
                'Set One_To_Many clone extend deep_map deep_equals validate sorta_diff log deps'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)
@@ -2152,7 +2171,7 @@
 }
 
 if (nodejs) {
-    module.exports.repl = require('./server').repl
+    make_bus.repl = require('./server').repl
     make_bus.serve = function serve (options) {
         var bus = make_bus()
         require('./server').run_server(bus, options)
