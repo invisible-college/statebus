@@ -1412,7 +1412,8 @@ function add_server_methods (bus)
                                                                              bare: true,
                                                                              sourceMap: true})
                 } catch (e) {
-                    console.error('Could not compile ' + filename + ': ', e)
+                    if (!bus.loading())
+                        console.error('Could not compile ' + filename + ': ', e)
                     return ''
                 }
 		    
