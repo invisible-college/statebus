@@ -1121,7 +1121,7 @@ function add_server_methods (bus)
 
             // Validate types
             if (!client.validate(o, {key: 'string', '?login': 'string', '?name': 'string',
-                                     '?pass': 'string', email: 'string', /*'?pic': 'string',*/
+                                     '?pass': 'string', '?email': 'string', /*'?pic': 'string',*/
                                      '*':'*'})) {
                 client.save.abort(o)
                 return
