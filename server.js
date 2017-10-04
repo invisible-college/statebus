@@ -2,6 +2,18 @@ var fs = require('fs'),
     util = require('util')
 var unique_sockjs_string = '_connect_to_statebus_'
 
+var default_options = {
+    port: 3006,
+    backdoor: null,
+    client: (c) => {c.shadows(bus)},
+    file_store: {save_delay: 250, filename: 'db', backup_dir: 'backups'},
+    serve: true,
+    certs: {private_key: 'certs/private-key',
+            certificate: 'certs/certificate',
+            certificate_bundle: 'certs/certificate-bundle'},
+    __secure: false
+}
+
 function add_server_methods (bus)
 {   var extra_methods = {
 
@@ -11,18 +23,7 @@ function add_server_methods (bus)
         master.label = 'master'
 
         // Initialize Options
-        var default_options = {
-            port: 3006,
-            backdoor: null,
-            client: (c) => {c.shadows(bus)},
-            file_store: {save_delay: 250, filename: 'db', backup_dir: 'backups'},
-            serve: true,
-            certs: {private_key: 'certs/private-key',
-                    certificate: 'certs/certificate',
-                    certificate_bundle: 'certs/certificate-bundle'},
-            __secure: false
-        }
-        bus.options = bus.clone(default_options)
+        //bus.options = bus.clone(default_options)
         options = options || {}
         for (k in (options || {}))
             bus.options[k] = options[k]
@@ -123,7 +124,7 @@ function add_server_methods (bus)
         var httpclient_num = 0
         bus.express.get('*', function (req, res) {
             // Make a temporary client bus
-            var cbus = new_bus()
+            var cbus = require('./statebus')()
             cbus.label = 'client_http' + httpclient_num++
             cbus.master = master
 
@@ -260,7 +261,7 @@ function add_server_methods (bus)
 
                 connections[conn.id] = {client: conn.id}; master.save(connections)
 
-                var user = new_bus()
+                var user = require('./statebus')()
                 user.label = 'client' + client_num++
                 master.label = master.label || 'master'
                 user.master = master
@@ -447,6 +448,7 @@ function add_server_methods (bus)
         var pending_save = null
         var active
         function file_store (prefix, delay_activate) {
+            prefix = prefix || '*'
             var filename = bus.options.file_store.filename,
                 backup_dir = bus.options.file_store.backup_dir
 
@@ -1372,7 +1374,7 @@ function add_server_methods (bus)
     },
 
     http_serve: function http_serve (route, fetcher) {
-        var textbus = new_bus()
+        var textbus = require('./statebus')()
         textbus.label = 'textbus'
         var watched = new Set()
         textbus('*').to_fetch = (filename, old) => {
@@ -1518,11 +1520,12 @@ function add_server_methods (bus)
     for (m in extra_methods)
         bus[m] = extra_methods[m]
 
+    bus.options = bus.clone(default_options)
+
     // Automatically make state:// fetch over a websocket
     bus.handle_state_urls()
     return bus
 }
-function new_bus () { return require('./statebus')() }
 
 module.exports.import_server = function (bus, options) { add_server_methods(bus) }
 module.exports.run_server = function (bus, options) { bus.serve(options) }
