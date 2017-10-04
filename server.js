@@ -14,7 +14,7 @@ var default_options = {
     __secure: false
 }
 
-function add_server_methods (bus)
+function import_server (bus, options)
 {   var extra_methods = {
 
     serve: function serve (options) {
@@ -1527,7 +1527,7 @@ function add_server_methods (bus)
     return bus
 }
 
-module.exports.import_server = function (bus, options) { add_server_methods(bus) }
+module.exports.import_server = import_server(bus, options)
 module.exports.run_server = function (bus, options) { bus.serve(options) }
 
 // Handy repl. Invoke with node -e 'require("statebus").repl("/tmp/foo")'
