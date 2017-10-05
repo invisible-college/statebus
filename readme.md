@@ -10,7 +10,9 @@ Statebus is a new version of HTTP that *synchronizes* state.
 
 No server needed!
 
-Just put the following code into a .html file on your computer, and double-click it to get a working chat:
+Just put the following code into a .html file on your computer, and
+double-click the file, to open it in your web browser with a `file:///` url,
+and get a working chat:
 
 ```coffeescript
 <script type="statebus">                       # Scripts with this tag are interpreted by statebus
@@ -48,9 +50,8 @@ dom.REPLY_BOX = ->                             # So let's define the reply box
 </script><script src="https://stateb.us/client6.js"></script>
 ```
 
-Now you have a working statebus app!  Double-click to open it in your web
-browser with a `file:///` url.  It synchronizes messages witih everyone who
-opens it.
+Now you have a working statebus chat!  It synchronizes messages witih everyone
+who opens it.
 
 
 ### Reactive Functions
