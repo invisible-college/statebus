@@ -26,6 +26,7 @@ dom.BODY = ->                                  # Define the webpage with dom.BOD
 
 dom.REPLY_BOX = ->                             # So let's define the reply box
   reply = fetch('reply')                       # We fetch the text written so far
+  chat = fetch('/chat')
 
   DIV {},
     INPUT
@@ -35,15 +36,14 @@ dom.REPLY_BOX = ->                             # So let's define the reply box
         reply.text = e.target.value            #    1) Update the state of the text
         save(reply)                            #    2) And save the new value to the bus!
 
-    BUTTON                                     # This button sends the message!
-      onClick: (e) =>                          #
-        chat = fetch('/chat')                  #    1) Take all messages
-        chat.messages or= []                   #       ... initialize them if empty
-                                               #
-        chat.messages.push(reply.text)         #    2) Add our new message!
-        save(chat)                             #    3) Save our (now larger) list of messages!
-                                               #
-        reply.text = ''                        #    4) And clear out the new message box
+    BUTTON
+      onClick: (e) =>
+        chat.messages or= []                   # Initialize the messages to []
+
+        chat.messages.push(reply.text)         # Add our new message to the list!
+        save(chat)
+
+        reply.text = ''                        # Clear the reply box
         save(reply)
       'Send'
 
@@ -149,18 +149,18 @@ And if you provide no prefix at all, then you can access the local storage in th
 fetch('chat')
 ```
 
-That brings us to the next few lines, which fetch some local state at the URL 'new_message'
+That brings us to the next few lines, which fetch some local state at the URL 'reply'
 and updates an input box whenever a user types and changes that state:
 
 ```coffeescript
-  new_message = fetch('new_message')
+  reply = fetch('reply')
   DIV {},
     INPUT
       type: 'text'
-      value: new_message.text
+      value: reply.text
       onChange: (e) =>
-        new_message.text = e.target.value
-        save(new_message)
+        reply.text = e.target.value
+        save(reply)
 ```
 
 The final chunk of code works with both local and remote state to
@@ -172,11 +172,10 @@ message is added to the chat feed, and the textbox is cleared away.
       onClick: (e) =>
         chat = fetch('/chat')
         chat.messages or= []
-        message = {content: new_message.text}
-        chat.messages.push( message )
+        chat.messages.push( reply.text )
         save(chat)
-        new_message.text = ''
-        save(new_message)
+        reply.text = ''
+        save(reply)
       'Send'
 ```
 
