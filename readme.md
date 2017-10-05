@@ -6,14 +6,11 @@ Statebus is a new version of HTTP that *synchronizes* state.
   - Statebus guarantees all state is synchronized automatically.
 
 
-Let's see how to make a chat app.
-
-
 ## Making a client
 
 No server needed!
 
-Just put the following code into a .html file on your computer, and double-click it to get a working chat that's synchronized with all users:
+Just put the following code into a .html file on your computer, and double-click it to get a working chat:
 
 ```coffeescript
 <script type="statebus">                          # Scripts with this tag are interpreted by statebus
@@ -51,9 +48,9 @@ dom.NEW_MESSAGE = ->                              # So let's define the "new mes
 </script><script src="https://stateb.us/client6.js"></script>
 ```
 
-Now you have a working statebus app!  Double-click
-to open it in your web browser with a `file:///` url.  You should be able to
-see everyone's messages.
+Now you have a working statebus app!  Double-click to open it in your web
+browser with a `file:///` url.  It synchronizes messages witih everyone who
+opens it.
 
 
 ### Reactive Functions
