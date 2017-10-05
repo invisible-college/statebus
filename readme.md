@@ -41,17 +41,12 @@ dom.NEW_MESSAGE = ->                              # So let's define the "new mes
         chat = fetch('/chat')                     #    1) Take all messages
         chat.messages or= []                      #       ... initialize them if empty
                                                   #
-        chat.messages.push({                      #    2) Add our new message!
-          key: "/message/#{random_string()}"      #       ... with a new random key
-          content: new_message.text               #
-        })                                        #
+        chat.messages.push(new_message.text)      #    2) Add our new message!
         save(chat)                                #    3) Save our (now larger) list of messages!
                                                   #
         new_message.text = ''                     #    4) And clear out the new message box
         save(new_message)
       'Send'
-
-random_string = -> Math.random().toString(36).substring(3)
 
 </script><script src="https://stateb.us/client6.js"></script>
 ```
@@ -232,38 +227,6 @@ Open your .html file in your browser. It now has an empty chat history. This is 
 
 To continue fetching and saving chat data to the stateb.us server, you could modify your .html file to use absolute state URLs by fetching from `state://stateb.us:3006/chat` instead of `/chat`. Or we could change our server to proxy state stored at `stateb.us:3006`. Let's create that proxy server!
 
-## A proxy server
-
-Let's get your new server serving the chat messages that you saw earlier by proxying the data stored at `stateb.us:3006`. Copy and paste the code below into your server.js file, entirely replacing its contents.
-
-```javascript
-// A proxy server
-//  • Chat messages are taken from the stateb.us server
-//  • New messages are posted to stateb.us
-
-statebus = require('statebus')
-
-var upstream_bus = statebus.serve(),                     // Create a bus for our upstream server
-    proxy_bus = statebus.serve({port: 3005})             // ..and our proxy server
-
-proxy_bus('chat').to_fetch = function (k) {              // When a client fetches '/chat',
-  return upstream_bus.fetch('/chat')                     // return the chat data stored at our upstream server
-}                                                        // We're also subscribed to changes from upstream server
-
-proxy_bus('message/*').to_save = function (o) {          // When a client saves a message,
-  chat = upstream_bus.fetch('/chat')                     // we'll add it to the chat history of the upstream bus
-  chat.key = '/' + chat.key                              // (the need for this key prefixing is a bug)
-  o.key = '/' + o.key
-  chat.messages.push(o)
-  upstream_bus.save(chat)                                // and then deliver it upstream  
-}
-
-upstream_bus.ws_client('/*', 'state://stateb.us:3006')   // Connect to our upstream server
-```
-
-Next, restart your server if you're not using `nodemon`or `supervisor`.
-
-Now open your .html file in a browser. You can once again see all of the chat messages of other people who have gone through this tutorial! If you post another message, it will be saved to `stateb.us:3006`.
 
 ### Question: What's on the bus?
 
