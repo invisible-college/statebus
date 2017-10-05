@@ -13,35 +13,35 @@ No server needed!
 Just put the following code into a .html file on your computer, and double-click it to get a working chat:
 
 ```coffeescript
-<script type="statebus">                          # Scripts with this tag are interpreted by statebus
+<script type="statebus">                       # Scripts with this tag are interpreted by statebus
 
-dom.BODY = ->                                     # Define the webpage with dom.BODY = ->
-  messages = fetch('/chat').messages or []        # Get the current state of the chat!
+dom.BODY = ->                                  # Define the webpage with dom.BODY = ->
+  messages = fetch('/chat').messages or []     # Get the current state of the chat!
   DIV {},
-    for message in messages                       # Print each message in the chat
+    for message in messages                    # Print each message in the chat
       DIV(message)
-    REPLY_BOX()                                   # ... and a textbox for writing new messages
+    REPLY_BOX()                                # ... and a textbox for writing new messages
 
-dom.REPLY_BOX = ->                                # So let's define the reply box
-  reply = fetch('reply')                          # We fetch the text written so far
+dom.REPLY_BOX = ->                             # So let's define the reply box
+  reply = fetch('reply')                       # We fetch the text written so far
 
   DIV {},
     INPUT
       type: 'text'
-      value: reply.text                           # Show the current state of the text in the box
-      onChange: (e) =>                            # ...and when it changes:
-        reply.text = e.target.value               #    1) Update the state of the text
-        save(reply)                               #    2) And save the new value to the bus!
+      value: reply.text                        # Show the current state of the text in the box
+      onChange: (e) =>                         # ...and when it changes:
+        reply.text = e.target.value            #    1) Update the state of the text
+        save(reply)                            #    2) And save the new value to the bus!
 
-    BUTTON                                        # This button sends the message!
-      onClick: (e) =>                             #
-        chat = fetch('/chat')                     #    1) Take all messages
-        chat.messages or= []                      #       ... initialize them if empty
-                                                  #
-        chat.messages.push(reply.text)            #    2) Add our new message!
-        save(chat)                                #    3) Save our (now larger) list of messages!
-                                                  #
-        reply.text = ''                           #    4) And clear out the new message box
+    BUTTON                                     # This button sends the message!
+      onClick: (e) =>                          #
+        chat = fetch('/chat')                  #    1) Take all messages
+        chat.messages or= []                   #       ... initialize them if empty
+                                               #
+        chat.messages.push(reply.text)         #    2) Add our new message!
+        save(chat)                             #    3) Save our (now larger) list of messages!
+                                               #
+        reply.text = ''                        #    4) And clear out the new message box
         save(reply)
       'Send'
 
