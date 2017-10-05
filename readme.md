@@ -19,30 +19,30 @@ dom.BODY = ->                                     # Define the webpage with dom.
   messages = fetch('/chat').messages or []        # Get the current state of the chat!
   DIV {},
     for message in messages                       # Print each message in the chat
-      DIV(message.content)
-    NEW_MESSAGE()                                 # ... and a textbox for writing new messages
+      DIV(message)
+    REPLY_BOX()                                   # ... and a textbox for writing new messages
 
-dom.NEW_MESSAGE = ->                              # So let's define the "new message" widget
-  new_message = fetch('new_message')              # We fetch the text written so far
+dom.REPLY_BOX = ->                                # So let's define the reply box
+  reply = fetch('reply')                          # We fetch the text written so far
 
   DIV {},
     INPUT
       type: 'text'
-      value: new_message.text                     # Show the current state of the text in the box
+      value: reply.text                           # Show the current state of the text in the box
       onChange: (e) =>                            # ...and when it changes:
-        new_message.text = e.target.value         #    1) Update the state of the text
-        save(new_message)                         #    2) And save the new value to the bus!
+        reply.text = e.target.value               #    1) Update the state of the text
+        save(reply)                               #    2) And save the new value to the bus!
 
     BUTTON                                        # This button sends the message!
       onClick: (e) =>                             #
         chat = fetch('/chat')                     #    1) Take all messages
         chat.messages or= []                      #       ... initialize them if empty
                                                   #
-        chat.messages.push(new_message.text)      #    2) Add our new message!
+        chat.messages.push(reply.text)            #    2) Add our new message!
         save(chat)                                #    3) Save our (now larger) list of messages!
                                                   #
-        new_message.text = ''                     #    4) And clear out the new message box
-        save(new_message)
+        reply.text = ''                           #    4) And clear out the new message box
+        save(reply)
       'Send'
 
 </script><script src="https://stateb.us/client6.js"></script>
@@ -62,11 +62,11 @@ it detects a change.
 Here's one of those reactive functions:
 
 ```coffeescript
-dom.NEW_MESSAGE = ->
+dom.REPLY_BOX = ->
 ```
 
 Any function on `dom.*` defines a reactive HTML tag, which you can use
-anywhere else in the page with e.g. `NEW_MESSAGE()`.  When the function runs,
+anywhere else in the page with e.g. `REPLY_BOX()`.  When the function runs,
 it remembers every piece of state it fetches, and will re-runs automatically
 whenever that state changes, to determine its new HTML.
 
@@ -87,7 +87,7 @@ Statebus returns undefined, and we so we set messages to be an empty list.
 > fetch('/chat')
 > {
     key: '/chat',
-    messages: [{content: 'hello world!'}]
+    messages: ['hello world!']
   }
 ```
 
@@ -102,8 +102,8 @@ in the next few lines of code.
 ```coffeescript
  DIV {},
     for message in messages
-      DIV(message.content)
-    NEW_MESSAGE()
+      DIV(message)
+    REPLY_BOX()
 ```
 This block of code that renders (1) the list of chat messages
 and (2) a custom component for typing new messages. These both are
@@ -114,13 +114,13 @@ You might be wondering about the syntax `DIV {},`. The `{},` is related
 to passing arguments to your components, like styling your components with css rules. But we're not passing any arguments now for simplicity, so we're just passing in an empty object.
 <!---If you're curious about styles, jump to our [Defining styles](http://) section.---->
 
-The custom NEW_MESSAGE component is defined in the next line.
+The custom REPLY_BOX component is defined in the next line.
 ```coffeescript
-dom.NEW_MESSAGE = ->
+dom.REPLY_BOX = ->
 ```
 
 Just like we defined the dom.BODY, this component defines an input box and
-a send button. One difference is that the NEW_MESSAGE component is
+a send button. One difference is that the REPLY_BOX component is
 concerned with changes in state that occur _locally_ when the user types in
 a box. So this is a good time to look at where state is stored.
 
