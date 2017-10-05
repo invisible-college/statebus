@@ -170,11 +170,12 @@ message is added to the chat feed, and the textbox is cleared away.
 ```coffeescript
     BUTTON
       onClick: (e) =>
-        chat = fetch('/chat')
-        chat.messages or= []
-        chat.messages.push( reply.text )
+        chat.messages or= []                   # Initialize the messages to []
+
+        chat.messages.push(reply.text)         # Add our new message to the list!
         save(chat)
-        reply.text = ''
+
+        reply.text = ''                        # Clear the reply box
         save(reply)
       'Send'
 ```
