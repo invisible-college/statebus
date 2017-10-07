@@ -2,7 +2,7 @@ var fs = require('fs'),
     util = require('util')
 var unique_sockjs_string = '_connect_to_statebus_'
 
-var default_options = {
+function default_options (bus) { return {
     port: 3006,
     backdoor: null,
     client: (c) => {c.shadows(bus)},
@@ -12,6 +12,24 @@ var default_options = {
             certificate: 'certs/certificate',
             certificate_bundle: 'certs/certificate-bundle'},
     __secure: false
+}}
+
+function set_options (bus, options) {
+    var defaults = bus.clone(bus.options)
+    options = options || {}
+    for (k in (options || {}))
+        bus.options[k] = options[k]
+
+    // Fill in defaults of nested options too
+    for (k in {file_store:1, certs:1})
+        if (bus.options[k]) {
+            if (typeof bus.options[k] !== 'object' || bus.options[k] === null)
+                bus.options[k] = {}
+
+            for (k2 in defaults[k])
+                if (!bus.options[k].hasOwnProperty(k2))
+                    bus.options[k][k2] = defaults[k][k2]
+        }
 }
 
 function import_server (bus, options)
@@ -23,21 +41,7 @@ function import_server (bus, options)
         master.label = 'master'
 
         // Initialize Options
-        //bus.options = bus.clone(default_options)
-        options = options || {}
-        for (k in (options || {}))
-            bus.options[k] = options[k]
-
-        // Fill in defaults of nested options too
-        for (k in {file_store:1, certs:1})
-            if (bus.options[k]) {
-                if (typeof bus.options[k] !== 'object' || bus.options[k] === null)
-                    bus.options[k] = {}
-
-                for (k2 in default_options[k])
-                    if (!bus.options[k].hasOwnProperty(k2))
-                        bus.options[k][k2] = default_options[k][k2]
-            }
+        set_options(bus, options)
 
         var use_ssl = bus.options.certs && (
                require('fs').existsSync(bus.options.certs.private_key)
@@ -531,7 +535,7 @@ function import_server (bus, options)
 
             // Handling errors
             function recover (e) {
-                console.log('### cleanup func')
+                console.log('### Crash detected from statebus file_store')
                 if (e) {
                     process.stderr.write("Uncaught Exception:\n");
                     process.stderr.write(e.stack + "\n");
@@ -1520,14 +1524,15 @@ function import_server (bus, options)
     for (m in extra_methods)
         bus[m] = extra_methods[m]
 
-    bus.options = bus.clone(default_options)
+    bus.options = default_options(bus)
+    set_options(bus, options)
 
     // Automatically make state:// fetch over a websocket
     bus.handle_state_urls()
     return bus
 }
 
-module.exports.import_server = import_server(bus, options)
+module.exports.import_server = import_server
 module.exports.run_server = function (bus, options) { bus.serve(options) }
 
 // Handy repl. Invoke with node -e 'require("statebus").repl("/tmp/foo")'
