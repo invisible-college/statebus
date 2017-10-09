@@ -120,9 +120,8 @@ function import_server (bus, options)
 	// use gzip compression if available
         try {
             bus.http.use(require('compression')())
-        } catch (e) {
-            console.error('Could not load compression library for gzipping http responses. Skipping.')
-        }
+            console.log('Enabled http compression!')
+        } catch (e) {}
 
         // Add a fallback that goes to state
         var httpclient_num = 0
@@ -196,8 +195,8 @@ function import_server (bus, options)
 	        // use http2 compatible library if available
             try {
                 var http = require('spdy')
+                console.log('Found spdy library. HTTP/2 enabled!')
             } catch (e) {
-                console.error('Could not load spdy library for http2 support. Falling back to https library.')
                 var http = require('https')
             }	    
 	    
