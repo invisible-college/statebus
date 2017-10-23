@@ -263,7 +263,7 @@ In our proxy server above, we defined two custom handlers for our state:
 
 ```javascript
 proxy_bus('chat').to_fetch = function (k) {[snip]}
-proxy_bus('message/*').to_save = function (o) {[snip]}
+proxy_bus('message/*').to_save = function (o, t) {[snip]}
 ```
 
 These handlers define how our proxy server relays state between clients and the upstream `stateb.us:3006` server.
@@ -275,12 +275,12 @@ These handlers give you control over how state is read and written through the r
 
 There is a handler for each of the Statebus methods:
 
-| Method      | Handler                                           |
-| :---------- | :------------------------------------------------ |
-| fetch(key)  | bus(key_space).to_fetch  = function (key) { ... } |
-| save(obj)   | bus(key_space).to_save   = function (obj) { ... } |
-| forget(key) | bus(key_space).to_forget = function (key) { ... } |
-| delete(key) | bus(key_space).to_delete = function (key) { ... } |
+| Method      | Handler                                              |
+| :---------- | :--------------------------------------------------- |
+| fetch(key)  | bus(key_space).to_fetch  = function (key)    { ... } |
+| save(obj)   | bus(key_space).to_save   = function (obj, t) { ... } |
+| forget(key) | bus(key_space).to_forget = function (key)    { ... } |
+| delete(key) | bus(key_space).to_delete = function (key, t) { ... } |
 
 These handlers can be written on clients as well -- on any state bus.
 
@@ -353,6 +353,7 @@ our proxy server will send new and updated messages to our upstream server:
 ```javascript
 proxy_bus('message/*').to_save = function (o, t) {
   upstream_bus.save(o)
+  t.done(o)
 }
 ```
 
