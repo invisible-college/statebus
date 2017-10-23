@@ -384,7 +384,7 @@ This lets you control:
 - Updating dependent state
 - When to broadcast updates
 
-`to_save handlers are also reactive, but stop reacting as soon as they run once
+`to_save` handlers are also reactive, but stop reacting as soon as they run once
 to completion without anything fetched loading.  This lets you fetch state
 from other places (*e.g.* over the network) and be sure that your handler will
 run once the state has loaded.
