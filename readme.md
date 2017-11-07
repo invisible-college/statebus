@@ -1,1 +1,1 @@
-**Readme: https://invisible.college/wiki/statebus**
+**Readme: https://wiki.invisible.college/statebus**
