@@ -218,8 +218,8 @@
     }
 
     save.abort = function (obj, t) {
+        if (!obj) console.error('No obj', obj)
         abort_changes([obj.key])
-        console.assert(obj)
         statelog(obj.key, yellow, '<', 'Aborting ' + obj.key)
         mark_changed(obj.key, t)
     }
@@ -789,6 +789,8 @@
                 t.abort = function () {
                     var key = method === 'to_save' ? arg.key : arg
                     if (f.loading()) return
+                    bus.cache[key] = bus.cache[key] || {key: key}
+                    bus.backup_cache[key] = bus.backup_cache[key] || {key: key}
                     bus.save.abort(bus.cache[key])
                 }
             if (method !== 'to_forget')
@@ -1684,6 +1686,10 @@
         return {send: send, sock: sock, close: function () {done = true; sock.close()}}
     }
 
+    // To do:
+    //  - make it recognize custom ports, but default to 3006
+    //  - merge the code in go_net and handle_state_urls and client.js
+    //  - pick better names here
     function go_net (socket_api, login) {
         var connections = {}
         function get_domain(key) { // Returns e.g. "state://foo.com"
