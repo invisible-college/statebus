@@ -83,6 +83,9 @@ function import_server (bus, options)
             // Add a redirect server if we have SSL
             var port = 80
             if (use_ssl) {
+                // This should be enableable even if you don't run as root,
+                // cause users can e.g. run:
+                //   sudo setcap 'cap_net_bind_service=+ep' `readlink -f /usr/bin/node`
                 port = 443
                 num_servers_desired = 2
 
@@ -103,7 +106,7 @@ function import_server (bus, options)
         if (!bus.options.client) c = undefined // no client bus when programmer explicitly says so 
 	    
         if (bus.options.file_store)
-            bus.file_store('*', port <= 443)
+            bus.file_store('*', process.getuid() === 0 && port <= 443)
 
         // ******************************************
         // ***** Create our own http server *********
@@ -591,6 +594,7 @@ function import_server (bus, options)
         // Load the db on startup
         try {
             var db = new (require('better-sqlite3'))(opts.filename)
+            bus.sqlite_store_db = db
             db.pragma('journal_mode = WAL')
             db.prepare('create table if not exists cache (key text primary key, obj text)').run()
             var temp_db = {}
