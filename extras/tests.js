@@ -101,6 +101,18 @@ var tests = [
         next()
     },
 
+    function prune (next) {
+        var boose = require('../statebus')()
+        boose.save({key: 'nark', _: 333666})
+        var a = {key: 'funny',
+                 b: {key: 'farty', booger: 3}}
+        assert(!boose.prune(a).b.booger)
+        var b = {key: 'farty',
+                 a: a,
+                 arr: [1, 3, a, {key: 'nark', ___: 999}]}
+        next()
+    },
+
     function auto_vars (next) {
         var n = require('../statebus')()
         n('r/*').to_fetch = function (rest, o) {return {rest: rest, o: o}}

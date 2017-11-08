@@ -1987,6 +1987,30 @@
         // Then Not Equal.
         return ' = ' + JSON.stringify(b)
     }
+    function prune (obj) {
+        var bus = this
+        obj = bus.clone(obj)
+        function recurse (o) {
+            // Recurse through each element in arrays
+            if (Array.isArray(o))
+                for (var i=0; i < o.length; i++)
+                    o[i] = recurse(o[i])
+
+            // Recurse through each property on objects
+            else if (typeof(o) === 'object')
+                if (o.key)
+                    return bus.fetch(o.key)
+            else
+                for (var k in o)
+                    o[k] = recurse(o[k])
+
+            return o
+        }
+
+        for (var k in obj)
+            obj[k] = recurse(obj[k])
+        return obj
+    }
 
     function validate (obj, schema) {
         // XXX Warning:
@@ -2146,7 +2170,7 @@
                'global_funk busses rerunnable_funks',
                'encode_field decode_field translate_keys',
                'net_client go_net message_method handle_state_urls',
-               'Set One_To_Many clone extend deep_map deep_equals validate sorta_diff log deps'
+               'Set One_To_Many clone extend deep_map deep_equals prune validate sorta_diff log deps'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)
         bus[api[i]] = eval(api[i])
