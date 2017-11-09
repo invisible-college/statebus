@@ -619,7 +619,7 @@ function import_server (bus, options)
         }
 
         // Add save handlers
-        function store_it (obj) {
+        function on_save (obj) {
             if (global.pointerify)
                 obj = abstract_pointers(obj)
 
@@ -642,10 +642,15 @@ function import_server (bus, options)
             }
 
         }
-        var old_route = bus.route
-        bus.route = function (key, method, arg, t) {
-            if (method === 'to_save') store_it(arg)
-            return old_route(key, method, arg, t)
+        if (opts.save_sync) {
+            var old_route = bus.route
+            bus.route = function (key, ethod, arg, t) {
+                if (method === 'to_save') on_save(arg)
+                return old_route(key, method, arg, t)
+            }
+        } else {
+            on_save.priority = true
+            bus(prefix).on_save = on_save
         }
         bus(prefix).to_delete = function (key) {
             if (opts.use_transactions && !open_transaction){
