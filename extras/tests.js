@@ -1311,6 +1311,61 @@ var tests = [
         })
     },
 
+    function closet_space (next) {
+        delay.init()
+        var s = require('../statebus').serve({port: 3949,
+                                              file_store: false,
+                                              client: (c)=>{c.honk=true}})
+        s.label = 's'
+
+        var c = require('../statebus')()
+        c.label = 'c'
+        c.ws_client('/*', 'statei://localhost:3949')
+
+        // Make stuff as user A
+        var cu = c.fetch('/current_user')
+        c.save({key: '/current_user', create_account: {name: 'a', pass: 'a'}})
+        c.save({key: '/current_user', login_as: {name: 'a', pass: 'a'}})
+        var a_closet = c.fetch('/user/a/foo')
+        var a_private = c.fetch('/user/a/private/foo')
+
+        delay(400, () => {
+            c.save({key: '/user/a/foo', _: 3})
+            c.save({key: '/user/a/private/foo', _: 4})
+        })
+
+        // User A can see it
+        delay(450, ()=> {
+            log('1. Now curr user is', cu)
+            console.assert(cu.logged_in == true, 'not logged in')
+            log('closet is', a_closet)
+            console.assert(a_closet._ === 3, 'closet not right')
+            console.assert(a_private._ === 4, 'private not right')
+
+            // Set up User B
+            c.save({key: '/current_user', create_account: {name: 'b', pass: 'b'}})
+            c.save({key: '/current_user', login_as: {name: 'b', pass: 'b'}})
+        })
+
+        // User B can't see private stuff
+        delay(450, ()=> {
+            log('3. Now curr user is', cu)
+            log('closet is', {closet:a_closet, private:a_private})
+            console.assert(a_closet._ === 3, 'A\'s closet is not visible')
+            console.assert(a_private._ !== 4, 'damn can still see private')
+
+            // User B tries editing the first closet
+            a_closet._ = 5; c.save(a_closet)
+        })
+
+        // User B could not edit that
+        delay(350, ()=> {
+            console.assert(a_closet._ === 3, 'damn he could edit it')
+        })
+
+        delay(50, ()=>next())
+    },
+
     function ambiguous_ordering (next) {
         // Not fully implemented yet
 

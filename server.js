@@ -537,7 +537,6 @@ function import_server (bus, options)
 
             // Handling errors
             function recover (e) {
-                console.log('### Crash detected from statebus file_store')
                 if (e) {
                     process.stderr.write("Uncaught Exception:\n");
                     process.stderr.write(e.stack + "\n");
@@ -1085,6 +1084,8 @@ function import_server (bus, options)
 
                             master.save(clients)
                             master.save(connections)
+
+                            client.log('current_user: success logging in!')
                         }
                         else {
                             error('Cannot log in with that information')
@@ -1114,6 +1115,10 @@ function import_server (bus, options)
         }
         client('current_user').to_delete = function () {}
 
+        // Users have closet space at /user/<name>/*
+        var closet_space_key = /^(user\/[^\/]+)\/.*/
+        var private_closet_space_key = /^user\/[^\/]+\/private.*/
+
         // User
         client('user/*').to_save = function (o) {
             var c = client.fetch('current_user')
@@ -1122,13 +1127,16 @@ function import_server (bus, options)
 
             // Only the current user can touch themself.
             if (!c.logged_in || c.user.key !== user_key) {
+                client.log('Only the current user can touch themself.',
+                           {logged_in: c.logged_in, as: c.user && c.user.key,
+                            touching: user_key})
                 client.save.abort(o)
                 return
             }
 
             // Users have closet space at /user/<name>/*
-            if (o.key.match(/^user\/[^\/]+\//)) {
-                console.log('closet data')
+            if (o.key.match(closet_space_key)) {
+                client.log('saving closet data')
                 master.save(o)
                 return
             }
@@ -1140,14 +1148,7 @@ function import_server (bus, options)
             if (!client.validate(o, {key: 'string', '?login': 'string', '?name': 'string',
                                      '?pass': 'string', '?email': 'string', /*'?pic': 'string',*/
                                      '*':'*'})) {
-                client.save.abort(o)
-                return
-            }
-
-            // Check permissions
-            var c = client.fetch('current_user')
-            client.log(o.key + '.to_save:', o, c.logged_in, c.user)
-            if (!(c.logged_in && c.user.key === o.key)) {
+                client.log('This user change fails validation.')
                 client.save.abort(o)
                 return
             }
@@ -1159,6 +1160,7 @@ function import_server (bus, options)
             // There must be at least a login or a name
             var login = o.login || o.name
             if (!login) {
+                client.log('User must have a login or a name')
                 client.save.abort(o)
                 return
             }
@@ -1214,9 +1216,23 @@ function import_server (bus, options)
 
             master.save(u)
         }
-        client('user/*').to_fetch = function filtered_user (k) {
-            client.log('* fetching:', k)
+        client('user/*').to_fetch = function user_fetcher (k) {
             var c = client.fetch('current_user')
+            client.log('* fetching:', k, 'as', c.user)
+
+            // Users have closet space at /user/<name>/*
+            if (k.match(closet_space_key)) {
+                var obj_user = k.match(closet_space_key)[1]
+                if (k.match(private_closet_space_key)
+                    && (!c.user || obj_user !== c.user.key)) {
+                    client.log('hiding private closet data')
+                    return {}
+                }
+                client.log('fetching closet data')
+                return client.clone(master.fetch(k))
+            }
+
+            // Otherwise return the actual user
             return user_obj(k, c.logged_in && c.user.key === k)
         }
         client('user/*').to_delete = function () {}
