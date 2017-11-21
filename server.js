@@ -643,7 +643,7 @@ function import_server (bus, options)
         }
         if (opts.save_sync) {
             var old_route = bus.route
-            bus.route = function (key, ethod, arg, t) {
+            bus.route = function (key, method, arg, t) {
                 if (method === 'to_save') on_save(arg)
                 return old_route(key, method, arg, t)
             }
