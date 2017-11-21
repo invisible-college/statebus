@@ -561,8 +561,8 @@
     // Connections
     function subspace (key) {
         var result = {}
-        for (method in {to_fetch:null, to_save:null, on_save:null,
-                        to_delete:null, to_forget:null})
+        for (var method in {to_fetch:null, to_save:null, on_save:null,
+                            to_delete:null, to_forget:null})
             (function (method) {
                 Object.defineProperty(result, method, {
                     set: function (func) {
@@ -1022,7 +1022,7 @@
 
             if (funk.statebus_id === 'global funk') return
 
-            for (hash in funk.fetched_keys) {
+            for (var hash in funk.fetched_keys) {
                 var tmp = JSON.parse(hash),
                     bus = busses[tmp[0]], key = tmp[1]
                 if (bus)  // Cause it might have been deleted
@@ -1031,7 +1031,7 @@
             funk.fetched_keys = {}
         }
         funk.loading = function () {
-            for (hash in funk.fetched_keys) {
+            for (var hash in funk.fetched_keys) {
                 var tmp = JSON.parse(hash),
                     bus = busses[tmp[0]], key = tmp[1]
                 if (bus  // Cause it might have been deleted
@@ -1467,7 +1467,7 @@
                         && !base._.key
                         && Object.keys(base._).length !== 0) {
                         // console.log('Collapsing', JSON.stringify(base))
-                        for (k2 in base._)
+                        for (var k2 in base._)
                             base[k2] = base._[k2]
                         delete base._
                     }
@@ -1709,7 +1709,7 @@
             }
         }
 
-        for (prefix in {'state://*':0, 'istate://*':0, 'statei://*':0}) {
+        for (var prefix in {'state://*':0, 'istate://*':0, 'statei://*':0}) {
             bus(prefix).to_fetch = function (k) {
                 var c = make_connection(k)
                 if (c) c.send({fetch: k})

@@ -17,16 +17,16 @@ function default_options (bus) { return {
 function set_options (bus, options) {
     var defaults = bus.clone(bus.options)
     options = options || {}
-    for (k in (options || {}))
+    for (var k in (options || {}))
         bus.options[k] = options[k]
 
     // Fill in defaults of nested options too
-    for (k in {file_store:1, certs:1})
+    for (var k in {file_store:1, certs:1})
         if (bus.options[k]) {
             if (typeof bus.options[k] !== 'object' || bus.options[k] === null)
                 bus.options[k] = {}
 
-            for (k2 in defaults[k])
+            for (var k2 in defaults[k])
                 if (!bus.options[k].hasOwnProperty(k2))
                     bus.options[k][k2] = defaults[k][k2]
         }
@@ -403,7 +403,7 @@ function import_server (bus, options)
                 user('connections').to_fetch = function () {
                     var result = []
                     var conns = master.fetch('connections')
-                    for (connid in conns)
+                    for (var connid in conns)
                         if (connid !== 'key') {
                             var c = master.clone(conns[connid])
                             if (c.user) c.user = user.fetch(c.user)
@@ -505,7 +505,7 @@ function import_server (bus, options)
             function abstract_pointers (o) {
                 o = bus.clone(o)
                 var result = {}
-                for (k in o)
+                for (var k in o)
                     result[k] = bus.deep_map(o[k], (o) => {
                         if (o && o.key) return {_key: o.key}
                         else return o
@@ -670,7 +670,7 @@ function import_server (bus, options)
         function abstract_pointers (o) {
             o = bus.clone(o)
             var result = {}
-            for (k in o)
+            for (var k in o)
                 result[k] = bus.deep_map(o[k], (o) => {
                     if (o && o.key) return {_key: o.key}
                     else return o
@@ -725,7 +725,7 @@ function import_server (bus, options)
         function abstract_pointers (o) {
             o = bus.clone(o)
             var result = {}
-            for (k in o)
+            for (var k in o)
                 result[k] = bus.deep_map(o[k], (o) => {
                     if (o && o.key) return {_key: o.key}
                     else return o
@@ -1009,7 +1009,7 @@ function import_server (bus, options)
                                login: params.login,
                                pass: params.pass,
                                email: params.email }
-            for (k in new_account) if (!new_account[k]) delete new_account[k]
+            for (var k in new_account) if (!new_account[k]) delete new_account[k]
 
             var users = master.fetch('users')
             users.all.push(new_account)
@@ -1207,10 +1207,10 @@ function import_server (bus, options)
 
             // For anything else, go ahead and add it to the user object
             var protected = {key:1, name:1, /*pic:1,*/ pass:1}
-            for (k in o)
+            for (var k in o)
                 if (!protected.hasOwnProperty(k))
                     u[k] = o[k]
-            for (k in u)
+            for (var k in u)
                 if (!protected.hasOwnProperty(k) && !o.hasOwnProperty(k))
                     delete u[k]
 
@@ -1515,7 +1515,7 @@ function import_server (bus, options)
             // And objects without a number, like 'shong' will go on:
             //  key_tree.server.shong[null]
             var tree = {server: {}, client: {}}
-            for (key in cache) {
+            for (var key in cache) {
                 var p = parse_key(key)
                 if (!p) {
                     console.log('The state dash can\'t deal with key', key)
@@ -1548,7 +1548,7 @@ function import_server (bus, options)
     }
 }
     // Add methods to bus object
-    for (m in extra_methods)
+    for (var m in extra_methods)
         bus[m] = extra_methods[m]
 
     bus.options = default_options(bus)

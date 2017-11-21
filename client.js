@@ -195,7 +195,7 @@
                     delete dirty_components[this.key]
 
                     // Add reactivity to any keys passed inside objects in props.
-                    for (k in this.props)
+                    for (var k in this.props)
                         if (this.props.hasOwnProperty(k)
                             && this.props[k] !== null
                             && typeof this.props[k] === 'object'
@@ -346,7 +346,7 @@
             if (statebus_dir == 'https://stateb.us/')
                 js_urls.statebus = statebus_dir + 'statebus4.js'
 
-            for (name in js_urls)
+            for (var name in js_urls)
                 document.write('<script src="' + js_urls[name] + '" charset="utf-8"></script>')
         }
 
@@ -396,6 +396,7 @@
 
         statebus.compile_coffee = compile_coffee
         statebus.load_client_code = load_client_code
+        statebus.load_widgets = load_widgets
 
         if (window.statebus_ready)
             for (var i=0; i<statebus_ready.length; i++)
@@ -442,11 +443,11 @@
                     // Pure objects get merged into object city
                     // Styles get redirected to the style field
                     else if (arg instanceof Object)
-                        for (k in arg)
+                        for (var k in arg)
                             if (is_css_prop[k])
                                 attrs.style[k] = arg[k]        // Merge styles
                             else if (k === 'style')            // Merge insides of style tags
-                                for (k2 in arg[k])
+                                for (var k2 in arg[k])
                                     attrs.style[k2] = arg[k][k2]
                             else {
                                 attrs[k] = arg[k]          // Or be normal.
