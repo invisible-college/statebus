@@ -10,6 +10,7 @@
         var c = document.cookie.match('(^|;)\\s*' + key + '\\s*=\\s*([^;]+)');
         return c ? c.pop() : '';
     }
+    try { document.cookie } catch (e) {get_cookie = set_cookie = function (){}}
     function sockjs_client (prefix, url) {
 	var bus = this;
 
