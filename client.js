@@ -52,6 +52,8 @@
     }
 
     function localstorage_client (prefix) {
+        try { localStorage } catch (e) { return }
+
         // This doesn't yet trigger updates across multiple browser windows.
         // We can do that by adding a list of dirty keys and 
 
@@ -95,43 +97,6 @@
         }
         if (window.addEventListener) window.addEventListener("storage", update, false)
         else                         window.attachEvent("onstorage", update)
-    }
-
-    function universal_sockjs () {
-        var bus = this
-        var old_route = bus.route
-        var connections = {}
-        bus.route = function (key, method, arg, opts) {
-            var d = get_domain(key)
-            if (d && !connections[d]) {
-                bus.sockjs_client(d + '*', d)
-                connections[d] = true
-            }
-
-            return old_route(key, method, arg, opts)
-        }
-        function get_domain(key) {
-            var m = key.match(/^i?statei?\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
-            // if (!m) throw Error('Bad url: ', key)
-            return m && m[0]
-        }
-
-        // Now, if I implement proxy, then we can implement /* using a
-        // proxy on top of this universal_sockjs
-        if (window.slashcut) {
-            // Proxy shortcut defined with:
-            bus('/*').to_fetch = function (key) {
-                return fetch('state://stateb.us' + key)
-            }
-            bus('/*').to_save = function (obj) {
-                bus.save(copy(obj, 'state://stateb.us' + obj.key))
-                bus.save.fire(obj)
-            }
-
-            bus('/*').proxy = function (key) { return 'state://stateb.us' + key }
-            bus('/*').proxy('state://stateb.us/*')
-            bus.proxy('/*', 'state://stateb.us/*')
-        }
     }
 
     // Stores state in the query string, as ?key1={obj...}&key2={obj...}
@@ -351,7 +316,7 @@
 
     function make_client_statebus_maker () {
         var extra_stuff = ['sockjs_client localstorage_client',
-                           'universal_sockjs url_store components live_reload_from'].join(' ').split(' ')
+                           'url_store components live_reload_from'].join(' ').split(' ')
         if (window.statebus) {
             var orig_statebus = statebus
             window.statebus = function make_client_bus () {
@@ -445,7 +410,7 @@
         function camelcase (s) { var a = s.split(/[_-]/)
                                  return a.slice(0,1).concat(a.slice(1).map(capitalize)).join('') }
 
-        var css_props = 'background background-attachment background-color background-image background-position background-repeat border border-collapse border-color border-spacing border-style border-width border-left border-right border-bottom border-top bottom caption-side clear clip color content counter-increment counter-reset cursor direction display empty-cells float font font-family font-size font-style font-variant font-weight height left letter-spacing line-height list-style list-style-image list-style-position list-style-type margin margin-left margin-right margin-bottom margin-top max-height max-width min-height min-width orphans outline outline-color outline-style outline-width overflow padding padding-left padding-right padding-bottom padding-top page-break-after page-break-before page-break-inside position quotes right table-layout text-align text-decoration text-indent text-transform top transform unicode-bidi vertical-align visibility white-space widows width word-spacing z-index'.split(' ')
+        var css_props = 'background background-attachment background-color background-image background-position background-repeat border border-collapse border-color border-spacing border-style border-width border-left border-right border-bottom border-top bottom caption-side clear clip color content counter-increment counter-reset cursor direction display empty-cells float font font-family font-size font-style font-variant font-weight height left letter-spacing line-height list-style list-style-image list-style-position list-style-type margin margin-left margin-right margin-bottom margin-top max-height max-width min-height min-width orphans opacity outline outline-color outline-style outline-width overflow padding padding-left padding-right padding-bottom padding-top page-break-after page-break-before page-break-inside position quotes right table-layout text-align text-decoration text-indent text-transform top transform unicode-bidi vertical-align visibility white-space widows width word-spacing z-index'.split(' ')
         var is_css_prop = {}
         for (var i=0; i<css_props.length; i++)
             is_css_prop[camelcase(css_props[i])] = true
