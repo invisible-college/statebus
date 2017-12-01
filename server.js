@@ -3,7 +3,7 @@ var fs = require('fs'),
 var unique_sockjs_string = '_connect_to_statebus_'
 
 function default_options (bus) { return {
-    port: 3006,
+    port: 'auto',
     backdoor: null,
     client: (c) => {c.shadows(bus)},
     file_store: {save_delay: 250, filename: 'db', backup_dir: 'backups'},
@@ -48,69 +48,19 @@ function import_server (bus, options)
             || require('fs').existsSync(bus.options.certs.certificate)
             || require('fs').existsSync(bus.options.certs.certificate_bundle))
 
-
-        // Automatically handle root and ports
-        //  - Bind to port 443 if SSL
-        //    - Redirect port 80 to 443
-        //  - Undo the sudo
-        //  - Wait until that's finished before touching any files
-        var on_listen = null
-
-        if (process.getuid() === 0 && !options.port) {
-
-            // Setup handler for when we are listening
-            var num_servers_listening = 0
-            var num_servers_desired = 1
-            on_listen = function () {
-                num_servers_listening++
-                if (num_servers_listening === num_servers_desired) {
-                    // Undo the sudo
-                    // Find out original user through environment variable
-                    var uid = parseInt(process.env.SUDO_UID)
-                    var gid = parseInt(process.env.SUDO_GID)
-                    // Set our server's uid/gid to that user
-                    if (gid) process.setgid(gid)
-                    if (uid) process.setuid(uid)
-                    console.log('Server\'s UID/GID is now '
-                                + process.getuid() + '/' + process.getgid())
-
-                    // Start writing to the file_store, since we aren't root
-                    bus.options.file_store && bus.file_store.activate()
-                    console.log('db is active')
-                }
-            }
-
-            // Add a redirect server if we have SSL
-            var port = 80
-            if (use_ssl) {
-                // This should be enableable even if you don't run as root,
-                // cause users can e.g. run:
-                //   sudo setcap 'cap_net_bind_service=+ep' `readlink -f /usr/bin/node`
-                port = 443
-                num_servers_desired = 2
-
-                var redirector = require('http')
-                redirector.createServer(function (req, res) {
-                    res.writeHead(301, {"Location": "https://"+req.headers['host']+req.url})
-                    res.end()
-                }).listen(80, on_listen)
-            }
-        } else
-            var port = bus.options.port
-
         function c (client, conn) {
             client.honk = 'statelog'
             client.serves_auth(conn, master)
             bus.options.client && bus.options.client(client)
         }
-        if (!bus.options.client) c = undefined // no client bus when programmer explicitly says so 
-	    
+        if (!bus.options.client) c = undefined // no client bus when programmer explicitly says so
+
         if (bus.options.file_store)
-            bus.file_store('*', process.getuid() === 0 && port <= 443)
+            bus.file_store('*')
 
         // ******************************************
         // ***** Create our own http server *********
-        bus.make_http_server({port, on_listen, use_ssl})
+        bus.make_http_server({port: bus.options.port, use_ssl})
         bus.sockjs_server(this.http_server, c) // Serve via sockjs on it
         var express = require('express')
         bus.express = express()
@@ -120,7 +70,7 @@ function import_server (bus, options)
         // User will put their routes in here
         bus.express.use('/', bus.http)
 
-	// use gzip compression if available
+        // use gzip compression if available
         try {
             bus.http.use(require('compression')())
             console.log('Enabled http compression!')
@@ -188,21 +138,20 @@ function import_server (bus, options)
 
     make_http_server: function make_http_server (options) {
         options = options || {}
-        var port = options.port || 3000
         var fs = require('fs')
 
         if (options.use_ssl) {
             // Load with TLS/SSL
             console.log('Encryption ON')
-	    
-	        // use http2 compatible library if available
+
+            // use http2 compatible library if available
             try {
                 var http = require('spdy')
                 console.log('Found spdy library. HTTP/2 enabled!')
             } catch (e) {
                 var http = require('https')
-            }	    
-	    
+            }
+
             var protocol = 'https'
             var ssl_options = {
                 ca: (fs.existsSync(this.options.certs.certificate_bundle)
@@ -223,22 +172,60 @@ function import_server (bus, options)
             var ssl_options = undefined
         }
 
-        var http_server = http.createServer(ssl_options)
-        http_server.listen(port, function () {
-            console.log('Listening on '+protocol+ '//:<host>:' + port)
-            if (options.on_listen)
-                options.on_listen()
-        })
+        if (options.port === 'auto') {
+            var bind = require('tcp-bind')
+            function find_a_port () {
+                var next_port_attempt = 80
+                while (true)
+                    try {
+                        var result = bind(next_port_attempt)
+                        bus.port = next_port_attempt
+                        return result
+                    } catch (e) {
+                        if (next_port_attempt < 3006) next_port_attempt = 3006
+                        else next_port_attempt++
+                    }
+            }
+
+            var fd
+            if (options.use_ssl)
+                try {
+                    fd = bind(443)
+                    bus.port = 443
+                    bus.redirect_port_80()
+                } catch (e) {fd = find_a_port()}
+            else fd = find_a_port()
+            var http_server = http.createServer(ssl_options)
+            http_server.listen({fd: fd}, () => {
+                console.log('Listening on '+protocol+'//:<host>:'+bus.port)
+            })
+        }
+        else {
+            bus.port = bus.options.port
+            var http_server = http.createServer(ssl_options)
+            http_server.listen(bus.options.port, () => {
+                console.log('Listening on '+protocol+'//:<host>:'+bus.port)
+            })
+        }
+
         bus[options.name || 'http_server'] = http_server
+    },
+
+    redirect_port_80: function redirect_port_80 () {
+        var redirector = require('http')
+        redirector.createServer(function (req, res) {
+            res.writeHead(301, {"Location": "https://"+req.headers['host']+req.url})
+            res.end()
+        }).listen(80)
     },
 
     install_express: function install_express (express_app) {
         this.http_server.on('request',  // Install express
-		            function (request, response) {
-		                // But express should ignore all sockjs requests
-		                if (!request.url.startsWith('/'+unique_sockjs_string+'/'))
-			            express_app(request, response)
-		            })
+                            function (request, response) {
+                                // But express should ignore all sockjs requests
+                                if (!request.url.startsWith('/'+unique_sockjs_string+'/'))
+                                    express_app(request, response)
+                            })
 
     },
     sockjs_server: function sockjs_server(httpserver, user_bus_func) {
@@ -254,7 +241,7 @@ function import_server (bus, options)
             sockjs_url: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js',
             disconnect_delay: 600 * 1000,
             heartbeat_delay: 6000 * 1000
-	})
+    })
         s.on('connection', function(conn) {
             if (user_bus_func) {
                 // To do for pooling client busses:
@@ -600,7 +587,7 @@ function import_server (bus, options)
 
             for (var row of db.prepare('select * from cache').iterate()) {
                 var obj = JSON.parse(row.obj)
-                temp_db[obj.key] = obj 
+                temp_db[obj.key] = obj
             }
 
             if (global.pointerify)
@@ -659,7 +646,7 @@ function import_server (bus, options)
             db.prepare('delete from cache where key = ?').run([key])
             if (opts.use_transactions && !open_transaction)
                 open_transaction = setTimeout(function(){
-                    console.log('committing')                    
+                    console.log('committing')
                     db.prepare('COMMIT').run()
                     open_transaction = false
                     console.timeEnd('save db')
@@ -680,7 +667,7 @@ function import_server (bus, options)
         // ...and the inverse
         function inline_pointers (db) {
             return bus.deep_map(db, (o) => {
-                if (o && o._key) 
+                if (o && o._key)
                     return db[o._key]
                 else return o
             })
@@ -1439,7 +1426,7 @@ function import_server (bus, options)
             var source_filename = filename.substr(1)
             var source = bus.read_file(source_filename)
             if (filename.match(/\.coffee$/)) {
-		    
+
                 try {
                     var compiled = require('coffee-script').compile(source, {filename,
                                                                              bare: true,
@@ -1449,7 +1436,7 @@ function import_server (bus, options)
                         console.error('Could not compile ' + filename + ': ', e)
                     return ''
                 }
-		    
+
                 var source_map = JSON.parse(compiled.v3SourceMap)
                 source_map.sourcesContent = source
                 compiled = 'window.dom = window.dom || {}\n' + compiled.js
