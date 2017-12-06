@@ -2188,8 +2188,10 @@
     var globals = ['loading', 'clone', 'forget']
     if (!nodejs && Object.keys(busses).length == 0)
         globals = globals.concat('fetch save del'.split(' '))
-    for (var i=0; i<globals.length; i++)
-        this[globals[i]] = eval(globals[i])
+    if (nodejs || !(document.querySelector('script[src*="client"][src$=".js"]')
+                    .getAttribute('globals') == 'false'))
+        for (var i=0; i<globals.length; i++)
+            this[globals[i]] = eval(globals[i])
 
     busses[bus.id] = bus
 
