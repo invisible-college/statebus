@@ -35,14 +35,14 @@
             //  secrets for every domain we connect to, within each domain's
             //  localStorage space.
             
-            var me = fetch('ls/me')
+            var me = bus.fetch('ls/me')
             bus.log('connect: me is', me)
             if (!me.client) {
                 var c = get_cookie('client')
                 me.client = c || (Math.random().toString(36).substring(2)
                                   + Math.random().toString(36).substring(2)
                                   + Math.random().toString(36).substring(2))
-                save(me)
+                bus.save(me)
             }
 
             set_cookie('client', me.client)
@@ -137,7 +137,7 @@
             this(function () {
                 var re = new RegExp(".*/" + prefix + "/(.*)")
                 var file = window.location.href.match(re)[1]
-                var code = fetch('/code/invisible.college/' + file).code
+                var code = bus.fetch('/code/invisible.college/' + file).code
                 if (!code) return
                 if (first_time) {first_time = false; return}
                 var old_scroll_position = window.pageYOffset
@@ -180,7 +180,7 @@
             function add_shortcut (obj, shortcut_name, to_key) {
                 delete obj[shortcut_name]
                 Object.defineProperty(obj, shortcut_name, {
-                    get: function () { return fetch(to_key) },
+                    get: function () { return bus.fetch(to_key) },
                     configurable: true })
             }
             add_shortcut(this, 'local', this.key)
@@ -201,7 +201,7 @@
                             && typeof this.props[k] === 'object'
                             && this.props[k].key)
                             
-                            fetch(this.props[k].key)
+                            bus.fetch(this.props[k].key)
                     
                     // Call the renderer!
                     return orig_render.apply(this, arguments)
