@@ -2189,9 +2189,11 @@
     if (!nodejs && Object.keys(busses).length == 0)
         globals = globals.concat('fetch save del'.split(' '))
     if (nodejs || !(document.querySelector('script[src*="client"][src$=".js"]')
-                    .getAttribute('globals') == 'false'))
+                    .getAttribute('globals') == 'false')) {
+        this.og_fetch = this.fetch
         for (var i=0; i<globals.length; i++)
             this[globals[i]] = eval(globals[i])
+    }
 
     busses[bus.id] = bus
 
