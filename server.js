@@ -969,16 +969,18 @@ function import_server (bus, options)
                 return master.fetch(userpass.user)
         }
         function create_account (params) {
-            if (typeof (params.login || params.name) !== 'string') return false
+            if (typeof (params.login || params.name) !== 'string')
+                throw 'no login or name'
             var login = (params.login || params.name).toLowerCase()
             if (!login ||
                 !master.validate(params, {'?name': 'string', '?login': 'string',
-                                          pass: 'string', '?email': 'string'}))
-                return false
+                                          pass: 'string', '?email': 'string',
+                                          '?key': undefined, '*': '*'}))
+                throw 'invalid name, login, pass, or email'
 
             var passes = master.fetch('users/passwords')
             if (passes.hasOwnProperty(login))
-                return false
+                throw 'there is already a user with that login or name'
 
             // Hash password
             params.pass = require('bcrypt-nodejs').hashSync(params.pass)
@@ -1003,7 +1005,6 @@ function import_server (bus, options)
             passes[login] = {user: new_account.key, pass: new_account.pass}
             master.save(users)
             master.save(passes)
-            return true
         }
 
         // Current User
@@ -1037,13 +1038,14 @@ function import_server (bus, options)
             else {
                 if (o.create_account) {
                     client.log('current_user: creating account')
-                    if (create_account(o.create_account)) {
+                    try {
+                        create_account(o.create_account)
                         client.log('Success creating account!')
                         var cu = client.fetch('current_user')
                         cu.create_account = null
                         client.save.fire(cu)
-                    } else {
-                        error('Cannot create that account')
+                    } catch (e) {
+                        error('Cannot create that account because ' + e)
                         return
                     }
                 }
