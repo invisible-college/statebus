@@ -674,25 +674,40 @@ function import_server (bus, options)
         }
     },
 
-    rocks_store: function rocks_store () {
+    pg_store: function pg_store (opts) {
         var prefix = '*'
+        var open_transaction = null
+
+        if (!opts) opts = {}
+
+        if (!opts.filename) opts.filename = 'db.sqlite'
 
         // Load the db on startup
         try {
-            var db = require('rocksdb-node').open({create_if_missing: true},
-                                                  'db.rocks')
-            var i = db.newIterator()
-            for (i.seekToFirst(); i.valid(); i.next()) {
-                var obj = JSON.parse(i.value())
-                if (global.pointerify) obj = inline_pointers(obj)
-                bus.save.fire(obj)
+            var db = new require('pg-native')()
+            bus.pg_db = db
+            db.connectSync(opts.url)
+            //db.prepare('create table if not exists cache (key text primary key, obj text)').run()
+            var temp_db = {}
+
+            var rows = db.querySync('select * from cache')
+            for (var i=0; i<rows.length; i++) {
+                var obj = rows[i].value
+                temp_db[obj.key] = obj
             }
-            bus.log('Read db.rocks')
+
+            if (global.pointerify)
+                temp_db = inline_pointers(temp_db)
+
+            for (var key in temp_db)
+                if (temp_db.hasOwnProperty(key)){
+                    bus.save.fire(temp_db[key])
+                    temp_db[key] = undefined
+                }
+            bus.log('Read ' + opts.url)
         } catch (e) {
             console.error(e)
-            console.error('Bad rocks db')
-        } finally {
-            db.releaseIterator()
+            console.error('Bad sqlite db')
         }
 
         // Add save handlers
@@ -700,12 +715,40 @@ function import_server (bus, options)
             if (global.pointerify)
                 obj = abstract_pointers(obj)
 
-            db.put(obj.key, JSON.stringify(obj))
+            if (opts.use_transactions && !open_transaction){
+                console.time('save db')
+                db.querySync('BEGIN TRANSACTION')
+            }
+
+            db.querySync('insert into cache (key, value) values ($1, $2) '
+                         + 'on conflict (key) do update set value = $2',
+                         [obj.key, JSON.stringify(obj)])
+
+            if (opts.use_transactions && !open_transaction) {
+
+                open_transaction = setTimeout(function(){
+                    db.querysync('COMMIT')
+                    open_transaction = false
+                    console.timeEnd('save db')
+                })
+            }
+
         }
         on_save.priority = true
         bus(prefix).on_save = on_save
         bus(prefix).to_delete = function (key) {
-            db.del(key)
+            if (opts.use_transactions && !open_transaction){
+                console.time('save db')
+                db.query('BEGIN TRANSACTION', e)
+            }
+            db.query('delete from cache where key = $1', [key], e)
+            if (opts.use_transactions && !open_transaction)
+                open_transaction = setTimeout(function(){
+                    console.log('committing')
+                    db.query('COMMIT', e)
+                    open_transaction = false
+                    console.timeEnd('save db')
+                })
         }
 
         // Replaces every nested keyed object with {_key: <key>}
