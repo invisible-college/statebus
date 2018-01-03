@@ -49,7 +49,7 @@ function import_server (bus, options)
             || require('fs').existsSync(bus.options.certs.certificate_bundle))
 
         function c (client, conn) {
-            client.honk = 'statelog'
+            client.honk = bus.honk
             client.serves_auth(conn, master)
             bus.options.client && bus.options.client(client)
         }
