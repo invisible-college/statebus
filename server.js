@@ -689,7 +689,6 @@ function import_server (bus, options)
                 var day = d.getDate()
                 if (day < 10) day = '0' + day
                 var date = y + '-' + m + '-' + day
-                console.log('backing up ' + opts.filename)
 
                 require('child_process').execFile(
                     'sqlite3',
