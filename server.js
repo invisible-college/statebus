@@ -672,6 +672,31 @@ function import_server (bus, options)
                 else return o
             })
         }
+
+        // Rotating backups
+        setInterval(
+            // Copy the current db over backups/db.<curr_date> every minute
+            function backup_db() {
+                if (opts.backups === false) return
+                var backup_dir = opts.backup_dir || 'backups'
+                if (fs.existsSync && !fs.existsSync(backup_dir))
+                    fs.mkdirSync(backup_dir)
+
+                var d = new Date()
+                var y = d.getYear() + 1900
+                var m = d.getMonth() + 1
+                if (m < 10) m = '0' + m
+                var day = d.getDate()
+                if (day < 10) day = '0' + day
+                var date = y + '-' + m + '-' + day
+                console.log('backing up ' + opts.filename)
+
+                require('child_process').execFile(
+                    'sqlite3',
+                    [opts.filename, '.backup '+"'"+backup_dir+'/'+opts.filename+'.'+date+"'"])
+            },
+            1000 * 60 // Every minute
+        )
     },
 
     pg_store: function pg_store (opts) {
@@ -1502,8 +1527,6 @@ function import_server (bus, options)
 
     serve_clientjs: function serve_clientjs (path) {
         path = path || 'client.js'
-        // bus.http_serve('/client.js', () =>
-
         bus(path).to_fetch = () =>
             ({_:
               ['extras/coffee.js', 'extras/sockjs.js', 'extras/react.js',
