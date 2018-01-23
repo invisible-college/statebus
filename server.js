@@ -80,17 +80,7 @@ function import_server (bus, options)
         var httpclient_num = 0
         bus.express.get('*', function (req, res) {
             // Make a temporary client bus
-            var cbus = require('./statebus')()
-            cbus.label = 'client_http' + httpclient_num++
-            cbus.master = master
-
-            // Log in as the client
-            var clientid = require('cookie').parse(req.headers.cookie || '').client || 'anon'
-            cbus.serves_auth({client: clientid,
-                              remoteAddress: req.connection.remoteAddress},
-                             bus)
-            bus.options.client(cbus)
-            cbus.save({key: 'current_user', client: clientid})
+            var cbus = bus.bus_for_http_client()
 
             // Do the fetch
             cbus.honk = 'statelog'
@@ -134,6 +124,21 @@ function import_server (bus, options)
         }
         
         bus.universal_ws_client()
+    },
+
+    bus_for_http_client: function () {
+        var cbus = require('./statebus')()
+        cbus.label = 'client_http' + httpclient_num++
+        cbus.master = master
+
+        // Log in as the client
+        var clientid = require('cookie').parse(req.headers.cookie || '').client || 'anon'
+        cbus.serves_auth({client: clientid,
+                          remoteAddress: req.connection.remoteAddress},
+                         bus)
+        bus.options.client(cbus)
+        cbus.save({key: 'current_user', client: clientid})
+        return cbus
     },
 
     make_http_server: function make_http_server (options) {
@@ -689,7 +694,6 @@ function import_server (bus, options)
                 var day = d.getDate()
                 if (day < 10) day = '0' + day
                 var date = y + '-' + m + '-' + day
-                console.log('backing up ' + opts.filename)
 
                 require('child_process').execFile(
                     'sqlite3',
@@ -795,6 +799,22 @@ function import_server (bus, options)
                 else return o
             })
         }
+    },
+
+    setup_usage_log (opts) {
+        opts = opts || {}
+        opts.filename = opts.filename || 'db.sqlite'
+        var db = new (require('better-sqlite3'))(opts.filename)
+        bus.usage_log_db = db
+        //db.pragma('journal_mode = WAL')
+        db.prepare('create table if not exists usage (date integer, event text, details text)').run()
+        db.prepare('create index if not exists date_index on usage (date)').run()
+    },
+    log_usage(event, details) {
+        bus.usage_log_db.prepare('insert into usage (date, event, details) values (?, ?, ?)')
+            .run([new Date().getTime()/1000,
+                  event,
+                  JSON.stringify(details)])
     },
 
     sqlite_query_server: function sqlite_query_server (db) {
