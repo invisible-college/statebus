@@ -77,7 +77,6 @@ function import_server (bus, options)
         } catch (e) {}
 
         // Add a fallback that goes to state
-        var httpclient_num = 0
         bus.express.get('*', function (req, res) {
             // Make a temporary client bus
             var cbus = bus.bus_for_http_client()
@@ -127,8 +126,10 @@ function import_server (bus, options)
     },
 
     bus_for_http_client: function () {
+        if (!bus.bus_for_http_client.counter)
+            bus.bus_for_http_client.counter = 0
         var cbus = require('./statebus')()
-        cbus.label = 'client_http' + httpclient_num++
+        cbus.label = 'client_http' + bus.bus_for_http_client.counter++
         cbus.master = master
 
         // Log in as the client
