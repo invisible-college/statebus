@@ -817,6 +817,98 @@ function import_server (bus, options)
                   JSON.stringify(details)])
     },
 
+    serve_email (master) {
+        var client = this
+
+        // Todo on Server:
+        //  - Sort emails by date
+        //  - Finish implementing "n=?" in email_for(.., n)
+        //  - Add in-reply-to: aka parent:
+        //  - Connect with mailin, so we can receive SMTP shit
+        //  - Run it live on invisible.college
+        //  
+        //  - Is there security hole if users have a ? or a / in their name?
+        //  - Make the master.emails/ state not require /
+        //  - Make standard url tools for optional slashes, and ? query params
+        //  - Should a e.g. client to_save abort if it calls save that aborts?
+        //    - e.g. if master('emails*').to_save aborts
+        //
+        // Todo on Client:
+        //  - Group into threads
+        //  - Add infinite scroll
+        //
+        // Questions
+        //  - How do we add mime types?  Like md?  HTML?
+
+        // Helpers
+        function email_for (user, n) {
+            var terms = user
+                ? [{_: {to: [user]}},
+                   {_: {cc: ['public']}},
+                   {_: {cc: [user]}},
+                   {_: {from: [user]}}]
+                : [{_: {cc: ['public']}}]
+
+            terms = terms.map(term => "value @> '"+JSON.stringify(term)+"'")
+            terms = terms.join(' or ')
+
+            var q = "select value from cache where " + terms
+            return master.pg_db.querySync(q).map(x=>x.value)
+        }
+
+        // Define state on master
+        if (master('emails*').to_fetch.length === 0) {
+            master('emails*').to_fetch = (rest) => {
+                var matches = rest.match(/\/(user\/[^\?]+)(\?n=(\d+))?/)
+                var user = matches && matches[1], n = matches && matches[3]
+                return {_: email_for(user, n)}
+            }
+            master('email/*').to_save = (o, t) => {
+                var dirtied = o.to.concat(o.cc).concat(o.from)
+                dirtied.forEach(u => master.dirty('emails/' + u))
+                t.done()
+            }
+        }
+
+        // Define state on client
+        client('emails').to_fetch = (k) => {
+            var c = client.fetch('current_user')
+            var e = master.fetch('emails/' + (c.logged_in ? c.user.key : ''))
+            return {_: master.clone(e._)}
+        }
+
+        client('email/*').to_fetch = (k) => {
+            var m_e = master.fetch(k)
+            if (!m_e._) return {}
+            var c = client.fetch('current_user')
+            var allowed = m_e._.to.concat(m_e._.cc).concat(m_e._.from)
+            if (c.logged_in)
+                if (allowed.indexOf(c.user.key) !== -1)
+                    return client.clone(m_e)
+            if (allowed.indexOf('public') !== -1)
+                return client.clone(m_e)
+            return {}
+        }
+
+        client('email/*').to_save = (o, t) => {
+            if (!client.validate(o, {to: 'array', cc: 'array',
+                                     from: 'array','*': '*'})) {
+                t.abort()
+                return
+            }
+
+            var c = fetch('current_user')
+
+            // Make sure this user is an author
+            if (!c.logged_in || o.from.indexOf(c.user.key === -1)) {
+                t.abort()
+                return
+            }
+            master.save(client.clone(o))
+            t.done()
+        }
+    },
+
     sqlite_query_server: function sqlite_query_server (db) {
         var fetch = bus.fetch
         bus('table_columns/*').to_fetch =
