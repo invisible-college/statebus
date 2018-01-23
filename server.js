@@ -51,7 +51,7 @@ function import_server (bus, options)
         function c (client, conn) {
             client.honk = bus.honk
             client.serves_auth(conn, master)
-            bus.options.client && bus.options.client(client)
+            bus.options.client && bus.options.client(client, conn)
         }
         if (!bus.options.client) c = undefined // no client bus when programmer explicitly says so
 
