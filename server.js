@@ -79,7 +79,7 @@ function import_server (bus, options)
         // Add a fallback that goes to state
         bus.express.get('*', function (req, res) {
             // Make a temporary client bus
-            var cbus = bus.bus_for_http_client()
+            var cbus = bus.bus_for_http_client(req)
 
             // Do the fetch
             cbus.honk = 'statelog'
@@ -125,7 +125,7 @@ function import_server (bus, options)
         bus.universal_ws_client()
     },
 
-    bus_for_http_client: function () {
+    bus_for_http_client (req) {
         var bus = this
         if (!bus.bus_for_http_client.counter)
             bus.bus_for_http_client.counter = 0
