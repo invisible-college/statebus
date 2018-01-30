@@ -67,6 +67,22 @@ function import_server (bus, options)
         bus.http = express.Router()
         bus.install_express(bus.express)
 
+        // Initialize new clients with an id.  We put the client id on
+        // req.client, and also in a cookie for the browser to see.
+        if (bus.options.client)
+            bus.express.use(function (req, res, next) {
+                req.client = require('cookie').parse(req.headers.cookie || '').client
+                if (!req.client) {
+                    req.client = (Math.random().toString(36).substring(2)
+                                  + Math.random().toString(36).substring(2)
+                                  + Math.random().toString(36).substring(2))
+            
+                    res.setHeader('Set-Cookie', 'client=' + req.client
+                                  + '; Expires=21 Oct 2025 00:0:00 GMT;')
+                }
+                next()
+            })
+
         // User will put their routes in here
         bus.express.use('/', bus.http)
 
@@ -79,7 +95,7 @@ function import_server (bus, options)
         // Add a fallback that goes to state
         bus.express.get('*', function (req, res) {
             // Make a temporary client bus
-            var cbus = bus.bus_for_http_client(req)
+            var cbus = bus.bus_for_http_client(req, res)
 
             // Do the fetch
             cbus.honk = 'statelog'
@@ -125,7 +141,7 @@ function import_server (bus, options)
         bus.universal_ws_client()
     },
 
-    bus_for_http_client (req) {
+    bus_for_http_client: function (req, res) {
         var bus = this
         if (!bus.bus_for_http_client.counter)
             bus.bus_for_http_client.counter = 0
@@ -134,12 +150,11 @@ function import_server (bus, options)
         cbus.master = bus
 
         // Log in as the client
-        var clientid = require('cookie').parse(req.headers.cookie || '').client || 'anon'
-        cbus.serves_auth({client: clientid,
+        cbus.serves_auth({client: req.client,
                           remoteAddress: req.connection.remoteAddress},
                          bus)
         bus.options.client(cbus)
-        cbus.save({key: 'current_user', client: clientid})
+        cbus.save({key: 'current_user', client: req.client})
         return cbus
     },
 
@@ -180,7 +195,7 @@ function import_server (bus, options)
         }
 
         if (options.port === 'auto') {
-            var bind = require('tcp-bind')
+            var bind = require('./tcp-bind')
             function find_a_port () {
                 var next_port_attempt = 80
                 while (true)

@@ -38,6 +38,8 @@
             var me = bus.fetch('ls/me')
             bus.log('connect: me is', me)
             if (!me.client) {
+                // Create a client id if we have none yet.
+                // Either from a cookie set by server, or a new one from scratch.
                 var c = get_cookie('client')
                 me.client = c || (Math.random().toString(36).substring(2)
                                   + Math.random().toString(36).substring(2)
