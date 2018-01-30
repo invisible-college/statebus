@@ -2,6 +2,10 @@ var tcp_wrap = process.binding('tcp_wrap')
 var TCP = tcp_wrap.TCP;
 var errno = require('util')._errnoException;
 
+// Check if the current node version is >= 9.3.0
+var v = process.version.substr(1).split('.')
+var node_v9_3_0 = Number(v[0]) >= 9 && Number(v[1]) >= 3
+
 module.exports = function (addr, port) {
     if (typeof addr === 'number' || /^\d+$/.test(addr)) {
         var p = port;
@@ -10,7 +14,10 @@ module.exports = function (addr, port) {
     }
     if (!port) port = 0;
     if (!addr) addr = '0.0.0.0';
-    var h = new TCP(tcp_wrap.constants && tcp_wrap.constants.SERVER);
+    if (node_v9_3_0)
+        var h = new TCP(tcp_wrap.constants && tcp_wrap.constants.SERVER);
+    else
+        var h = new TCP;
     var r = /:/.test(addr)
         ? h.bind6(addr, port)
         : h.bind(addr, port)
