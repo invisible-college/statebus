@@ -855,6 +855,7 @@ function import_server (bus, options)
 
             return {_: days}
         }
+        setInterval(()=>{bus.dirty('usage')}, 1000*60*60)  // Refresh every hour
     },
     log_usage(event, details) {
         bus.usage_log_db.prepare('insert into usage (date, event, details) values (?, ?, ?)')
