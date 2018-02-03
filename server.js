@@ -826,6 +826,35 @@ function import_server (bus, options)
         //db.pragma('journal_mode = WAL')
         db.prepare('create table if not exists usage (date integer, event text, details text)').run()
         db.prepare('create index if not exists date_index on usage (date)').run()
+
+        // Aggregate all accesses by day, to get daily active users
+        bus('usage').to_fetch = () => {
+            var days = []
+            var last_day
+            var nots = ['details not like "%facebookexternalhit%"',
+                        'details not like "%/apple-touch-icon%"',
+                        'details not like "%Googlebot%"'
+                       ].join(' and ')
+            for (var row of db.prepare('select * from usage where '
+                                       + nots + ' order by date').iterate()) {
+                row.date = row.date * 1000
+                row.details = JSON.parse(row.details)
+
+                var d = new Date(row.date)
+                var day = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate()
+                if (last_day !== day)
+                    days.push({day: day})
+                last_day = day
+                
+                days[days.length-1][row.details.client] = true
+                days[days.length-1][row.details.ip] = true
+            }
+
+            for (var i=0; i<days.length; i++)
+                days[i] = {day: days[i].day, count: (Object.keys(days[i]).length-1)/2}
+
+            return {_: days}
+        }
     },
     log_usage(event, details) {
         bus.usage_log_db.prepare('insert into usage (date, event, details) values (?, ?, ?)')
