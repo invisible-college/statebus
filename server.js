@@ -841,7 +841,7 @@ function import_server (bus, options)
                 row.details = JSON.parse(row.details)
 
                 var d = new Date(row.date)
-                var day = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate()
+                var day = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate()
                 if (last_day !== day)
                     days.push({day: day})
                 last_day = day
