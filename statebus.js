@@ -85,30 +85,7 @@
     var fetches_out = {}                // Maps `key' to `func' iff we've fetched `key'
     var fetches_in = new One_To_Many()  // Maps `key' to `pub_funcs' subscribed to our key
 
-    if (nodejs)
-        var red = '\x1b[31m', normal = '\x1b[0m', grey = '\x1b[0;38;5;245m',
-            green = '\x1b[0;38;5;46m', brown = '\x1b[0;38;5;130m',
-            yellow = '\x1b[0;38;5;226m'
-    else
-        var red = '', normal = '', grey = '',
-            green = '', brown = ''
     var currently_saving
-    function add_diff_msg (message, obj) {
-        var diff = sorta_diff(backup_cache[obj.key], obj)
-        if (diff) {
-            var end_col = message.length + 2 + statelog_indent * 3
-            for (var i=0; i<40-end_col; i++) message += ' '
-            message += diff.substring(0,80)
-        }
-        else message += ' <no diff>'
-        return message
-    }
-    function save_msg (obj, t, meth) {
-        var message = (t && t.m) || bus + "."+meth+"('"+obj.key+"')"
-        message = add_diff_msg(message, obj)
-        if (t.version) message += ' [' + t.version + ']'
-        return message
-    }
     function save (obj, t) {
         if (!('key' in obj) || typeof obj.key !== 'string')
             console.error('Error: save(obj) called on object without a key: ', obj)
@@ -1066,6 +1043,35 @@
         })
     }
 
+
+    // ******************
+    // Pretty Printing
+
+    if (nodejs)
+        var red = '\x1b[31m', normal = '\x1b[0m', grey = '\x1b[0;38;5;245m',
+            green = '\x1b[0;38;5;46m', brown = '\x1b[0;38;5;130m',
+            yellow = '\x1b[0;38;5;226m'
+    else
+        var red = '', normal = '', grey = '',
+            green = '', brown = ''
+    function add_diff_msg (message, obj) {
+        var diff = sorta_diff(backup_cache[obj.key], obj)
+        if (diff) {
+            var end_col = message.length + 2 + statelog_indent * 3
+            for (var i=0; i<40-end_col; i++) message += ' '
+            message += diff.substring(0,80)
+        }
+        else message += ' <no diff>'
+        return message
+    }
+    function save_msg (obj, t, meth) {
+        var message = (t && t.m) || bus + "."+meth+"('"+obj.key+"')"
+        message = add_diff_msg(message, obj)
+        if (t.version) message += ' [' + t.version + ']'
+        return message
+    }
+
+
     // ******************
     // Fancy Stuff
 
@@ -1165,90 +1171,6 @@
                     v = bus.clone(v)
                 v.key = k
                 bus.save(v)
-            },
-            // In future, this might check if there's a .to_fetch function OR
-            // something in the cache:
-            //
-            // has: function has(o, k) {
-            //     return k in o
-            // },
-            // ... but I haven't had a need yet.
-            deleteProperty: function del (o, k) {
-                bus.delete(encode_field(k))
-            }
-        })
-    }
-
-    // Proxy2
-    function sb2 () {
-        // I have the cache behind the scenes
-        // Each proxy has a target object -- the raw data on cache
-        // If we're proxying a {_: ...} singleton then ...
-
-        // function empty_obj (o) {
-        //     if (typeof o !== 'object' || o === null) return false
-        //     for (k in o)
-        //         if (k !== 'key') return false
-        //     return true
-        // }
-
-        // NOTE: Does this work with arrays?  Does array.push, splice, etc. do
-        // the right thing?
-        var strict_mode = (function () {return !this})()
-        function item_proxy (base, o) {
-            if (typeof o !== 'object' && o !== null) return o
-
-            var f = function () {}
-            return new Proxy(f, {
-                get: function get(f, k) {
-                    if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol') {
-                        console.log('got', k, '!! type of is', typeof k)
-                    //     if (typeof k !== 'symbol') return undefined
-                    //     return function () {return o}
-                    }
-                    if (typeof k === 'symbol')
-                        return function () {return JSON.stringify(o)}
-                    k = encode_field(k)
-                    return item_proxy(base, o[k])
-                },
-                set: function set(f, k, v) {
-                    // todo warning XXX: this doesn't yet encode v.  For
-                    // instance, you can do bus.sb.foo.boo = {key: 'bar'}, and
-                    // it won't encode it into {key_: 'bar'} like it should.
-                    var result = o[encode_field(k)] = v
-                    bus.save(base)
-                    return strict_mode ? true : result  // Strict mode forces us to return true
-                },
-                has: function has(f, k) {
-                    return o.hasOwnProperty(encode_field(k))
-                },
-                deleteProperty: function del (f, k) {
-                    delete o[encode_field(k)]
-                },
-                apply: function apply (f, This, args) {
-                    return o
-                }
-            })}
-
-        return new Proxy(bus.cache, {
-            get: function get(o, k) {
-                if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
-                    return undefined
-                var raw = bus.fetch(k),
-                    obj = raw
-                while (typeof obj == 'object' && '_' in obj) obj = obj._
-                return item_proxy(raw, obj)
-            },
-            set: function set(o, k, v) {
-                // todo warning XXX: this doesn't yet encode v.  For instance,
-                // you can do bus.sb.foo = {key: 'bar'}, and it won't encode
-                // it into {key_: 'bar'} like it should.
-                v = bus.clone(v)
-                if (typeof v !== 'object' || v === null || Array.isArray(v))
-                    v = {_: v}
-                v.key = k
-                bus.save(v)
-                return strict_mode ? true : v  // Strict mode forces us to return true
             },
             // In future, this might check if there's a .to_fetch function OR
             // something in the cache:
