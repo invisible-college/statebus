@@ -669,29 +669,11 @@
         return result
     }
 
-    /* Regular expressions might be more efficient.
-    function bind_re () {
-        var r=''
-        for (var i=arguments.length-1; i>=0; i--) {
-            var s = (typeof arguments[i] == 'string' ? arguments[i] : arguments[i].source);
-            r += i==arguments.length-1 ? ('('+s+')') : ('|('+s+')')
-        }
-        return new RegExp(r)
-    }
-    function bindings_re (key, method) {
-    }
-    */
-
     function run_handler(funck, method, arg, options) {
         options = options || {}
         var t = options.t,
             just_make_it = options.dont_run,
             binding = options.binding
-
-        // console.log("run_handler: ('"+(arg.key||arg)+"').on_"
-        //             +method+' = f^'+funk_key(funck))
-        // if (funck.statebus_name === undefined || funck.statebus_name === 'undefined')
-        //     console.log('WEIRDO FUNCK', funck, typeof funck.statebus_name)
 
         // When we first run a handler (e.g. a fetch or save), we wrap it in a
         // reactive() funk that calls it with its arg.  Then if it fetches or
@@ -711,8 +693,6 @@
             console.log('   > a', bus+'.'+event + "('" + (arg.key||arg) + "') is " + triggering
                 +'\n     ' + funk_name(funck))
         }
-
-        //console.log('     run_handler:  funk', funk_name(funk))
 
         if (funk) {
             // Then this is an on_save event re-triggering an already-wrapped
@@ -1909,6 +1889,14 @@
         // Then Not Equal.
         return ' = ' + JSON.stringify(b)
     }
+
+    // This prune() function is a temporary workaround for dealing with nested
+    // objects in save() handlers, until we change statebus' behavior.  Right
+    // now, it calls .to_save only on the top-level state.  But if that state
+    // validates, it calls fire() on *every* level of state.  This means that
+    // state changes can sneak inside.  Prune() will take out any changes from
+    // the nested levels of state in a new object -- replacing them with the
+    // existing state from this bus.
     function prune (obj) {
         var bus = this
         obj = bus.clone(obj)
