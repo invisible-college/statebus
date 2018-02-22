@@ -819,6 +819,7 @@ function import_server (bus, options)
     },
 
     setup_usage_log (opts) {
+        bus.serve_time()
         opts = opts || {}
         opts.filename = opts.filename || 'db.sqlite'
         var db = new (require('better-sqlite3'))(opts.filename)
@@ -826,6 +827,7 @@ function import_server (bus, options)
         //db.pragma('journal_mode = WAL')
         db.prepare('create table if not exists usage (date integer, event text, details text)').run()
         db.prepare('create index if not exists date_index on usage (date)').run()
+        var refresh_interval = 1000*60
 
         var nots = ['details not like "%facebookexternalhit%"',
                     'details not like "%/apple-touch-icon%"',
@@ -849,6 +851,7 @@ function import_server (bus, options)
 
         // Aggregate all accesses by day, to get daily active users
         bus('usage').to_fetch = () => {
+            bus.fetch('time/' + refresh_interval)
             var days = []
             var last_day
             for (var row of db.prepare('select * from usage where '
@@ -888,6 +891,7 @@ function import_server (bus, options)
         }
 
         bus('recent_referers/*').to_fetch = (rest) => {
+            bus.fetch('time/' + refresh_interval)
             var result = []
             for (var row of db.prepare('select * from usage where '
                                        + nots + ' order by date desc limit ?').iterate(
@@ -904,13 +908,34 @@ function import_server (bus, options)
 
             return {_: result}
         }
-        setInterval(()=>{bus.dirty('usage')}, 1000*60*60)  // Refresh every hour
     },
     log_usage(event, details) {
         bus.usage_log_db.prepare('insert into usage (date, event, details) values (?, ?, ?)')
             .run([new Date().getTime()/1000,
                   event,
                   JSON.stringify(details)])
+    },
+
+    serve_time () {
+        if (bus('time*').to_fetch.length > 0)
+            // Then it's already installed
+            return
+
+        // Time ticker
+        var timeouts = {}
+        bus('time*').to_fetch =
+            function (key, rest, t) {
+                if (key === 'time') rest = '/1000'
+                timeout = parseInt(rest.substr(1))
+                function f () { bus.save.fire({key: key, time: Date.now()}) }
+                timeouts[key] = setInterval(f, timeout)
+                f()
+            }
+        bus('time*').to_forget =
+            function (key, rest) {
+                if (key === 'time') key = 'time/1000'
+                clearTimeout(timeouts[key])
+            }
     },
 
     serve_email (master) {
