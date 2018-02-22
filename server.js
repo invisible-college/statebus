@@ -195,7 +195,7 @@ function import_server (bus, options)
         }
 
         if (options.port === 'auto') {
-            var bind = require('./tcp-bind')
+            var bind = require('./extras/tcp-bind')
             function find_a_port () {
                 var next_port_attempt = 80
                 while (true)
@@ -843,15 +843,24 @@ function import_server (bus, options)
                 var d = new Date(row.date)
                 var day = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate()
                 if (last_day !== day)
-                    days.push({day: day})
+                    days.push({day: day,    // Init
+                               clients: new Set(),
+                               ips: new Set(),
+                               socket_opens: new Set()
+                              })
                 last_day = day
                 
-                days[days.length-1][row.details.client] = true
-                days[days.length-1][row.details.ip] = true
+                if (row.event === 'socket open')
+                    days[days.length-1].socket_opens.add(row.details.client)
+                days[days.length-1].clients.add(row.details.client)
+                days[days.length-1].ips.add(row.details.ip)
             }
 
             for (var i=0; i<days.length; i++)
-                days[i] = {day: days[i].day, count: (Object.keys(days[i]).length-1)/2}
+                days[i] = {day: days[i].day,
+                           hits: (days[i].clients.size + days[i].ips.size)/2,
+                           socket_opens: days[i].socket_opens.size
+                          }
 
             return {_: days}
         }

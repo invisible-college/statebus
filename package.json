@@ -1,6 +1,6 @@
 {
   "name": "statebus",
-  "version": "6.0.60",
+  "version": "6.0.61",
   "description": "Synchronize state.",
   "main": "statebus.js",
   "scripts": {
@@ -15,7 +15,6 @@
     "cookie": "^0.3.1",
     "express": "^4.15.3",
     "sockjs": "^0.3.18",
-    "tcp-bind": "^1.2.0",
     "websocket": "^1.0.24"
   }
 }
