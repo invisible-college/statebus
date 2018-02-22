@@ -858,8 +858,9 @@ function import_server (bus, options)
 
             for (var i=0; i<days.length; i++)
                 days[i] = {day: days[i].day,
-                           hits: (days[i].clients.size + days[i].ips.size)/2,
-                           socket_opens: days[i].socket_opens.size
+                           ip_hits: days[i].ips.size,
+                           client_hits: days[i].clients.size,
+                           client_socket_opens: days[i].socket_opens.size
                           }
 
             return {_: days}
