@@ -855,7 +855,7 @@ function import_server (bus, options)
                                        + nots + ' order by date').iterate()) {
                 row.date = row.date * 1000
                 row.details = JSON.parse(row.details)
-                if (row.details.agent.match(/bot/)) continue
+                if (row.details.agent && row.details.agent.match(/bot/)) continue
 
                 var d = new Date(row.date)
                 var day = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate()
@@ -895,7 +895,7 @@ function import_server (bus, options)
 
                 row.date = row.date * 1000
                 row.details = JSON.parse(row.details)
-                if (row.details.agent.match(/bot/)) continue
+                if (row.details.agent && row.details.agent.match(/bot/)) continue
 
                 if (row.details.referer && !row.details.referer.match(/^https:\/\/cheeseburgertherapy.com/))
                     result.push({url: row.details.url, referer: row.details.referer,
