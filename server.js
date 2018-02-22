@@ -875,13 +875,14 @@ function import_server (bus, options)
         bus('recent_referers/*').to_fetch = (rest) => {
             var result = []
             for (var row of db.prepare('select * from usage where '
-                                       + nots + ' order by date limit ?').iterate(
+                                       + nots + ' order by date desc limit ?').iterate(
                                            [parseInt(rest)])) {
 
                 row.date = row.date * 1000
                 row.details = JSON.parse(row.details)
                 if (row.details.referer && !row.details.referer.match(/^https:\/\/cheeseburgertherapy.com/))
-                    result.push({url: row.details.url, referer: row.details.referer})
+                    result.push({url: row.details.url, referer: row.details.referer,
+                                 date: row.date})
             }
 
             return {_: result}
