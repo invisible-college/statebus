@@ -827,14 +827,16 @@ function import_server (bus, options)
         db.prepare('create table if not exists usage (date integer, event text, details text)').run()
         db.prepare('create index if not exists date_index on usage (date)').run()
 
+        var nots = ['details not like "%facebookexternalhit%"',
+                    'details not like "%/apple-touch-icon%"',
+                    'details not like "%Googlebot%"',
+                    'details not like "%/cheese_service%"'
+                   ].join(' and ')
+
         // Aggregate all accesses by day, to get daily active users
         bus('usage').to_fetch = () => {
             var days = []
             var last_day
-            var nots = ['details not like "%facebookexternalhit%"',
-                        'details not like "%/apple-touch-icon%"',
-                        'details not like "%Googlebot%"'
-                       ].join(' and ')
             for (var row of db.prepare('select * from usage where '
                                        + nots + ' order by date').iterate()) {
                 row.date = row.date * 1000
@@ -868,6 +870,21 @@ function import_server (bus, options)
                           }
 
             return {_: days}
+        }
+
+        bus('recent_referers/*').to_fetch = (rest) => {
+            var result = []
+            for (var row of db.prepare('select * from usage where '
+                                       + nots + ' order by date limit ?').iterate(
+                                           [parseInt(rest)])) {
+
+                row.date = row.date * 1000
+                row.details = JSON.parse(row.details)
+                if (row.details.referer && !row.details.referer.match(/^https:\/\/cheeseburgertherapy.com/))
+                    result.push({url: row.details.url, referer: row.details.referer})
+            }
+
+            return {_: result}
         }
         setInterval(()=>{bus.dirty('usage')}, 1000*60*60)  // Refresh every hour
     },
