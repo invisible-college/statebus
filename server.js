@@ -830,6 +830,20 @@ function import_server (bus, options)
         var nots = ['details not like "%facebookexternalhit%"',
                     'details not like "%/apple-touch-icon%"',
                     'details not like "%Googlebot%"',
+                    'details not like "%AdsBot-Google%"',
+                    'details not like "%Google-Adwords-Instant%"',
+                    'details not like "%Apache-HttpClient%"',
+                    'details not like "%SafeDNSBot%"',
+                    'details not like "%RevueBot%"',
+                    'details not like "%MetaURI API%"',
+                    'details not like "%redback/v%"',
+                    'details not like "%Slackbot%"',
+                    'details not like "%HTTP_Request2/%"',
+                    'details not like "%python-requests/%"',
+                    'details not like "%LightspeedSystemsCrawler/%"',
+                    'details not like "%CipaCrawler/%"',
+                    'details not like "%Twitterbot/%"',
+                    'details not like "%Go-http-client/%"',
                     'details not like "%/cheese_service%"'
                    ].join(' and ')
 
@@ -841,6 +855,7 @@ function import_server (bus, options)
                                        + nots + ' order by date').iterate()) {
                 row.date = row.date * 1000
                 row.details = JSON.parse(row.details)
+                if (row.details.agent.match(/bot/)) continue
 
                 var d = new Date(row.date)
                 var day = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate()
@@ -880,6 +895,8 @@ function import_server (bus, options)
 
                 row.date = row.date * 1000
                 row.details = JSON.parse(row.details)
+                if (row.details.agent.match(/bot/)) continue
+
                 if (row.details.referer && !row.details.referer.match(/^https:\/\/cheeseburgertherapy.com/))
                     result.push({url: row.details.url, referer: row.details.referer,
                                  date: row.date})
