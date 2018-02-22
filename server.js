@@ -846,12 +846,15 @@ function import_server (bus, options)
                     days.push({day: day,    // Init
                                clients: new Set(),
                                ips: new Set(),
-                               socket_opens: new Set()
+                               client_socket_opens: new Set(),
+                               ip_socket_opens: new Set()
                               })
                 last_day = day
                 
-                if (row.event === 'socket open')
-                    days[days.length-1].socket_opens.add(row.details.client)
+                if (row.event === 'socket open') {
+                    days[days.length-1].client_socket_opens.add(row.details.client)
+                    days[days.length-1].ip_socket_opens.add(row.details.ip)
+                }
                 days[days.length-1].clients.add(row.details.client)
                 days[days.length-1].ips.add(row.details.ip)
             }
@@ -860,7 +863,8 @@ function import_server (bus, options)
                 days[i] = {day: days[i].day,
                            ip_hits: days[i].ips.size,
                            client_hits: days[i].clients.size,
-                           client_socket_opens: days[i].socket_opens.size
+                           client_socket_opens: days[i].client_socket_opens.size,
+                           ip_socket_opens: days[i].ip_socket_opens.size
                           }
 
             return {_: days}
