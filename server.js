@@ -219,14 +219,14 @@ function import_server (bus, options)
             else fd = find_a_port()
             var http_server = http.createServer(ssl_options)
             http_server.listen({fd: fd}, () => {
-                console.log('Listening on '+protocol+'//:<host>:'+bus.port)
+                console.log('Listening on '+protocol+'://<host>:'+bus.port)
             })
         }
         else {
             bus.port = bus.options.port
             var http_server = http.createServer(ssl_options)
             http_server.listen(bus.options.port, () => {
-                console.log('Listening on '+protocol+'//:<host>:'+bus.port)
+                console.log('Listening on '+protocol+'://<host>:'+bus.port)
             })
         }
 
@@ -848,6 +848,7 @@ function import_server (bus, options)
                     'details not like "%Go-http-client/%"',
                     'details not like "%/cheese_service%"'
                    ].join(' and ')
+        bus.usage_log_nots = nots
 
         // Aggregate all accesses by day, to get daily active users
         bus('usage').to_fetch = () => {
@@ -856,11 +857,10 @@ function import_server (bus, options)
             var last_day
             for (var row of db.prepare('select * from usage where '
                                        + nots + ' order by date').iterate()) {
-                row.date = row.date * 1000
                 row.details = JSON.parse(row.details)
                 if (row.details.agent && row.details.agent.match(/bot/)) continue
 
-                var d = new Date(row.date)
+                var d = new Date(row.date * 1000)
                 var day = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate()
                 if (last_day !== day)
                     days.push({day: day,    // Init
@@ -897,7 +897,6 @@ function import_server (bus, options)
                                        + nots + ' order by date desc limit ?').iterate(
                                            [parseInt(rest)])) {
 
-                row.date = row.date * 1000
                 row.details = JSON.parse(row.details)
                 if (row.details.agent && row.details.agent.match(/bot/)) continue
 
@@ -907,6 +906,41 @@ function import_server (bus, options)
             }
 
             return {_: result}
+        }
+
+
+        function sock_open_time (sock_event) {
+            var client = JSON.parse(sock_event.details).client
+            if (!client) return null
+
+            var http_req = db.prepare('select * from usage where event = "http request" and date < ? and '
+                                      + ' details like ? and '
+                                      + nots + ' order by date desc limit 1').get([sock_event.date,
+                                                                                       '%'+client+'%'])
+            if (!http_req) return null
+
+            var delay = sock_event.date - http_req.date
+            var res = !delay || delay > 300 ? 'fail' : delay
+            if (delay && delay < 300
+                && JSON.parse(sock_event.details).ip
+                !== JSON.parse(http_req.details).ip)
+                console.error('Yuck!', delay, sock_event, http_req)
+            return [res, JSON.parse(http_req.details).url]
+        }
+        function sock_open_times () {
+            var opens = db.prepare('select * from usage where event = "socket open" and '
+                                   + nots + ' order by date desc limit ?').all(500)
+            var times = []
+            for (var i=0; i<opens.length; i++) {
+                times.push(sock_open_time(opens[i]))
+                // Get the most recent http hit before this open, from the same client id
+                // subract the times
+            }
+            return times
+        }
+
+        bus('socket_load_times').to_fetch = () => {
+            return {_: sock_open_times()}
         }
     },
     log_usage(event, details) {
@@ -1302,6 +1336,7 @@ function import_server (bus, options)
             for (var k in new_account) if (!new_account[k]) delete new_account[k]
 
             var users = master.fetch('users')
+            users.all = users.all || []
             users.all.push(new_account)
             passes[login] = {user: new_account.key, pass: new_account.pass}
             master.save(users)
