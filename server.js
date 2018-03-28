@@ -1729,6 +1729,8 @@ function import_server (bus, options)
         return bus.read_file(arguments[0])
     },
 
+    // Installs a GET handler at route that gets state from a fetcher function
+    // Note: Makes too many textbusses.  Should re-use one.
     http_serve: function http_serve (route, fetcher) {
         var textbus = require('./statebus')()
         textbus.label = 'textbus'

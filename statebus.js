@@ -2091,7 +2091,7 @@
     if ((nodejs ? global : window).Proxy) {
         bus.sb = sb()
         bus.state = make_proxy(null, bus.cache)
-        this.state = bus.state // make 'state' global
+        this.state = this.state || bus.state // make 'state' global
     }
 
     // Export globals
