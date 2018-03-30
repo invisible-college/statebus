@@ -1509,6 +1509,12 @@
             sock.onopen = function()  {
                 nlog('[*] opened ' + url)
 
+                // Update state
+                var peers = bus.fetch('peers')
+                peers[url] = peers[url] || {}
+                peers[url].connected = true
+                save(peers)
+
                 // Login
                 login && login(function (clientid, name, pass) {
                     var i = []
@@ -1540,6 +1546,12 @@
                 nlog('[*] closed ' + url)
                 heartbeat && clearInterval(heartbeat); heartbeat = null
                 setTimeout(connect, attempts++ < 3 ? 1500 : 5000)
+
+                // Update state
+                var peers = bus.fetch('peers')
+                peers[url] = peers[url] || {}
+                peers[url].connected = false
+                save(peers)
 
                 // Remove all fetches and forgets from queue
                 var new_outbox = []
