@@ -6,7 +6,7 @@ function default_options (bus) { return {
     port: 'auto',
     backdoor: null,
     client: (c) => {c.shadows(bus)},
-    file_store: {save_delay: 250, filename: 'db', backup_dir: 'backups'},
+    file_store: {save_delay: 250, filename: 'db', backup_dir: 'backups', prefix: '*'},
     serve: true,
     certs: {private_key: 'certs/private-key',
             certificate: 'certs/certificate',
@@ -56,7 +56,7 @@ function import_server (bus, options)
         if (!bus.options.client) c = undefined // no client bus when programmer explicitly says so
 
         if (bus.options.file_store)
-            bus.file_store('*')
+            bus.file_store()
 
         // ******************************************
         // ***** Create our own http server *********
@@ -463,7 +463,7 @@ function import_server (bus, options)
         var pending_save = null
         var active
         function file_store (prefix, delay_activate) {
-            prefix = prefix || '*'
+            prefix = prefix || bus.options.file_store.prefix
             var filename = bus.options.file_store.filename,
                 backup_dir = bus.options.file_store.backup_dir
 
