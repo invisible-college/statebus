@@ -705,8 +705,8 @@ var tests = [
         var bus = require('../statebus')()
         var state = bus.state
 
-           assert(state.array === undefined)
-           assert(state.bar === undefined)
+        assert(state.array === undefined)
+        assert(state.bar === undefined)
 
         state.array = []
            log('array:', state.array)

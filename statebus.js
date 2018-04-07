@@ -1092,7 +1092,7 @@
         })
     }
 
-    function sb () {
+    var sb = (function sb () {
         // I have the cache behind the scenes
         // Each proxy has a target object -- the raw data on cache
         // If we're proxying a {_: ...} singleton then ...
@@ -1128,7 +1128,7 @@
                 }
             })}
 
-        return new Proxy(bus.cache, {
+        return new Proxy(cache, {
             get: function get(o, k) {
                 if (k in bogus_keys) return o[k]
                 if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
@@ -1163,7 +1163,8 @@
                 bus.delete(encode_field(k))
             }
         })
-    }
+    })()
+
 
     // ******** State (Proxy) API *********
     //
@@ -1430,6 +1431,9 @@
             apply: function apply (f, This, args) { return get_json() }
         })
     }
+    if (nodejs || window.Proxy)
+        var state = make_proxy(null, cache)
+
     // So chrome can print out proxy objects decently
     if (!nodejs)
         window.devtoolsFormatters = [{
@@ -2086,7 +2090,7 @@
     var api = ['cache backup_cache fetch save forget del fire dirty fetch_once',
                'subspace bindings run_handler bind unbind reactive uncallback',
                'versions new_version',
-               'make_proxy',
+               'make_proxy state sb',
                'funk_key funk_name funks key_id key_name id',
                'pending_fetches fetches_in loading_keys loading',
                'global_funk busses rerunnable_funks',
@@ -2100,19 +2104,15 @@
     bus.delete = bus.del
     bus.executing_funk = function () {return executing_funk}
 
-    if ((nodejs ? global : window).Proxy) {
-        bus.sb = sb()
-        bus.state = make_proxy(null, bus.cache)
-        this.state = this.state || bus.state // make 'state' global
-    }
-
     // Export globals
-    var globals = ['loading', 'clone', 'forget']
-    if (!nodejs && Object.keys(busses).length == 0)
-        globals = globals.concat('fetch save del'.split(' '))
     if (nodejs || !(document.querySelector('script[src*="client"][src$=".js"]')
                     .getAttribute('globals') == 'false')) {
-        this.og_fetch = this.fetch
+        var globals = ['loading', 'clone', 'forget']
+        var client_globals = ['fetch', 'save', 'del', 'state']
+        if (!nodejs && Object.keys(busses).length == 0)
+            globals = globals.concat(client_globals)
+
+        this.og_fetch = this.fetch    // Cause fetch() is actually a browser API now
         for (var i=0; i<globals.length; i++)
             this[globals[i]] = eval(globals[i])
     }
