@@ -315,9 +315,11 @@ function import_server (bus, options)
                                                         '?parent': 'string', '?version': 'string'}))
                           ||
                           (method === 'save'
-                           && master.validate(message, {save: 'object',
-                                                        '?parents': 'array', '?version': 'string', '?patch': 'string'})
-                           && typeof(message.save.key === 'string'))
+                           && master.validate(message, {save: '*',
+                                                        '?parents': 'array', '?version': 'string', '?patch': 'array'})
+                           && (typeof(message.save) === 'string'
+                               || (typeof(message.save) === 'object'
+                                   && typeof(message.save.key === 'string'))))
                           ||
                           (method === 'forget'
                            && master.validate(message, {forget: 'string'}))
@@ -348,6 +350,16 @@ function import_server (bus, options)
                 case 'save':
                     message.version = message.version || user.new_version()
                     // sockjs_pubber.has_seen(user, message.save.key, message.version)
+                    if (message.patch) {
+                        var o = bus.clone(bus.cache[message.save] || {key: message.save})
+                        try {
+                            message.save = bus.apply_patch(o, message.patch[0])
+                        } catch (e) {
+                            console.error('Received bad sockjs message from '
+                                          + conn.remoteAddress +': ', message, e)
+                            return
+                        }
+                    }
                     user.save(message.save,
                               {version: message.version,
                                parents: message.parents,

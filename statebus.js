@@ -1498,7 +1498,8 @@
             var x = {save: obj}
             if (t.version) x.version = t.version
             if (t.parents) x.parents = t.parents
-            if (t.patch)   x.patch =   t.patch
+            if (t.patch)   x.patch   = t.patch
+            if (t.patch)   x.save    = rem_prefix(x.save.key)
             send(x)
         }
         bus(prefix).to_fetch  = function (key) { send({fetch: key}),
@@ -1637,9 +1638,11 @@
                     c.fetches_out_count++
                 }
             }
-            bus(prefix).to_save = function (o) {
+            bus(prefix).to_save = function (o, t) {
                 var c = make_connection(o.key)
-                if (c) c.send({save: o})
+                var msg = {save: o}
+                if (t && t.patch) msg.patch = t.patch
+                if (c) c.send(msg)
             }
             bus(prefix).to_delete = function (k) {
                 var c = make_connection(k)
@@ -1728,6 +1731,64 @@
 
     function key_id(string) { return string.match(/\/?[^\/]+\/(\d+)/)[1] }
     function key_name(string) { return string.match(/\/?([^\/]+).*/)[1] }
+
+    // ******************
+    // Applying Patches, aka Diffs
+    function apply_patch (obj, patch) {
+        // Descend down a bunch of objects until we get to the final object
+        // The final object can be a slice
+        // Set the value in the final object
+
+        var x = patch.match(/(.*) = (.*)/),
+            path = x[1],
+            new_stuff = JSON.parse(x[2])
+
+        var path_segment = /^(\.([^\.\[]+))|(\[((-?\d+):)?(-?\d+)\])/
+        var curr_obj = obj,
+            last_obj = null
+        de_neg = (x) => (x[0] == '-') ? curr_obj.length - parseInt(x.substr(1)) : parseInt(x)
+
+        while (true) {
+            var match = path_segment.exec(path),
+                subpath = match[0],
+                field = match[2],
+                slice_start = match[5],
+                slice_end = match[6],
+
+            slice_start = slice_start && de_neg(slice_start)
+            slice_end = slice_end && de_neg(slice_end)
+
+            // console.log('Descending', {curr_obj, path, subpath, field, slice_start, slice_end, last_obj})
+
+            // If it's the final item, set it
+            if (path.length == subpath.length) {
+                if (field)                               // Object
+                    curr_obj[field] = new_stuff
+                else if (typeof curr_obj == 'string') {  // String
+                    console.assert(typeof new_stuff == 'string')
+                    if (!slice_start) {slice_start = slice_end; slice_end = slice_end+1}
+                    if (last_obj) {
+                        var s = last_obj[last_field]
+                        last_obj[last_field] = s.slice(0, slice_start) + new_stuff + s.slice(slice_end)
+                    } else
+                        return obj.slice(0, slice_start) + new_stuff + obj.slice(slice_end)
+                } else                                   // Array
+                    if (slice_start)  // Array splice
+                        [].splice.apply(curr_obj, [slice_start, slice_end-slice_start]
+                                        .concat(new_stuff))
+                else                  // Array set
+                    curr_obj[slice_end] = new_stuff
+
+                return obj
+            }
+
+            // Otherwise, descend down the path
+            last_obj = curr_obj
+            last_field = field
+            curr_obj = curr_obj[field || slice_end]
+            path = path.substr(subpath.length)
+        }
+    }
 
     // ******************
     // Utility funcs
@@ -2094,7 +2155,7 @@
                'funk_key funk_name funks key_id key_name id',
                'pending_fetches fetches_in loading_keys loading',
                'global_funk busses rerunnable_funks',
-               'encode_field decode_field translate_keys',
+               'encode_field decode_field translate_keys apply_patch',
                'net_client go_net message_method handle_state_urls',
                'Set One_To_Many clone extend deep_map deep_equals prune validate sorta_diff log deps'
               ].join(' ').split(' ')

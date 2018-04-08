@@ -91,6 +91,24 @@ test(function validation (done) {
     done()
 })
 
+test(function applying_patches (done) {
+    var tests = [
+        ['0', '[0] = "1"', '1'],
+        [['0'], '[0] = "1"', ['1']],
+        [['0'], '[0] = [1]', [[1]]],
+        ['', '[0:0] = "something"', 'something'],
+        ['hello', '[-0:-0] = " there"', 'hello there'],
+        [{}, '.foo = "bar"', {foo: 'bar'}],
+        [{a:1}, '.a = true', {a: true}]
+    ]
+
+    for (var i=0; i<tests.length; i++)
+        assert(bus.deep_equals(bus.apply_patch(tests[i][0], tests[i][1]), tests[i][2]),
+               'Patch applied wrong', tests[i])
+
+    done()
+})
+
 test(function prune (done) {
     var boose = require('../statebus')()
     boose.save({key: 'nark', _: 333666})
