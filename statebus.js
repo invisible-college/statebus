@@ -1588,6 +1588,10 @@
                     var t = {version: message.version,
                              parents: message.parents,
                              patch: message.patch}
+                    if (t.patch) {
+                        var o = bus.clone(bus.cache[msg.save] || {key: msg.save})
+                        msg.save = apply_patch(o, message.patch[0])
+                    }
                     if (!(t.version||t.parents||t.patch))
                         t = undefined
                     bus.save.fire(add_prefixes(message.save), t)

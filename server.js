@@ -292,6 +292,7 @@ function import_server (bus, options)
                 if (t.version) msg.version = t.version
                 if (t.parents) msg.parents = t.parents
                 if (t.patch)   msg.patch =   t.patch
+                if (t.patch)   msg.save    = msg.save.key
                 msg = JSON.stringify(msg)
 
                 if (global.network_delay) {
