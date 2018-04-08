@@ -1870,6 +1870,42 @@ function import_server (bus, options)
         schema.parse_key = parse_key
         schema.url_tree = url_tree
         return url_tree(bus.cache)
+    },
+
+    testing: {
+        tests: [],
+        test: function test (f) {bus.testing.tests.push(f)},
+        run_tests: function run_tests () {
+            var t = bus.testing
+            // Either run the test specified at command line
+            if (process.argv[2])
+                tests.find((f) => f.name == process.argv[2])(
+                    ()=>process.exit()
+                )
+
+            // Or run all tests
+            else {
+                function run_next () {
+                    if (t.tests.length > 0) {
+                        var f = t.tests.shift()
+                        t.delay_so_far = 0
+                        console.log('\nTesting:', f.name)
+                        f(function () {setTimeout(run_next)})
+                    } else
+                        (console.log('\nDone with all tests.'), process.exit())
+                }
+                run_next()
+            }
+        },
+        log: function log () {
+            var pre = '   '
+            console.log(pre+util.format.apply(null,arguments).replace('\n','\n'+pre))
+        },
+        assert: function assert () { console.assert.apply(console, arguments) },
+        delay: function delay (time, f) {
+            bus.testing.delay_so_far = bus.testing.delay_so_far + time
+            return setTimeout(f, bus.testing.delay_so_far)
+        }
     }
 }
     // Add methods to bus object
