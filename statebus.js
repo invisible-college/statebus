@@ -1750,7 +1750,9 @@
         var path_segment = /^(\.([^\.\[]+))|(\[((-?\d+):)?(-?\d+)\])/
         var curr_obj = obj,
             last_obj = null
-        de_neg = (x) => (x[0] == '-') ? curr_obj.length - parseInt(x.substr(1)) : parseInt(x)
+        de_neg = (x) => (x[0] === '-'
+                         ? curr_obj.length - parseInt(x.substr(1))
+                         : parseInt(x))
 
         while (true) {
             var match = path_segment.exec(path),
@@ -1773,14 +1775,16 @@
                     if (!slice_start) {slice_start = slice_end; slice_end = slice_end+1}
                     if (last_obj) {
                         var s = last_obj[last_field]
-                        last_obj[last_field] = s.slice(0, slice_start) + new_stuff + s.slice(slice_end)
+                        last_obj[last_field] = (s.slice(0, slice_start)
+                                                + new_stuff
+                                                + s.slice(slice_end))
                     } else
                         return obj.slice(0, slice_start) + new_stuff + obj.slice(slice_end)
                 } else                                   // Array
-                    if (slice_start)  // Array splice
+                    if (slice_start)                     //  - Array splice
                         [].splice.apply(curr_obj, [slice_start, slice_end-slice_start]
                                         .concat(new_stuff))
-                else {                // Array set
+                else {                                   //  - Array set
                     console.assert(slice_end >= 0, 'Index '+subpath+' is too small')
                     console.assert(slice_end <= curr_obj.length - 1,
                                    'Index '+subpath+' is too big')
@@ -1791,6 +1795,7 @@
             }
 
             // Otherwise, descend down the path
+            console.assert(!slice_start, 'No splices allowed in middle of path')
             last_obj = curr_obj
             last_field = field
             curr_obj = curr_obj[field || slice_end]
