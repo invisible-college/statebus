@@ -4,8 +4,8 @@ fs = require('fs')
 bus.label = 'bus'
 statelog_indent++
 
-// The statebus test suite
-var {test, run_tests, log, assert, delay} = bus.testing
+// Include the test functions
+var {test, run_tests, log, assert, delay} = require('../statebus').testing
 
 // Make sure we have all the npm packages installed
 try {

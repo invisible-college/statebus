@@ -2126,14 +2126,7 @@
     return bus
 }
 
-if (nodejs) {
-    make_bus.repl = require('./server').repl
-    make_bus.serve = function serve (options) {
-        var bus = make_bus()
-        require('./server').run_server(bus, options)
-        return bus
-    }
-}
+if (nodejs) require('./server').import_module(make_bus)
 
 return make_bus
 }))

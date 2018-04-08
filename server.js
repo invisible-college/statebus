@@ -1870,42 +1870,6 @@ function import_server (bus, options)
         schema.parse_key = parse_key
         schema.url_tree = url_tree
         return url_tree(bus.cache)
-    },
-
-    testing: {
-        tests: [],
-        test: function test (f) {bus.testing.tests.push(f)},
-        run_tests: function run_tests () {
-            var t = bus.testing
-            // Either run the test specified at command line
-            if (process.argv[2])
-                tests.find((f) => f.name == process.argv[2])(
-                    ()=>process.exit()
-                )
-
-            // Or run all tests
-            else {
-                function run_next () {
-                    if (t.tests.length > 0) {
-                        var f = t.tests.shift()
-                        t.delay_so_far = 0
-                        console.log('\nTesting:', f.name)
-                        f(function () {setTimeout(run_next)})
-                    } else
-                        (console.log('\nDone with all tests.'), process.exit())
-                }
-                run_next()
-            }
-        },
-        log: function log () {
-            var pre = '   '
-            console.log(pre+util.format.apply(null,arguments).replace('\n','\n'+pre))
-        },
-        assert: function assert () { console.assert.apply(console, arguments) },
-        delay: function delay (time, f) {
-            bus.testing.delay_so_far = bus.testing.delay_so_far + time
-            return setTimeout(f, bus.testing.delay_so_far)
-        }
     }
 }
     // Add methods to bus object
@@ -1920,36 +1884,84 @@ function import_server (bus, options)
     return bus
 }
 
+
+// Handy functions for writing tests on nodejs
+var tests = []
+function test (f) {tests.push(f)}
+function run_tests () {
+    var t = bus.testing
+    // Either run the test specified at command line
+    if (process.argv[2])
+        tests.find((f) => f.name == process.argv[2])(
+            ()=>process.exit()
+        )
+
+    // Or run all tests
+    else {
+        function run_next () {
+            if (tests.length > 0) {
+                var f = tests.shift()
+                delay_so_far = 0
+                console.log('\nTesting:', f.name)
+                f(function () {setTimeout(run_next)})
+            } else
+                (console.log('\nDone with all tests.'), process.exit())
+        }
+        run_next()
+    }
+}
+function log () {
+    var pre = '   '
+    console.log(pre+util.format.apply(null,arguments).replace('\n','\n'+pre))
+}
+function assert () { console.assert.apply(console, arguments) }
+function delay (time, f) {
+    delay_so_far = delay_so_far + time
+    return setTimeout(f, delay_so_far)
+}
+var delay_so_far = 0
+
+
+// Now export everything
 module.exports.import_server = import_server
 module.exports.run_server = function (bus, options) { bus.serve(options) }
+module.exports.import_module = function (statebus) {
+    statebus.testing = {test, run_tests, log, assert, delay}
 
-// Handy repl. Invoke with node -e 'require("statebus").repl("/tmp/foo")'
-module.exports.repl = function (filename) {
-    var net = require('net')
-    var sock = net.connect(filename)
+    statebus.serve = function serve (options) {
+        var bus = statebus()
+        require('./server').run_server(bus, options)
+        return bus
+    }
 
-    process.stdin.pipe(sock)
-    sock.pipe(process.stdout)
+    // Handy repl. Invoke with node -e 'require("statebus").repl("/tmp/foo")'
+    statebus.repl = function (filename) {
+        var net = require('net')
+        var sock = net.connect(filename)
 
-    sock.on('connect', function () {
-        process.stdin.resume();
-        process.stdin.setRawMode(true)
-    })
+        process.stdin.pipe(sock)
+        sock.pipe(process.stdout)
 
-    sock.on('close', function done () {
-        process.stdin.setRawMode(false)
-        process.stdin.pause()
-        sock.removeListener('close', done)
-    })
+        sock.on('connect', function () {
+            process.stdin.resume();
+            process.stdin.setRawMode(true)
+        })
 
-    process.stdin.on('end', function () {
-        sock.destroy()
-        console.log()
-    })
+        sock.on('close', function done () {
+            process.stdin.setRawMode(false)
+            process.stdin.pause()
+            sock.removeListener('close', done)
+        })
 
-    process.stdin.on('data', function (b) {
-        if (b.length === 1 && b[0] === 4) {
-            process.stdin.emit('end')
-        }
-    })
+        process.stdin.on('end', function () {
+            sock.destroy()
+            console.log()
+        })
+
+        process.stdin.on('data', function (b) {
+            if (b.length === 1 && b[0] === 4) {
+                process.stdin.emit('end')
+            }
+        })
+    }
 }
