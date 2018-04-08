@@ -352,7 +352,7 @@ function import_server (bus, options)
                     message.version = message.version || user.new_version()
                     // sockjs_pubber.has_seen(user, message.save.key, message.version)
                     if (message.patch) {
-                        var o = bus.clone(bus.cache[message.save] || {key: message.save})
+                        var o = bus.cache[message.save] || {key: message.save}
                         try {
                             message.save = bus.apply_patch(o, message.patch[0])
                         } catch (e) {

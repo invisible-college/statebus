@@ -1588,10 +1588,9 @@
                     var t = {version: message.version,
                              parents: message.parents,
                              patch: message.patch}
-                    if (t.patch) {
-                        var o = bus.clone(bus.cache[msg.save] || {key: msg.save})
-                        msg.save = apply_patch(o, message.patch[0])
-                    }
+                    if (t.patch)
+                        msg.save = apply_patch(bus.cache[msg.save] || {key: msg.save},
+                                               message.patch[0])
                     if (!(t.version||t.parents||t.patch))
                         t = undefined
                     bus.save.fire(add_prefixes(message.save), t)
@@ -1739,6 +1738,7 @@
     // ******************
     // Applying Patches, aka Diffs
     function apply_patch (obj, patch) {
+        obj = bus.clone(obj)
         // Descend down a bunch of objects until we get to the final object
         // The final object can be a slice
         // Set the value in the final object
@@ -1780,8 +1780,12 @@
                     if (slice_start)  // Array splice
                         [].splice.apply(curr_obj, [slice_start, slice_end-slice_start]
                                         .concat(new_stuff))
-                else                  // Array set
+                else {                // Array set
+                    console.assert(slice_end >= 0, 'Index '+subpath+' is too small')
+                    console.assert(slice_end <= curr_obj.length - 1,
+                                   'Index '+subpath+' is too big')
                     curr_obj[slice_end] = new_stuff
+                }
 
                 return obj
             }

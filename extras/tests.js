@@ -99,13 +99,19 @@ test(function applying_patches (done) {
         ['', '[0:0] = "something"', 'something'],
         ['hello', '[-0:-0] = " there"', 'hello there'],
         [{}, '.foo = "bar"', {foo: 'bar'}],
-        [{a:1}, '.a = true', {a: true}]
+        [{a:1}, '.a = true', {a: true}],
+        [[1,2,3], '[1:1] = [4, 5, 6]', [1, 4, 5, 6, 2, 3]],
+        [[1,2,3], '[-0:-0] = 0', [1, 2, 3, 0]],
+        [[1,2,3], '[-1] = 0', [1, 2, 0]],
+        [[1,2,3], '[-1:-0] = [0]', [1, 2, 0]],
+        [[1,2,3], '[-1:-0] = [0, 0, 0]', [1, 2, 0, 0, 0]]
     ]
 
-    for (var i=0; i<tests.length; i++)
-        assert(bus.deep_equals(bus.apply_patch(tests[i][0], tests[i][1]), tests[i][2]),
-               'Patch applied wrong', tests[i])
-
+    for (var i=0; i<tests.length; i++) {
+        var x = bus.apply_patch(tests[i][0], tests[i][1])
+        assert(bus.deep_equals(x, tests[i][2]),
+               `Patch applied wrong ${JSON.stringify(tests[i])} got ${x}`)
+    }
     done()
 })
 
