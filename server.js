@@ -1919,6 +1919,7 @@ function delay (time, f) {
     delay_so_far = delay_so_far + time
     return setTimeout(f, delay_so_far)
 }
+delay.init = _=> delay_so_far = 0
 var delay_so_far = 0
 
 
