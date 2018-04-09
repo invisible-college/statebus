@@ -15,7 +15,8 @@
 	var bus = this;
 
         function socket_api (url) {
-            url = url.replace(/^\//, location.protocol+'//'+location.hostname+(location.port ? ':'+location.port : ''))
+            if (!url.match(/^\w{0,7}:\/\//))
+                url = (location.protocol+'//'+location.hostname+(location.port ? ':'+location.port : '') + url
 
             url = url.replace(/^state:\/\//, 'wss://')
             url = url.replace(/^istate:\/\//, 'http://')
