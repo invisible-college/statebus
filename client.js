@@ -18,6 +18,11 @@
             url = url.replace(/^state:\/\//, 'wss://')
             url = url.replace(/^istate:\/\//, 'http://')
             url = url.replace(/^statei:\/\//, 'http://')
+            {   // Convert to absolute
+                var link = document.createElement("a")
+                link.href = url
+                url = link.href
+            }
             url = url.replace(/^http:\/\//, 'ws://')
             url = url.replace(/^https:\/\//, 'wss://')
             return new WebSocket(url + '/' + unique_sockjs_string + '/websocket')
