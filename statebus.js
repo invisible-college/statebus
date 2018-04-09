@@ -87,6 +87,13 @@
 
     var currently_saving
     function save (obj, t) {
+        // First let's handle diffs
+        if (typeof obj === 'string' && t && t.patch) {
+            if (typeof t.patch == 'string') t.patch = [t.patch]
+            // Apply the patch locally
+            obj = apply_patch(bus.cache[obj] || {key: obj}, t.patch[0])
+        }
+
         if (!('key' in obj) || typeof obj.key !== 'string')
             console.error('Error: save(obj) called on object without a key: ', obj)
         bogus_check(obj.key)
@@ -1759,7 +1766,7 @@
                 subpath = match[0],
                 field = match[2],
                 slice_start = match[5],
-                slice_end = match[6],
+                slice_end = match[6]
 
             slice_start = slice_start && de_neg(slice_start)
             slice_end = slice_end && de_neg(slice_end)
