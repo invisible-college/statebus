@@ -15,16 +15,19 @@
 	var bus = this;
 
         function socket_api (url) {
+            url = url.replace(/^\//, location.protocol+'//'+location.hostname+(location.port ? ':'+location.port : ''))
+
             url = url.replace(/^state:\/\//, 'wss://')
             url = url.replace(/^istate:\/\//, 'http://')
             url = url.replace(/^statei:\/\//, 'http://')
-            {   // Convert to absolute
-                var link = document.createElement("a")
-                link.href = url
-                url = link.href
-            }
+            // {   // Convert to absolute
+            //     var link = document.createElement("a")
+            //     link.href = url
+            //     url = link.href
+            // }
             url = url.replace(/^http:\/\//, 'ws://')
             url = url.replace(/^https:\/\//, 'wss://')
+            console.log('opening websocket to', url)
             return new WebSocket(url + '/' + unique_sockjs_string + '/websocket')
         }
         function socket_api_sjs (url) {
