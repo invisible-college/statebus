@@ -1757,9 +1757,11 @@
         var path_segment = /^(\.([^\.\[]+))|(\[((-?\d+):)?(-?\d+)\])/
         var curr_obj = obj,
             last_obj = null
-        de_neg = (x) => (x[0] === '-'
-                         ? curr_obj.length - parseInt(x.substr(1))
-                         : parseInt(x))
+        function de_neg (x) {
+            return x[0] === '-'
+                ? curr_obj.length - parseInt(x.substr(1))
+                : parseInt(x)
+        }
 
         while (true) {
             var match = path_segment.exec(path),
