@@ -16,7 +16,7 @@
 
         function socket_api (url) {
             if (!url.match(/^\w{0,7}:\/\//))
-                url = (location.protocol+'//'+location.hostname+(location.port ? ':'+location.port : '') + url
+                url = location.protocol+'//'+location.hostname+(location.port ? ':'+location.port : '') + url
 
             url = url.replace(/^state:\/\//, 'wss://')
             url = url.replace(/^istate:\/\//, 'http://')
