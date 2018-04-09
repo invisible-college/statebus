@@ -15,6 +15,14 @@
 	var bus = this;
 
         function socket_api (url) {
+            url = url.replace(/^state:\/\//, 'wss://')
+            url = url.replace(/^istate:\/\//, 'http://')
+            url = url.replace(/^statei:\/\//, 'http://')
+            url = url.replace(/^http:\/\//, 'ws://')
+            url = url.replace(/^https:\/\//, 'wss://')
+            return new WebSocket(url + '/' + unique_sockjs_string + '/websocket')
+        }
+        function socket_api_sjs (url) {
             url = url.replace(/^state:\/\//, 'https://')
             url = url.replace(/^istate:\/\//, 'http://')
             url = url.replace(/^statei:\/\//, 'http://')
