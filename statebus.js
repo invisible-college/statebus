@@ -594,6 +594,7 @@
             case 'o':
             case 'obj':
             case 'val':
+            case 'new':
                 handler.args['obj'] = i; break
             case 'old':
                 handler.args['old'] = i; break
