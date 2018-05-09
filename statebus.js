@@ -769,6 +769,8 @@
                     else { // Then method === to_fetch
                         o.key = key
                         bus.save.fire(o, t)
+                        // And now reset the version cause it could get called again
+                        delete t.version
                     }
                 }
             t.return = t.done
@@ -1956,7 +1958,6 @@
         var a_array = Array.isArray(a), b_array = Array.isArray(b)
         if (a_array !== b_array) return ' = ' + JSON.stringify(b)
         if (a_array) {
-            //if (a.length !== b.length) return ' = ' + JSON.stringify(b)
             if (a.length === b.length-1
                 && !deep_equals(a[a.length], b[b.length])) {
                 return '.push(' +JSON.stringify(b[b.length]) + ')'

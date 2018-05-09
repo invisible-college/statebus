@@ -1902,7 +1902,6 @@ function import_server (bus, options)
 var tests = []
 function test (f) {tests.push(f)}
 function run_tests () {
-    var t = bus.testing
     // Either run the test specified at command line
     if (process.argv[2])
         tests.find((f) => f.name == process.argv[2])(
