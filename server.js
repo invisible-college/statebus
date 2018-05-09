@@ -603,6 +603,27 @@ function import_server (bus, options)
         return file_store
     })(),
 
+    firebase_store: function (prefix, firebase_ref) {
+        prefix = prefix || '*'
+
+        function encode_firebase_key(k) {
+            return encodeURIComponent(k).replace(/\./g, '%2E')
+        }
+
+        function decode_firebase_key(k) {
+            return decodeURIComponent(k.replace('%2E', '.'))
+        }
+
+        bus(prefix).to_fetch = function (key, t) {
+            firebase_ref.child(encode_firebase_key(key)).on('value', function (x) {
+                t.done(x.val() || {})
+            }, function (x) { console.log('firebase error:', x); t.abort() })
+        }
+
+        bus(prefix).on_save = function (o) {
+            firebase_ref.child(encode_firebase_key(o.key)).set(o)
+        }
+    },
 
     sqlite_store: function sqlite_store (opts) {
         var prefix = '*'
