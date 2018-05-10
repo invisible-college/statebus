@@ -620,11 +620,15 @@ function import_server (bus, options)
             }, function (err) { t.abort() })
         }
 
-        bus(prefix).to_save = function (o, t) {
-            firebase_ref.child(encode_firebase_key(o.key)).set(o, (err) => {
-                err ? t.abort() : t.done()
-            })
+        bus(prefix).on_save = function (o) {
+            firebase_ref.child(encode_firebase_key(o.key)).set(o)
         }
+
+        // bus(prefix).to_save = function (o, t) {
+        //     firebase_ref.child(encode_firebase_key(o.key)).set(o, (err) => {
+        //         err ? t.abort() : t.done()
+        //     })
+        // }
 
         bus(prefix).to_delete = function (key, t) {
             firebase_ref.child(encode_firebase_key(key)).set(null, (err) => {
