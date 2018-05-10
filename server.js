@@ -617,11 +617,23 @@ function import_server (bus, options)
         bus(prefix).to_fetch = function (key, t) {
             firebase_ref.child(encode_firebase_key(key)).on('value', function (x) {
                 t.done(x.val() || {})
-            }, function (x) { console.log('firebase error:', x); t.abort() })
+            }, function (err) { t.abort() })
         }
 
-        bus(prefix).on_save = function (o) {
-            firebase_ref.child(encode_firebase_key(o.key)).set(o)
+        bus(prefix).to_save = function (o, t) {
+            firebase_ref.child(encode_firebase_key(o.key)).set(o, (err) => {
+                err ? t.abort() : t.done()
+            })
+        }
+
+        bus(prefix).to_delete = function (key, t) {
+            firebase_ref.child(encode_firebase_key(key)).set(null, (err) => {
+                err ? t.abort() : t.done()
+            })
+        }
+
+        bus(prefix).to_forget = function (key, t) {
+            firebase_ref.child(encode_firebase_key(key)).off()
         }
     },
 
