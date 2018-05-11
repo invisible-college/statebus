@@ -641,6 +641,67 @@ function import_server (bus, options)
         }
     },
 
+    lazy_sqlite_store: function lazy_sqlite_store (opts) {
+        var prefix = '*'
+        if (!opts) opts = {}
+        if (!opts.filename) opts.filename = 'db.sqlite'
+
+        // Load the db on startup
+        try {
+            var db = new (require('better-sqlite3'))(opts.filename)
+            bus.lazy_sqlite_store_db = db
+            db.pragma('journal_mode = WAL')
+            db.prepare('create table if not exists cache (key text primary key, obj text)').run()
+
+            bus.log('Read ' + opts.filename)
+        } catch (e) {
+            console.error(e)
+            console.error('Bad sqlite db')
+        }
+
+        // Add fetch handler
+        bus(prefix).to_fetch = function (key, t) {
+            var x = db.prepare('select * from cache where key = ?').get([key])
+            t.done(x ? JSON.parse(x.obj) : {})
+        }
+
+        // Add save handlers
+        function on_save (obj) {
+            db.prepare('replace into cache (key, obj) values (?, ?)').run(
+                [obj.key, JSON.stringify(obj)])
+        }
+        on_save.priority = true
+        bus(prefix).on_save = on_save
+
+        bus(prefix).to_delete = function (key) {
+            db.prepare('delete from cache where key = ?').run([key])
+        }
+
+        // Rotating backups
+        setInterval(
+            // Copy the current db over backups/db.<curr_date> every minute
+            function backup_db() {
+                if (opts.backups === false) return
+                var backup_dir = opts.backup_dir || 'backups'
+                if (fs.existsSync && !fs.existsSync(backup_dir))
+                    fs.mkdirSync(backup_dir)
+
+                var d = new Date()
+                var y = d.getYear() + 1900
+                var m = d.getMonth() + 1
+                if (m < 10) m = '0' + m
+                var day = d.getDate()
+                if (day < 10) day = '0' + day
+                var date = y + '-' + m + '-' + day
+
+                require('child_process').execFile(
+                    'sqlite3',
+                    [opts.filename, '.backup '+"'"+backup_dir+'/'+opts.filename+'.'+date+"'"])
+            },
+            1000 * 60 // Every minute
+        )
+    },
+
     sqlite_store: function sqlite_store (opts) {
         var prefix = '*'
         var open_transaction = null
