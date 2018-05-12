@@ -263,7 +263,7 @@ function import_server (bus, options)
             sockjs_url: 'https://cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js',
             disconnect_delay: 600 * 1000,
             heartbeat_delay: 6000 * 1000
-    })
+        })
         s.on('connection', function(conn) {
             if (client_bus_func) {
                 // To do for pooling client busses:
@@ -362,13 +362,13 @@ function import_server (bus, options)
                         }
                     }
                     client.save(message.save,
-                              {version: message.version,
-                               parents: message.parents,
-                               patch: message.patch})
+                                {version: message.version,
+                                 parents: message.parents,
+                                 patch: message.patch})
                     if (our_fetches_in[message.save.key]) {  // Store what we've seen if we
                                                              // might have to publish it later
                         client.log('Adding', message.save.key+'#'+message.version,
-                                 'to pubber!')
+                                   'to pubber!')
                         sockjs_pubber.has_seen(client, message.save.key, message.version)
                     }
                     break
