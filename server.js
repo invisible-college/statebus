@@ -250,12 +250,12 @@ function import_server (bus, options)
                             })
 
     },
-    sockjs_server: function sockjs_server(httpserver, user_bus_func) {
+    sockjs_server: function sockjs_server(httpserver, client_bus_func) {
         var master = this
         var client_num = 0
         // var client_busses = {}  // XXX work in progress
         var log = master.log
-        if (user_bus_func) {
+        if (client_bus_func) {
             master.save({key: 'connections'}) // Clean out old sessions
             var connections = master.fetch('connections')
         }
@@ -265,7 +265,7 @@ function import_server (bus, options)
             heartbeat_delay: 6000 * 1000
     })
         s.on('connection', function(conn) {
-            if (user_bus_func) {
+            if (client_bus_func) {
                 // To do for pooling client busses:
                 //  - What do I do with connections?  Do they pool at all?
                 //  - Before creating a new bus here, check to see if there's
@@ -276,13 +276,13 @@ function import_server (bus, options)
 
                 connections[conn.id] = {client: conn.id}; master.save(connections)
 
-                var user = require('./statebus')()
-                user.label = 'client' + client_num++
+                var client = require('./statebus')()
+                client.label = 'client' + client_num++
                 master.label = master.label || 'master'
-                user.master = master
-                user_bus_func(user, conn)
+                client.master = master
+                client_bus_func(client, conn)
             } else
-                var user = master
+                var client = master
 
             var our_fetches_in = {}  // Every key that every client has fetched.
             log('sockjs_s: New connection from', conn.remoteAddress)
@@ -339,18 +339,18 @@ function import_server (bus, options)
                 switch (method) {
                 case 'fetch':
                     our_fetches_in[message.fetch] = true
-                    user.fetch(message.fetch, sockjs_pubber)
+                    client.fetch(message.fetch, sockjs_pubber)
                     break
                 case 'forget':
                     delete our_fetches_in[message.forget]
-                    user.forget(message.forget, sockjs_pubber)
+                    client.forget(message.forget, sockjs_pubber)
                     break
                 case 'delete':
-                    user.delete(message['delete'])
+                    client.delete(message['delete'])
                     break
                 case 'save':
-                    message.version = message.version || user.new_version()
-                    // sockjs_pubber.has_seen(user, message.save.key, message.version)
+                    message.version = message.version || client.new_version()
+                    // sockjs_pubber.has_seen(client, message.save.key, message.version)
                     if (message.patch) {
                         var o = bus.cache[message.save] || {key: message.save}
                         try {
@@ -361,53 +361,47 @@ function import_server (bus, options)
                             return
                         }
                     }
-                    user.save(message.save,
+                    client.save(message.save,
                               {version: message.version,
                                parents: message.parents,
                                patch: message.patch})
                     if (our_fetches_in[message.save.key]) {  // Store what we've seen if we
                                                              // might have to publish it later
-                        user.log('Adding', message.save.key+'#'+message.version,
+                        client.log('Adding', message.save.key+'#'+message.version,
                                  'to pubber!')
-                        sockjs_pubber.has_seen(user, message.save.key, message.version)
+                        sockjs_pubber.has_seen(client, message.save.key, message.version)
                     }
                     break
                 }
 
                 // validate that our fetches_in are all in the bus
                 for (var key in our_fetches_in)
-                    if (!user.fetches_in.has(key, master.funk_key(sockjs_pubber)))
+                    if (!client.fetches_in.has(key, master.funk_key(sockjs_pubber)))
                         console.trace("***\n****\nFound errant key", key,
                                       'when receiving a sockjs', method, 'of', message)
                 //log('sockjs_s: done with message')
             })
             conn.on('close', function() {
-                log('sockjs_s: disconnected from', conn.remoteAddress, conn.id, user.id)
+                log('sockjs_s: disconnected from', conn.remoteAddress, conn.id, client.id)
                 for (var key in our_fetches_in)
-                    user.forget(key, sockjs_pubber)
-                if (user_bus_func) {
+                    client.forget(key, sockjs_pubber)
+                if (client_bus_func) {
                     delete connections[conn.id]; master.save(connections)
-                    user.delete_bus()
+                    client.delete_bus()
                 }
             })
-            if (user_bus_func && !master.options.__secure) {
-                user('connection').to_fetch = function () {
+            if (client_bus_func && !master.options.__secure) {
+                client('connection').to_fetch = function () {
                     // subscribe to changes in authentication
                     // note: it would be better to be subscribed to just this particular user
                     //       changing auth, rather whenever logged_in_clients changes.  
                     master.fetch('logged_in_clients')
                     
-                    var c = user.clone(connections[conn.id])
-                /// XXX work in progress with client busses
-                //     return {_: user.fetch('connection/' + conn.id)}
-                // }
-                // user('connection/*').to_fetch = function (star) {
-                //     master.fetch('logged_in_clients')
-                //     var c = user.clone(connections[star])
-                    if (c.user) c.user = user.fetch(c.user.key)
+                    var c = client.clone(connections[conn.id])
+                    if (c.user) c.user = client.fetch(c.user.key)
                     return c
                 }
-                user('connection').to_save = function (o) {
+                client('connection').to_save = function (o) {
                     delete o.key
                     o.client = conn.id // don't let client update the client id or user
                     o.user = connections[conn.id].user
@@ -421,14 +415,14 @@ function import_server (bus, options)
                 //  - The connections object will have an array or hash of these connections
                 //  - When you save /connection, it will update to your /connection/<id>
                 //  - When you fetch /connection, it will derive from /connection/<id>
-                user('connections').to_save = function noop () {}
-                user('connections').to_fetch = function () {
+                client('connections').to_save = function noop (t) {t.abort()}
+                client('connections').to_fetch = function () {
                     var result = []
                     var conns = master.fetch('connections')
                     for (var connid in conns)
                         if (connid !== 'key') {
                             var c = master.clone(conns[connid])
-                            if (c.user) c.user = user.fetch(c.user)
+                            if (c.user) c.user = client.fetch(c.user)
                             result.push(c)
                         }
                     
