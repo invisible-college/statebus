@@ -1227,6 +1227,100 @@ test(function create_account (done) {
     })
 })
 
+function connections_helper (done, port, options) {
+    // Setup a server
+    var s = require('../statebus').serve({port: port,
+                                          file_store: false,
+                                          connections: options})
+    s.label = 's'
+
+    // Connect two clients
+    var c1 = require('../statebus')()
+    c1.label = 'c1'
+    c1.ws_client('/*', 'statei://localhost:' + port)
+
+    var c2 = require('../statebus')()
+    c2.label = 'c2'
+    c2.ws_client('/*', 'statei://localhost:' + port)
+
+    // Load the basic connections
+    c1.c = c1.fetch('/connection')
+    c2.c = c2.fetch('/connection')
+    c1.all = c1.fetch('/connections')
+
+    delay(50, _=> {
+        // Test
+        log('c1.c:', c1.c)
+        log('c2.c:', c2.c)
+        log('all:', c1.all)
+        assert(c1.c.id)
+        assert(c2.c.id)
+
+        // Load the connections inside
+        c1.c1 = c1.fetch('/connection/' + c1.c.id)
+        c1.c2 = c1.fetch('/connection/' + c2.c.id)
+        c2.c1 = c2.fetch('/connection/' + c1.c.id)
+        c2.c2 = c2.fetch('/connection/' + c2.c.id)
+    })
+
+    delay(50, _=> {
+        // Test
+        assert(c1.validate(c1.c1, {key: 'string', client: 'string', id: 'string'}))
+        log('c1.c1', JSON.stringify(c1.c1))
+        log('c2.c2', JSON.stringify(c2.c2))
+        assert(c1.c1.id === c1.c.id)
+        assert(c1.c2.id === c2.c.id)
+        assert(c2.c1.id === c1.c.id)
+        assert(c2.c2.id === c2.c.id)
+
+        // Modify a connection
+        c1.c.foo = 'bar'; c1.save(c1.c)
+        c2.c2.fuzz = 'buzz'; c2.save(c2.c2)
+    })
+
+    delay(50, _=> {
+        // Test
+        assert(c1.c.foo === 'bar')
+        assert(c1.c1.foo === 'bar')
+        assert(c2.c1.foo === 'bar')
+
+        assert(c2.c.fuzz === 'buzz')
+        assert(c2.c2.fuzz === 'buzz')
+        assert(c1.c2.fuzz === 'buzz')
+
+        // Modify someone else's connection
+        c1.c2.fuzz = 'fart'; c1.save(c1.c2)
+        c2.c1.free = 'willy'; c2.save(c2.c1)
+    })
+
+    delay(50, _=> {
+        // Test
+        if (options.edit_others) {
+            assert(c1.c2.fuzz === 'fart')
+            assert(c2.c2.fuzz === 'fart')
+            assert(c1.c1.free === 'willy')
+            assert(c2.c1.free === 'willy')
+        } else {
+            assert(c1.c2.fuzz !== 'fart')
+            assert(c2.c2.fuzz !== 'fart')
+            assert(c1.c1.free !== 'willy')
+            assert(c2.c1.free !== 'willy')
+        }
+    })
+
+    // Todo: test the inclusion of users
+
+    delay(50, _=> done())
+}
+
+test(function connections_1 (done) {
+    connections_helper(done, 3951, {include_users: true, edit_others: true})
+})
+
+test(function connections_2 (done) {
+    connections_helper(done, 3952, {include_users: false, edit_others: false})
+})
+
 test(function email_read_permissions (done) {
     var phase = -1
     var u, user1, user2, user3

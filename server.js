@@ -11,6 +11,7 @@ function default_options (bus) { return {
     certs: {private_key: 'certs/private-key',
             certificate: 'certs/certificate',
             certificate_bundle: 'certs/certificate-bundle'},
+    connections: {include_users: true, edit_others: true},
     __secure: false
 }}
 
@@ -274,7 +275,9 @@ function import_server (bus, options)
                 //  - When disconnecting, decrement the number, and if it gets
                 //    to zero, delete the client bus.
 
-                connections[conn.id] = {client: conn.id}; master.save(connections)
+                connections[conn.id] = {client: conn.id, // client is deprecated
+                                        id: conn.id}
+                master.save(connections)
 
                 var client = require('./statebus')()
                 client.label = 'client' + client_num++
@@ -390,41 +393,63 @@ function import_server (bus, options)
                     client.delete_bus()
                 }
             })
+
+            // Define the /connection* state!
             if (client_bus_func && !master.options.__secure) {
-                client('connection').to_fetch = function () {
-                    // subscribe to changes in authentication
-                    // note: it would be better to be subscribed to just this particular user
-                    //       changing auth, rather whenever logged_in_clients changes.  
-                    master.fetch('logged_in_clients')
-                    
-                    var c = client.clone(connections[conn.id])
-                    if (c.user) c.user = client.fetch(c.user.key)
-                    return c
+
+                // A connection
+                client('connection/*').to_fetch = function (key, star) {
+                    var id = star
+                    var conn = master.fetch('connections')[id]
+                    var result = master.clone(conn)
+                    result.key = key
+                    result.id = id
+                    result.client = id   // Deprecated
+
+                    if (master.options.connections.include_users && result.user)
+                        result.user = client.fetch(result.user.key)
+                    return result
                 }
-                client('connection').to_save = function (o) {
-                    delete o.key
-                    o.client = conn.id // don't let client update the client id or user
-                    o.user = connections[conn.id].user
-                    connections[conn.id] = o
+                client('connection/*').to_save = function (o, star, t) {
+                    // Check permissions before editing
+                    if (star !== conn.id && !master.options.connections.edit_others) {
+                        t.abort()
+                        return
+                    }
+                    var connections = master.fetch('connections')
+                    var result = client.clone(o)
+                    var old = connections[star]
+                    delete result.key
+                    result.id = star
+                    result.client = star   // Deprecated
+                    result.user = old.user
+                    connections[star] = result
                     master.save(connections)
                 }
-                // To do:
-                //  We want each connection in /connections.all to have a key
-                //  - Make a state for '/connection/<id>',
-                //    ... which will be mirrored in your '/connection'
-                //  - The connections object will have an array or hash of these connections
-                //  - When you save /connection, it will update to your /connection/<id>
-                //  - When you fetch /connection, it will derive from /connection/<id>
+
+                // Your connection
+                client('connection').to_fetch = function () {
+                    // subscribe to changes in authentication
+                    client.fetch('current_user')
+
+                    var result = client.clone(client.fetch('connection/' + conn.id))
+                    delete result.key
+                    return result
+                }
+                client('connection').to_save = function (o) {
+                    o = client.clone(o)
+                    o.key = 'connection/' + conn.id
+                    client.save(o)
+                }
+
+                // All connections
                 client('connections').to_save = function noop (t) {t.abort()}
                 client('connections').to_fetch = function () {
                     var result = []
                     var conns = master.fetch('connections')
                     for (var connid in conns)
-                        if (connid !== 'key') {
-                            var c = master.clone(conns[connid])
-                            if (c.user) c.user = client.fetch(c.user)
-                            result.push(c)
-                        }
+                        if (connid !== 'key')
+                            result.push(client.fetch('connection/' + connid))
                     
                     return {all: result}
                 }
