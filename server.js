@@ -401,7 +401,7 @@ function import_server (bus, options)
                 client('connection/*').to_fetch = function (key, star) {
                     var id = star
                     var conn = master.fetch('connections')[id]
-                    if (!conn) return {}
+                    if (!conn) return {error: 'connection ' + id + ' does not exist'}
 
                     var result = master.clone(conn)
                     result.key = key
