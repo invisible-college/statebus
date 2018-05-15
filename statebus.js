@@ -762,6 +762,15 @@
                 t.done = function (o) {
                     var key = method === 'to_save' ? arg.key : arg
                     bus.log('We are DONE()ing', method, key, o||arg)
+
+                    // We use a simple (and crappy?) heuristic to know if to
+                    // to_save handler has changed the state: whether the
+                    // programmer passed (o) to the t.done(o) handler.  If
+                    // not, we assume it hasn't changed.  If so, we assume it
+                    // *has* changed, and thus we change the version of the
+                    // state.
+                    if (o) t.version = new_version()
+
                     if (method === 'to_delete')
                         delete bus.cache[key]
                     else if (method === 'to_save')

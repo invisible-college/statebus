@@ -1321,6 +1321,51 @@ test(function connections_2 (done) {
     connections_helper(done, 3952, {include_users: false, edit_others: false})
 })
 
+test(function flashbacks (done) {
+    // We have an echo canceler.  If you save state, it shouldn't send the
+    // same state back to you, but it should send it to everyone else.  But if
+    // the state is changed in a to_save handler, it *should* send you
+    // changes.
+
+    var port = 3873
+
+    // Setup a server
+    var s = require('../statebus').serve({port: port, file_store: false})
+    s.label = 's'
+
+    s('x').to_save = (o, t) => {
+        log('Saving x with', o)
+        o.x++        // Change the value of o.x a little
+        t.done(o)
+    }
+
+    // Connect two clients
+    var c1 = require('../statebus')()
+    c1.label = 'c1'
+    c1.ws_client('*', 'statei://localhost:' + port)
+
+    var c2 = require('../statebus')()
+    c2.label = 'c2'
+    c2.ws_client('*', 'statei://localhost:' + port)
+    
+    c1.x = c1.fetch('x')
+    c2.x = c2.fetch('x')
+
+    // Change stuff
+    delay(50, _=> {
+        c1.x.x = 1
+        c1.save(c1.x)
+    })
+
+    // Test stuff
+    delay(50, _=> {
+        assert(c2.x.x === 2, 'c2 didn\'t get it')
+        assert(c1.x.x === 2, 'c1 didn\'t get it')
+        log('complete!', c1.x, c2.x)
+        done()
+    })
+})
+
 test(function email_read_permissions (done) {
     var phase = -1
     var u, user1, user2, user3
