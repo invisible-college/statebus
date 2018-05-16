@@ -404,6 +404,27 @@ test(function fetch_once (done) {
     setTimeout(()=> { done() }, 30 )
 })
 
+test(function once (done) {
+    bus('takeawhile').to_fetch = (t) => {
+        setTimeout(_=> t.return({_: 3}), 150)
+    }
+    bus.once(_=> {
+        var x = bus.fetch('takeawhile')
+        var y = bus.fetch('changing')
+        log('running the once func! loading is', bus.loading())
+        assert(!bus.cache.certified)
+        bus.save({key: 'whendone', certified: true})
+    })
+
+    delay(50, _=> assert(!bus.fetch('whendone').certified))
+    delay(10, _=> bus.save({key: 'changing', _: 1}))
+    delay(10, _=> bus.save({key: 'changing', _: 2}))
+    delay(150, _=> assert(bus.fetch('whendone').certified))
+    delay(10, _=> bus.save({key: 'changing', _: 3}))
+    delay(10, _=> bus.save({key: 'changing', _: 4}))
+    delay(30, _=> done())
+})
+
 // If there's an on_fetch handler, the callback doesn't return
 // until the handler fires a value
 test(function fetch_remote (done) {

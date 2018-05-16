@@ -81,6 +81,7 @@
         // fetch(key)   // This prevents key from being forgotten
         fetch(key, cb2)
     }
+    fetch.once = fetch_once
     var pending_fetches = {}
     var fetches_out = {}                // Maps `key' to `func' iff we've fetched `key'
     var fetches_in = new One_To_Many()  // Maps `key' to `pub_funcs' subscribed to our key
@@ -768,7 +769,9 @@
                     // programmer passed (o) to the t.done(o) handler.  If
                     // not, we assume it hasn't changed.  If so, we assume it
                     // *has* changed, and thus we change the version of the
-                    // state.
+                    // state.  I imagine it would be more accurate to diff o
+                    // from before the to_save handler began with when
+                    // t.done(o) ran.
                     if (o) t.version = new_version()
 
                     if (method === 'to_delete')
@@ -1042,6 +1045,13 @@
         })
     }
 
+    function once (f) {
+        var r = reactive(function () {
+            f()
+            if (!r.loading()) r.forget()
+        })
+        r()
+    }
 
     // ******************
     // Pretty Printing
@@ -2176,17 +2186,13 @@
         throw 'Invalid key'
     }
 
-    // #######################################
-    // ########### Browser Code ##############
-    // #######################################
-
     // Make these private methods accessible
     var api = ['cache backup_cache fetch save forget del fire dirty fetch_once',
                'subspace bindings run_handler bind unbind reactive uncallback',
                'versions new_version',
                'make_proxy state sb',
                'funk_key funk_name funks key_id key_name id',
-               'pending_fetches fetches_in loading_keys loading',
+               'pending_fetches fetches_in loading_keys loading once',
                'global_funk busses rerunnable_funks',
                'encode_field decode_field translate_keys apply_patch',
                'net_client go_net message_method handle_state_urls',
