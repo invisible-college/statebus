@@ -431,12 +431,10 @@
         function camelcase (s) { var a = s.split(/[_-]/)
                                  return a.slice(0,1).concat(a.slice(1).map(capitalize)).join('') }
 
-        // Note, we can also get a more complete list with:
-        //   Object.keys(getComputedStyle(document.body, null))
-        var css_props = 'background background-attachment background-color background-image background-position background-repeat border border-collapse border-color border-spacing border-style border-width border-left border-right border-bottom border-top border-radius bottom caption-side clear clip color content counter-increment counter-reset cursor direction display empty-cells float font font-family font-size font-style font-variant font-weight height left letter-spacing line-height list-style list-style-image list-style-position list-style-type margin margin-left margin-right margin-bottom margin-top max-height max-width min-height min-width orphans opacity outline outline-color outline-style outline-width overflow padding padding-left padding-right padding-bottom padding-top page-break-after page-break-before page-break-inside position quotes right table-layout text-align text-decoration text-indent text-transform top transform unicode-bidi vertical-align visibility white-space widows width word-spacing z-index'.split(' ')
+        var all_css_props = Object.keys(document.body.style)
         var is_css_prop = {}
-        for (var i=0; i<css_props.length; i++)
-            is_css_prop[camelcase(css_props[i])] = true
+        for (var i=0; i<all_css_props.length; i++)
+            is_css_prop[all_css_props[i]] = true
 
         function better_element(el) {
             // To do:
@@ -465,7 +463,9 @@
                     // Styles get redirected to the style field
                     else if (arg instanceof Object)
                         for (var k in arg)
-                            if (is_css_prop[k])
+                            if (is_css_prop[k]
+                                && !(k in {width:1,height:1,size:1}
+                                     && el in {canvas:1, input:1, embed:1, object:1}))
                                 attrs.style[k] = arg[k]        // Merge styles
                             else if (k === 'style')            // Merge insides of style tags
                                 for (var k2 in arg[k])
@@ -483,11 +483,11 @@
                 if (children.length === 0) children = undefined
                 if (attrs['ref'] === 'input')
                     bus.log(attrs, children)
-                return el(attrs, children)
+                return React.DOM[el](attrs, children)
             }
         }
         for (var el in React.DOM)
-            window[el.toUpperCase()] = better_element(React.DOM[el])
+            window[el.toUpperCase()] = better_element(el)
         
         function make_better_input (name, element) {
             window[name] = React.createFactory(React.createClass({
