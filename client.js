@@ -514,8 +514,8 @@
             }))
         }
 
-        make_better_input("INPUT", React.DOM.input)
-        make_better_input("TEXTAREA", React.DOM.textarea)
+        make_better_input("INPUT", window.INPUT)
+        make_better_input("TEXTAREA", window.TEXTAREA)
 
         // Unfortunately, React's default STYLE and TITLE tags are useless
         // unless you "dangerously set inner html" because they wrap strings
