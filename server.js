@@ -287,7 +287,7 @@ function import_server (bus, options)
             } else
                 var client = master
 
-            var our_fetches_in = {}  // Every key that every client has fetched.
+            var our_fetches_in = {}  // Every key that this socket has fetched
             log('sockjs_s: New connection from', conn.remoteAddress)
             function sockjs_pubber (obj, t) {
                 // log('sockjs_pubber:', obj, t)
@@ -353,7 +353,6 @@ function import_server (bus, options)
                     break
                 case 'save':
                     message.version = message.version || client.new_version()
-                    // sockjs_pubber.has_seen(client, message.save.key, message.version)
                     if (message.patch) {
                         var o = bus.cache[message.save] || {key: message.save}
                         try {
@@ -669,8 +668,8 @@ function import_server (bus, options)
 
         // Load the db on startup
         try {
-            var db = new (require('better-sqlite3'))(opts.filename)
-            bus.lazy_sqlite_store_db = db
+            var db = bus.sqlite_store_db || new (require('better-sqlite3'))(opts.filename)
+            bus.sqlite_store_db = db
             db.pragma('journal_mode = WAL')
             db.prepare('create table if not exists cache (key text primary key, obj text)').run()
 
@@ -728,12 +727,11 @@ function import_server (bus, options)
         var open_transaction = null
 
         if (!opts) opts = {}
-
         if (!opts.filename) opts.filename = 'db.sqlite'
 
         // Load the db on startup
         try {
-            var db = new (require('better-sqlite3'))(opts.filename)
+            var db = bus.sqlite_store_db || new (require('better-sqlite3'))(opts.filename)
             bus.sqlite_store_db = db
             db.pragma('journal_mode = WAL')
             db.prepare('create table if not exists cache (key text primary key, obj text)').run()
@@ -1184,7 +1182,7 @@ function import_server (bus, options)
                 return
             }
 
-            var c = fetch('current_user')
+            var c = client.fetch('current_user')
 
             // Make sure this user is an author
             if (!c.logged_in || o.from.indexOf(c.user.key === -1)) {

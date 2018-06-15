@@ -708,7 +708,10 @@
             // funk.  It has its own arg internally that it's calling itself
             // with.  Let's tell it to re-trigger itself with that arg.
 
-            console.assert(method === 'on_save', 'Funk is being re-triggered, but isn\'t on_save. It is: "' + method + '", oh and funk: ' + funk_name(funk))
+            if (method !== 'on_save') {
+                console.error(method === 'on_save', 'Funk is being re-triggered, but isn\'t on_save. It is: "' + method + '", oh and funk: ' + funk_name(funk))
+                return
+            }
             return funk.react()
 
             // This might not work that great.
