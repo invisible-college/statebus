@@ -2,9 +2,11 @@ var tcp_wrap = process.binding('tcp_wrap')
 var TCP = tcp_wrap.TCP;
 var errno = require('util')._errnoException;
 
-// Check if the current node version is >= 9.3.0
-var v = process.version.substr(1).split('.')
-var node_v9_3_0 = Number(v[0]) >= 9 && Number(v[1]) >= 3
+// Check if the current node version is >= 9.3.0 or >= 8.11.2
+var v = process.version.substr(1).split('.').map(x=>Number(x))
+var is_recent_node = (v[0] >= 10
+                      || (v[0] >= 9 && v[1] >= 3) // v9_3_0
+                      || (v[0] >= 8 && v[1] >= 11 && v[2] >= 2)) // v8_11_2
 
 module.exports = function (addr, port) {
     if (typeof addr === 'number' || /^\d+$/.test(addr)) {
@@ -14,7 +16,7 @@ module.exports = function (addr, port) {
     }
     if (!port) port = 0;
     if (!addr) addr = '0.0.0.0';
-    if (node_v9_3_0)
+    if (is_recent_node)
         var h = new TCP(tcp_wrap.constants && tcp_wrap.constants.SERVER);
     else
         var h = new TCP;
