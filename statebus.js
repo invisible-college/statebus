@@ -24,7 +24,11 @@
             ).push({as:'fetch callback', key:key});
             callback.has_seen = callback.has_seen || function (bus, key, version) {
                 callback.seen_keys = callback.seen_keys || {}
-                callback.seen_keys[JSON.stringify([bus.id, key])] = version
+                var bus_key = JSON.stringify([bus.id, key])
+                var seen_versions =
+                    callback.seen_keys[bus_key] = callback.seen_keys[bus_key] || []
+                seen_versions.push(version)
+                if (versions.length > 50) versions.shift()
             }
         }
 
@@ -512,7 +516,7 @@
                     // Skip if it's already up to date
                     var v = f.fetched_keys[JSON.stringify([this.id, keys[i]])]
                     //log('re-run:', keys[i], f.statebus_id, f.fetched_keys)
-                    if (v && v === versions[keys[i]]) {
+                    if (v && v.indexOf(versions[keys[i]]) !== -1) {
                         log('skipping', funk_name(f), 'already at version', v)
                         continue
                     }
@@ -520,7 +524,7 @@
                     // Fresh handlers are always run, but need a wrapper
                     f.seen_keys = f.seen_keys || {}
                     var v = f.seen_keys[JSON.stringify([this.id, keys[i]])]
-                    if (v && v === versions[keys[i]]) {
+                    if (v && v.indexOf(versions[keys[i]]) !== -1) {
                         //log('skipping', funk_name(f), 'already at version', v)
                         continue
                     }
@@ -982,7 +986,11 @@
         funk.abortable_keys = []
         funk.has_seen = function (bus, key, version) {
             //console.log('depend:', bus, key, versions[key])
-            this.fetched_keys[JSON.stringify([bus.id, key])] = version
+            var bus_key = JSON.stringify([bus.id, key])
+            var seen_versions =
+                this.fetched_keys[bus_key] = this.fetched_keys[bus_key] || []
+            seen_versions.push(version)
+            if (versions.length > 10) versions.shift()
         }
         funk.react = function () {
             var result
