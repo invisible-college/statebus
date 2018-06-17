@@ -854,9 +854,7 @@ function import_server (bus, options)
         var prefix = '*'
         var open_transaction = null
 
-        if (!opts) opts = {}
-
-        if (!opts.filename) opts.filename = 'db.sqlite'
+        opts = opts || {}
 
         // Load the db on startup
         try {
@@ -864,22 +862,10 @@ function import_server (bus, options)
             bus.pg_db = db
             db.connectSync(opts.url)
             //db.prepare('create table if not exists cache (key text primary key, obj text)').run()
-            var temp_db = {}
 
             var rows = db.querySync('select * from cache')
-            for (var i=0; i<rows.length; i++) {
-                var obj = rows[i].value
-                temp_db[obj.key] = obj
-            }
+            rows.forEach(r => bus.save(inline_pointers(r.value, bus)))
 
-            if (global.pointerify)
-                temp_db = inline_pointers(temp_db)
-
-            for (var key in temp_db)
-                if (temp_db.hasOwnProperty(key)){
-                    bus.save.fire(temp_db[key])
-                    temp_db[key] = undefined
-                }
             bus.log('Read ' + opts.url)
         } catch (e) {
             console.error(e)
@@ -887,44 +873,28 @@ function import_server (bus, options)
         }
 
         // Add save handlers
-        function on_save (obj) {
-            if (global.pointerify)
-                obj = abstract_pointers(obj)
+        function pg_to_save (obj) {
+            abstract_pointers(obj)
 
-            if (opts.use_transactions && !open_transaction){
-                console.time('save db')
-                db.querySync('BEGIN TRANSACTION')
-            }
+            console.time('save db')
+            // db.querySync('BEGIN TRANSACTION')
 
             db.querySync('insert into cache (key, value) values ($1, $2) '
                          + 'on conflict (key) do update set value = $2',
                          [obj.key, JSON.stringify(obj)])
 
-            if (opts.use_transactions && !open_transaction) {
-
-                open_transaction = setTimeout(function(){
-                    db.querysync('COMMIT')
-                    open_transaction = false
-                    console.timeEnd('save db')
-                })
-            }
-
+            // db.querysync('COMMIT')
+            console.timeEnd('save db')
         }
-        on_save.priority = true
-        bus(prefix).on_save = on_save
+        pg_to_save.priority = true
+        bus(prefix).to_save = pg_to_save
         bus(prefix).to_delete = function (key) {
-            if (opts.use_transactions && !open_transaction){
-                console.time('save db')
-                db.query('BEGIN TRANSACTION', e)
-            }
+            console.time('save db')
+            // db.query('BEGIN TRANSACTION', e)
             db.query('delete from cache where key = $1', [key], e)
-            if (opts.use_transactions && !open_transaction)
-                open_transaction = setTimeout(function(){
-                    console.log('committing')
-                    db.query('COMMIT', e)
-                    open_transaction = false
-                    console.timeEnd('save db')
-                })
+            console.log('committing')
+            db.query('COMMIT', e)
+            console.timeEnd('save db')
         }
 
         // Replaces every nested keyed object with {_key: <key>}
@@ -939,10 +909,10 @@ function import_server (bus, options)
             return result
         }
         // ...and the inverse
-        function inline_pointers (db) {
-            return bus.deep_map(db, (o) => {
+        function inline_pointers (obj, bus) {
+            return bus.deep_map(obj, (o) => {
                 if (o && o._key)
-                    return db[o._key]
+                    return bus.cache[o._key]
                 else return o
             })
         }
@@ -1106,7 +1076,6 @@ function import_server (bus, options)
         var client = this
 
         // Todo on Server:
-        //  - Sort emails by date
         //  - Finish implementing "n=?" in email_for(.., n)
         //  - Add in-reply-to: aka parent:
         //  - Connect with mailin, so we can receive SMTP shit
@@ -1126,7 +1095,7 @@ function import_server (bus, options)
         //  - How do we add mime types?  Like md?  HTML?
 
         // Helpers
-        function email_for (user, n) {
+        function email_for (user, to) {
             var terms = user
                 ? [{_: {to: [user]}},
                    {_: {cc: ['public']}},
@@ -1138,27 +1107,42 @@ function import_server (bus, options)
             terms = terms.join(' or ')
 
             var q = "select value from cache where " + terms
+            q += " order by value #>'{_,date}' asc"
+            if (to) q += ' limit ' + to
             return master.pg_db.querySync(q).map(x=>x.value)
         }
 
         // Define state on master
-        if (master('emails*').to_fetch.length === 0) {
-            master('emails*').to_fetch = (rest) => {
-                var matches = rest.match(/\/(user\/[^\?]+)(\?n=(\d+))?/)
-                var user = matches && matches[1], n = matches && matches[3]
-                return {_: email_for(user, n)}
+        if (master('emails_for*').to_fetch.length === 0) {
+            // Get emails for each user
+            master('emails_for*').to_fetch = (rest) => {
+                var matches = rest.match(/\/(user\/[^\/]+)(\/to=(\d+))?/)
+                var user = matches[1], to = matches[3]
+                if (to) master.fetch('emails_for/' + user) // for dirtying later
+                return {_: email_for(user, to)}
             }
-            master('email/*').to_save = (o, t) => {
-                var dirtied = o.to.concat(o.cc).concat(o.from)
-                dirtied.forEach(u => master.dirty('emails/' + u))
+            // Saving any email will dirty the list for all users mentioned in
+            // the email
+            master('email/*').to_save = (old, New, t) => {
+                // To do: diff the cc, to, and from lists, and only dirty
+                // emails_for people who have been changed
+                old = old._
+                New = New._
+                if (!old) old = {to: [], from: [], cc: []}
+                var dirtied = old.to.concat(New.to)
+                    .concat(old.cc).concat(New.cc)
+                    .concat(old.from).concat(New.from)
+                dirtied.forEach(u => master.dirty('emails_for/' + u))
                 t.done()
             }
         }
 
         // Define state on client
-        client('emails').to_fetch = (k) => {
+        client('emails*').to_fetch = (k, rest) => {
             var c = client.fetch('current_user')
-            var e = master.fetch('emails/' + (c.logged_in ? c.user.key : ''))
+            var e = master.fetch('emails_for/'
+                                 + (c.logged_in ? c.user.key : 'public')
+                                 + rest)
             return {_: master.clone(e._)}
         }
 
@@ -1176,8 +1160,13 @@ function import_server (bus, options)
         }
 
         client('email/*').to_save = (o, t) => {
-            if (!client.validate(o, {to: 'array', cc: 'array',
-                                     from: 'array','*': '*'})) {
+            if (!client.validate(o, {key: 'string',
+                                     _: {to: 'array', cc: 'array',
+                                         from: 'array', date: 'number',
+                                         '?parent': 'string',
+                                         body: 'string', '?title': 'string',
+                                         '*': '*'}})) {
+                console.error('email no validate', o)
                 t.abort()
                 return
             }
@@ -1185,7 +1174,7 @@ function import_server (bus, options)
             var c = client.fetch('current_user')
 
             // Make sure this user is an author
-            if (!c.logged_in || o.from.indexOf(c.user.key === -1)) {
+            if (!c.logged_in || o._.from.indexOf(c.user.key) === -1) {
                 t.abort()
                 return
             }

@@ -455,7 +455,7 @@
         clean_timer = clean_timer || setTimeout(clean)
 
         // If none found, then just mark the key changed
-        if (!found) mark_changed(key, t)
+        if (!found && cache.hasOwnProperty(key)) mark_changed(key, t)
     }
 
     function mark_changed (key, t) {
@@ -600,6 +600,7 @@
             case 'obj':
             case 'val':
             case 'new':
+            case 'New':
                 handler.args['obj'] = i; break
             case 'old':
                 handler.args['old'] = i; break
