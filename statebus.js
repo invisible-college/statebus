@@ -1718,7 +1718,7 @@
         bus.route = function (key, method, arg, opts) {
             var d = get_domain(key)
             if (d && !connections[d]) {
-                (bus.sockjs_client || bus.ws_client)(d + '*', d)
+                (bus.sockjs_client || bus.ws_client)(d + '/*', d)
                 connections[d] = true
             }
 
