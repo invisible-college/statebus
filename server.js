@@ -1161,12 +1161,15 @@ function import_server (bus, options)
 
         client('email/*').to_save = (o, t) => {
             if (!client.validate(o, {key: 'string',
-                                     _: {to: 'array', cc: 'array',
-                                         from: 'array', date: 'number',
+                                     _: {to: 'array',
+                                         cc: 'array',
+                                         from: 'array',
+                                         date: 'number',
                                          '?parent': 'string',
-                                         body: 'string', '?title': 'string',
+                                         body: 'string',
+                                         '?title': 'string',
                                          '*': '*'}})) {
-                console.error('email no validate', o)
+                console.error('email no be valid', o)
                 t.abort()
                 return
             }
