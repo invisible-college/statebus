@@ -1073,6 +1073,7 @@ function import_server (bus, options)
     },
 
     serve_email (master, opts) {
+        opts = opts || {}
         var client = this
 
         // Todo on Server:
