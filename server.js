@@ -1072,11 +1072,10 @@ function import_server (bus, options)
             }
     },
 
-    serve_email (master) {
+    serve_email (master, opts) {
         var client = this
 
         // Todo on Server:
-        //  - Finish implementing "n=?" in email_for(.., n)
         //  - Add in-reply-to: aka parent:
         //  - Connect with mailin, so we can receive SMTP shit
         //  - Run it live on invisible.college
@@ -1110,6 +1109,11 @@ function import_server (bus, options)
             q += " order by value #>'{_,date}' asc"
             if (to) q += ' limit ' + to
             return master.pg_db.querySync(q).map(x=>x.value)
+        }
+        function email_children (email) {
+            return master.pg_db.querySync(
+                "select value from cache where value #>'{_,parent}' = '"
+                    + JSON.stringify(email.key) + "' order by value #>'{_,date}' desc").map(x=>x.value)
         }
 
         // Define state on master
@@ -1147,16 +1151,16 @@ function import_server (bus, options)
         }
 
         client('email/*').to_fetch = (k) => {
-            var m_e = master.fetch(k)
-            if (!m_e._) return {}
+            var e = master.clone(master.fetch(k))
+            if (!e._) return {}
             var c = client.fetch('current_user')
-            var allowed = m_e._.to.concat(m_e._.cc).concat(m_e._.from)
-            if (c.logged_in)
-                if (allowed.indexOf(c.user.key) !== -1)
-                    return client.clone(m_e)
-            if (allowed.indexOf('public') !== -1)
-                return client.clone(m_e)
-            return {}
+            var allowed = e._.to.concat(e._.cc).concat(e._.from)
+            if (allowed.indexOf(c.logged_in ? c.user.key : 'public') === -1)
+                return {}
+            
+            //console.log('getting email children for', k, email_children(e).map(e=>e.key))
+            e._.children = email_children(e).map(e=>e.key)
+            return e
         }
 
         client('email/*').to_save = (o, t) => {
@@ -1181,8 +1185,57 @@ function import_server (bus, options)
                 t.abort()
                 return
             }
-            master.save(client.clone(o))
+            o = client.clone(o)
+            delete o.children
+            master.save(o)
             t.done()
+        }
+
+        // Listen for SMTP messages on port 25
+        if (opts.domain) {
+            var mailin = require('mailin')
+            mailin.start({
+                port: opts.port,
+                disableWebhook: true,
+                host: opts.domain,
+                smtpOptions: { SMTPBanner: opts.domain }
+            })
+            // Event emitted after a message was received and parsed.
+            mailin.on('message', (connection, msg, raw) => {
+                if (!msg.messageId) {
+                    console.log('Aborting message without id!', msg.subject, new Date().toLocaleString())
+                    return
+                }
+
+                console.log(msg)
+                console.log('Refs is', msg.references)
+                console.log('Raw is', raw)
+                var parent = msg.references
+                if (parent) {
+                    if (Array.isArray(parent))
+                        parent = parent[0]
+                    var m = parent.match(/\<(.*)\>/)
+                    if (m && m[1])
+                        parent = m[1]
+                }
+                var from = msg.from
+
+                console.log('date is', msg.date, typeof(msg.date), msg.date.getTime())
+                email = {
+                    key: "email/" + msg.messageId,
+                    title: msg.subject,
+                    parent: parent && ("email/" + parent) || undefined,
+                    from: [msg.from],
+                    to: msg.to,
+                    cc: msg.cc,
+                    date: msg.date.getTime() / 1000,
+                    text: msg.text,
+                    body: msg.text,
+                    html: msg.html
+                }
+
+                master.save(email)
+            })
         }
     },
 
