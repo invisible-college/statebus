@@ -861,9 +861,9 @@ function import_server (bus, options)
             var db = new require('pg-native')()
             bus.pg_db = db
             db.connectSync(opts.url)
-            //db.prepare('create table if not exists cache (key text primary key, obj text)').run()
+            db.querySync('create table if not exists store (key text primary key, value text)')
 
-            var rows = db.querySync('select * from cache')
+            var rows = db.querySync('select * from store')
             rows.forEach(r => bus.save(inline_pointers(r.value, bus)))
 
             bus.log('Read ' + opts.url)
@@ -879,7 +879,7 @@ function import_server (bus, options)
             console.time('save db')
             // db.querySync('BEGIN TRANSACTION')
 
-            db.querySync('insert into cache (key, value) values ($1, $2) '
+            db.querySync('insert into store (key, value) values ($1, $2) '
                          + 'on conflict (key) do update set value = $2',
                          [obj.key, JSON.stringify(obj)])
 
@@ -891,7 +891,7 @@ function import_server (bus, options)
         bus(prefix).to_delete = function (key) {
             console.time('save db')
             // db.query('BEGIN TRANSACTION', e)
-            db.query('delete from cache where key = $1', [key], e)
+            db.query('delete from store where key = $1', [key], e)
             console.log('committing')
             db.query('COMMIT', e)
             console.timeEnd('save db')
@@ -1106,14 +1106,14 @@ function import_server (bus, options)
             terms = terms.map(term => "value @> '"+JSON.stringify(term)+"'")
             terms = terms.join(' or ')
 
-            var q = "select value from cache where " + terms
+            var q = "select value from store where " + terms
             q += " order by value #>'{_,date}' asc"
             if (to) q += ' limit ' + to
             return master.pg_db.querySync(q).map(x=>x.value)
         }
         function email_children (email) {
             return master.pg_db.querySync(
-                "select value from cache where value #>'{_,parent}' = '"
+                "select value from store where value #>'{_,parent}' = '"
                     + JSON.stringify(email.key) + "' order by value #>'{_,date}' desc").map(x=>x.value)
         }
 
