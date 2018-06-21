@@ -868,27 +868,20 @@ function import_server (bus, options)
             bus.log('Read ' + opts.url)
         } catch (e) {
             console.error(e)
-            console.error('Bad sqlite db')
+            console.error('Bad pg db')
         }
 
         // Add save handlers
-        function pg_save (obj, t) {
+        function pg_save (obj) {
             abstract_pointers(obj)
-
-            console.time('save pg db')
             db.querySync('insert into store (key, value) values ($1, $2) '
                          + 'on conflict (key) do update set value = $2',
                          [obj.key, JSON.stringify(obj)])
-            console.timeEnd('save pg db')
-            t.done()
         }
         pg_save.priority = true
-        bus(opts.prefix).to_save = pg_save
-        bus(opts.prefix).to_delete = function (key, t) {
-            console.time('save pg db')
+        bus(opts.prefix).on_save = pg_save
+        bus(opts.prefix).to_delete = function (key) {
             db.query('delete from store where key = $1', [key], e)
-            console.timeEnd('save pg db')
-            t.done()
         }
 
         // Replaces every nested keyed object with {_key: <key>}
