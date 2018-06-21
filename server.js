@@ -851,17 +851,16 @@ function import_server (bus, options)
     },
 
     pg_store: function pg_store (opts) {
-        var prefix = '*'
-        var open_transaction = null
-
         opts = opts || {}
+        opts.prefix = opts.prefix || '*'
 
         // Load the db on startup
         try {
             var db = new require('pg-native')()
             bus.pg_db = db
+            bus.pg_save = pg_save
             db.connectSync(opts.url)
-            db.querySync('create table if not exists store (key text primary key, value text)')
+            db.querySync('create table if not exists store (key text primary key, value jsonb)')
 
             var rows = db.querySync('select * from store')
             rows.forEach(r => bus.save(inline_pointers(r.value, bus)))
@@ -873,28 +872,23 @@ function import_server (bus, options)
         }
 
         // Add save handlers
-        function pg_to_save (obj) {
+        function pg_save (obj, t) {
             abstract_pointers(obj)
 
-            console.time('save db')
-            // db.querySync('BEGIN TRANSACTION')
-
+            console.time('save pg db')
             db.querySync('insert into store (key, value) values ($1, $2) '
                          + 'on conflict (key) do update set value = $2',
                          [obj.key, JSON.stringify(obj)])
-
-            // db.querysync('COMMIT')
-            console.timeEnd('save db')
+            console.timeEnd('save pg db')
+            t.done()
         }
-        pg_to_save.priority = true
-        bus(prefix).to_save = pg_to_save
-        bus(prefix).to_delete = function (key) {
-            console.time('save db')
-            // db.query('BEGIN TRANSACTION', e)
+        pg_save.priority = true
+        bus(opts.prefix).to_save = pg_save
+        bus(opts.prefix).to_delete = function (key, t) {
+            console.time('save pg db')
             db.query('delete from store where key = $1', [key], e)
-            console.log('committing')
-            db.query('COMMIT', e)
-            console.timeEnd('save db')
+            console.timeEnd('save pg db')
+            t.done()
         }
 
         // Replaces every nested keyed object with {_key: <key>}
@@ -1077,22 +1071,13 @@ function import_server (bus, options)
         var client = this
 
         // Todo on Server:
-        //  - Add in-reply-to: aka parent:
         //  - Connect with mailin, so we can receive SMTP shit
-        //  - Run it live on invisible.college
         //  
         //  - Is there security hole if users have a ? or a / in their name?
         //  - Make the master.emails/ state not require /
         //  - Make standard url tools for optional slashes, and ? query params
         //  - Should a e.g. client to_save abort if it calls save that aborts?
         //    - e.g. if master('emails*').to_save aborts
-        //
-        // Todo on Client:
-        //  - Group into threads
-        //  - Add infinite scroll
-        //
-        // Questions
-        //  - How do we add mime types?  Like md?  HTML?
 
         // Helpers
         function email_for (user, to) {
@@ -1121,7 +1106,7 @@ function import_server (bus, options)
         if (master('emails_for*').to_fetch.length === 0) {
             // Get emails for each user
             master('emails_for*').to_fetch = (rest) => {
-                var matches = rest.match(/\/(user\/[^\/]+)(\/to=(\d+))?/)
+                var matches = rest.match(/\/((user\/[^\/]+)|public)(\/to=(\d+))?/)
                 var user = matches[1], to = matches[3]
                 if (to) master.fetch('emails_for/' + user) // for dirtying later
                 return {_: email_for(user, to)}
