@@ -1848,6 +1848,7 @@
 
     // ******************
     // Utility funcs
+    function parse (s) {try {return JSON.parse(s)} catch (e) {return {}}}
     function One_To_Many() {
         var hash = this.hash = {}
         var counts = {}
@@ -2208,7 +2209,7 @@
                'global_funk busses rerunnable_funks',
                'encode_field decode_field translate_keys apply_patch',
                'net_client go_net message_method handle_state_urls',
-               'Set One_To_Many clone extend deep_map deep_equals prune validate sorta_diff log deps'
+               'parse Set One_To_Many clone extend deep_map deep_equals prune validate sorta_diff log deps'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)
         bus[api[i]] = eval(api[i])

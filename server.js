@@ -868,20 +868,27 @@ function import_server (bus, options)
             bus.log('Read ' + opts.url)
         } catch (e) {
             console.error(e)
-            console.error('Bad pg db')
+            console.error('Bad sqlite db')
         }
 
         // Add save handlers
-        function pg_save (obj) {
+        function pg_save (obj, t) {
             abstract_pointers(obj)
+
+            console.time('save pg db')
             db.querySync('insert into store (key, value) values ($1, $2) '
                          + 'on conflict (key) do update set value = $2',
                          [obj.key, JSON.stringify(obj)])
+            console.timeEnd('save pg db')
+            t.done()
         }
         pg_save.priority = true
-        bus(opts.prefix).on_save = pg_save
-        bus(opts.prefix).to_delete = function (key) {
+        bus(opts.prefix).to_save = pg_save
+        bus(opts.prefix).to_delete = function (key, t) {
+            console.time('save pg db')
             db.query('delete from store where key = $1', [key], e)
+            console.timeEnd('save pg db')
+            t.done()
         }
 
         // Replaces every nested keyed object with {_key: <key>}
@@ -1059,6 +1066,58 @@ function import_server (bus, options)
             }
     },
 
+    smtp (opts) {
+        var bus = this
+        // Listen for SMTP messages on port 25
+        if (opts.domain) {
+            var mailin = require('mailin')
+            mailin.start({
+                port: opts.port || 25,
+                disableWebhook: true,
+                host: opts.domain,
+                smtpOptions: { SMTPBanner: opts.domain }
+            })
+            // Event emitted after a message was received and parsed.
+            mailin.on('message', (connection, msg, raw) => {
+                if (!msg.messageId) {
+                    console.log('Aborting message without id!', msg.subject, new Date().toLocaleString())
+                    return
+                }
+
+                console.log(msg)
+                console.log('Refs is', msg.references)
+                console.log('Raw is', raw)
+                var parent = msg.references
+                if (parent) {
+                    if (Array.isArray(parent))
+                        parent = parent[0]
+                    var m = parent.match(/\<(.*)\>/)
+                    if (m && m[1])
+                        parent = m[1]
+                }
+                var from = msg.from
+
+                console.log('date is', msg.date, typeof(msg.date), msg.date.getTime())
+                email = {
+                    key: "email/" + msg.messageId,
+                    _: {
+                        title: msg.subject,
+                        parent: parent && ("email/" + parent) || undefined,
+                        from: msg.from.address,
+                        to: msg.to.map(x=>x.address),
+                        cc: msg.cc.map(x=>x.address),
+                        date: msg.date.getTime() / 1000,
+                        text: msg.text,
+                        body: msg.text,
+                        html: msg.html
+                    }
+                }
+
+                bus.save(email)
+            })
+        }
+    },
+
     serve_email (master, opts) {
         opts = opts || {}
         var client = this
@@ -1073,45 +1132,64 @@ function import_server (bus, options)
         //    - e.g. if master('emails*').to_save aborts
 
         // Helpers
-        function email_for (user, to) {
-            var terms = user
-                ? [{_: {to: [user]}},
-                   {_: {cc: ['public']}},
-                   {_: {cc: [user]}},
-                   {_: {from: [user]}}]
-                : [{_: {cc: ['public']}}]
+        function get_emails (args) {
+            console.log('getting emails with', args)
+            var can_see = [{cc: ['public']}]
+            if (args.for_user)
+                can_see.push({to: [args.for_user]},
+                             {cc: [args.for_user]},
+                             {from: [args.for_user]})
 
-            terms = terms.map(term => "value @> '"+JSON.stringify(term)+"'")
-            terms = terms.join(' or ')
+            terms = '(' + can_see
+                .map(x => "value @> '"+JSON.stringify({_:x})+"'")
+                .join(' or ')
+                + ')'
+
+            if (args.about_user) {
+                console.log('getting one about', args.about_user)
+                var interested_in = [{to: [args.about_user]},
+                                     {cc: [args.about_user]},
+                                     {from: [args.about_user]}]
+                terms += ' and (' + interested_in
+                    .map(x => "value @> '"+JSON.stringify({_:x})+"'")
+                    .join(' or ')
+                    + ')'
+            }
 
             var q = "select value from store where " + terms
             q += " order by value #>'{_,date}' asc"
-            if (to) q += ' limit ' + to
+            if (args.to) q += ' limit ' + to
+            console.log('here comes query', q)
             return master.pg_db.querySync(q).map(x=>x.value)
         }
         function email_children (email) {
             return master.pg_db.querySync(
                 "select value from store where value #>'{_,parent}' = '"
-                    + JSON.stringify(email.key) + "' order by value #>'{_,date}' desc").map(x=>x.value)
+                    + JSON.stringify(email.key)
+                    + "' order by value #>'{_,date}' desc").map(x=>x.value)
         }
 
         // Define state on master
-        if (master('emails_for*').to_fetch.length === 0) {
+        if (master('emails_for/*').to_fetch.length === 0) {
             // Get emails for each user
-            master('emails_for*').to_fetch = (rest) => {
-                var matches = rest.match(/\/((user\/[^\/]+)|public)(\/to=(\d+))?/)
-                var user = matches[1], to = matches[3]
-                if (to) master.fetch('emails_for/' + user) // for dirtying later
-                return {_: email_for(user, to)}
+            master('emails_for/*').to_fetch = (json) => {
+                // var matches = rest.match(
+                //         /\/((user\/[^\/]+)|public)(\/to=(\d+))?(\/about=(\d+))?/)
+                // var for_user = matches[1], to = matches[3], about_user = matches[4]
+                if (json.to) master.fetch('dirty_emails_for/' + json.for_user) // for dirtying later
+                return {_: get_emails(json)}
             }
             // Saving any email will dirty the list for all users mentioned in
             // the email
             master('email/*').to_save = (old, New, t) => {
                 // To do: diff the cc, to, and from lists, and only dirty
                 // emails_for people who have been changed
+                console.log('New was', New)
                 old = old._
                 New = New._
+                console.log('old is', old, !old)
                 if (!old) old = {to: [], from: [], cc: []}
+                console.log('now old is', old, 'and new', New)
                 var dirtied = old.to.concat(New.to)
                     .concat(old.cc).concat(New.cc)
                     .concat(old.from).concat(New.from)
@@ -1122,10 +1200,10 @@ function import_server (bus, options)
 
         // Define state on client
         client('emails*').to_fetch = (k, rest) => {
+            var args = bus.parse(rest.substr(1))
             var c = client.fetch('current_user')
-            var e = master.fetch('emails_for/'
-                                 + (c.logged_in ? c.user.key : 'public')
-                                 + rest)
+            args.for_user = (c.logged_in ? c.user.key : 'public')
+            var e = master.fetch('emails_for/' + JSON.stringify(args))
             return {_: master.clone(e._)}
         }
 
@@ -1168,53 +1246,6 @@ function import_server (bus, options)
             delete o.children
             master.save(o)
             t.done()
-        }
-
-        // Listen for SMTP messages on port 25
-        if (opts.domain) {
-            var mailin = require('mailin')
-            mailin.start({
-                port: opts.port,
-                disableWebhook: true,
-                host: opts.domain,
-                smtpOptions: { SMTPBanner: opts.domain }
-            })
-            // Event emitted after a message was received and parsed.
-            mailin.on('message', (connection, msg, raw) => {
-                if (!msg.messageId) {
-                    console.log('Aborting message without id!', msg.subject, new Date().toLocaleString())
-                    return
-                }
-
-                console.log(msg)
-                console.log('Refs is', msg.references)
-                console.log('Raw is', raw)
-                var parent = msg.references
-                if (parent) {
-                    if (Array.isArray(parent))
-                        parent = parent[0]
-                    var m = parent.match(/\<(.*)\>/)
-                    if (m && m[1])
-                        parent = m[1]
-                }
-                var from = msg.from
-
-                console.log('date is', msg.date, typeof(msg.date), msg.date.getTime())
-                email = {
-                    key: "email/" + msg.messageId,
-                    title: msg.subject,
-                    parent: parent && ("email/" + parent) || undefined,
-                    from: [msg.from],
-                    to: msg.to,
-                    cc: msg.cc,
-                    date: msg.date.getTime() / 1000,
-                    text: msg.text,
-                    body: msg.text,
-                    html: msg.html
-                }
-
-                master.save(email)
-            })
         }
     },
 
