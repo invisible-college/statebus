@@ -432,9 +432,12 @@
                                  return a.slice(0,1).concat(a.slice(1).map(capitalize)).join('') }
 
         var all_css_props = Object.keys(document.body.style)
+        var ignore = {d:1, cx:1, cy:1, rx:1, ry:1, x:1, y:1,
+                      content:1, fill:1, stroke:1, src:1}
         var is_css_prop = {}
         for (var i=0; i<all_css_props.length; i++)
-            is_css_prop[all_css_props[i]] = true
+            if (!ignore[all_css_props[i]])
+                is_css_prop[all_css_props[i]] = true
 
         function better_element(el) {
             // To do:
@@ -476,9 +479,6 @@
                                 if (k === 'key')
                                     attrs['data-key'] = arg[k]
                             }
-
-                    // else
-                    //     console.log("Couldn't parse param", arg)
                 }
                 if (children.length === 0) children = undefined
                 if (attrs['ref'] === 'input')
