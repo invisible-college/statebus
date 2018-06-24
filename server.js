@@ -1121,35 +1121,36 @@ function import_server (bus, options)
     serve_email (master, opts) {
         opts = opts || {}
         var client = this
-
+        var email_regex = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+        var local_addie_regex = new RegExp('state://' + opts.domain + '/user/([^\/]+)')
         // Todo on Server:
         //  - Connect with mailin, so we can receive SMTP shit
         //  
         //  - Is there security hole if users have a ? or a / in their name?
-        //  - Make the master.emails/ state not require /
+        //  - Make the master.posts/ state not require /
         //  - Make standard url tools for optional slashes, and ? query params
         //  - Should a e.g. client to_save abort if it calls save that aborts?
-        //    - e.g. if master('emails*').to_save aborts
+        //    - e.g. if master('posts*').to_save aborts
 
         // Helpers
-        function get_emails (args) {
-            console.log('getting emails with', args)
+        function get_posts (args) {
+            console.log('getting posts with', args)
             var can_see = [{cc: ['public']}]
-            if (args.for_user)
-                can_see.push({to: [args.for_user]},
-                             {cc: [args.for_user]},
-                             {from: [args.for_user]})
+            if (args.for)
+                can_see.push({to: [args.for]},
+                             {cc: [args.for]},
+                             {from: [args.for]})
 
             terms = '(' + can_see
                 .map(x => "value @> '"+JSON.stringify({_:x})+"'")
                 .join(' or ')
                 + ')'
 
-            if (args.about_user) {
-                console.log('getting one about', args.about_user)
-                var interested_in = [{to: [args.about_user]},
-                                     {cc: [args.about_user]},
-                                     {from: [args.about_user]}]
+            if (args.about) {
+                console.log('getting one about', args.about)
+                var interested_in = [{to: [args.about]},
+                                     {cc: [args.about]},
+                                     {from: [args.about]}]
                 terms += ' and (' + interested_in
                     .map(x => "value @> '"+JSON.stringify({_:x})+"'")
                     .join(' or ')
@@ -1162,52 +1163,74 @@ function import_server (bus, options)
             console.log('here comes query', q)
             return master.pg_db.querySync(q).map(x=>x.value)
         }
-        function email_children (email) {
+        function post_children (post) {
             return master.pg_db.querySync(
                 "select value from store where value #>'{_,parent}' = '"
-                    + JSON.stringify(email.key)
+                    + JSON.stringify(post.key)
                     + "' order by value #>'{_,date}' desc").map(x=>x.value)
         }
 
+        function canonicalize_address (addie) {
+            if (opts.domain) {
+                // Try foo@gar.boo
+                var m = addie.match(email_regex)
+                if (m && m[5].toLowerCase() === opts.domain)
+                    return 'user/' + m[1]
+
+                // Try state://gar.boo/user/foo
+                m = addie.match(local_addie_regex)
+                if (m) return 'user/' + m[1]
+            }
+            return addie
+        }
+
         // Define state on master
-        if (master('emails_for/*').to_fetch.length === 0) {
-            // Get emails for each user
-            master('emails_for/*').to_fetch = (json) => {
+        if (master('posts_for/*').to_fetch.length === 0) {
+            // Get posts for each user
+            master('posts_for/*').to_fetch = (json) => {
                 // var matches = rest.match(
                 //         /\/((user\/[^\/]+)|public)(\/to=(\d+))?(\/about=(\d+))?/)
-                // var for_user = matches[1], to = matches[3], about_user = matches[4]
-                if (json.to) master.fetch('dirty_emails_for/' + json.for_user) // for dirtying later
-                return {_: get_emails(json)}
+                // var for = matches[1], to = matches[3], about = matches[4]
+                if (json.to) master.fetch('dirty_posts_for/' + json.for) // for dirtying later
+                return {_: get_posts(json)}
             }
-            // Saving any email will dirty the list for all users mentioned in
-            // the email
-            master('email/*').to_save = (old, New, t) => {
+            // Saving any post will dirty the list for all users mentioned in
+            // the post
+            master('post/*').to_save = (old, New, t) => {
                 // To do: diff the cc, to, and from lists, and only dirty
-                // emails_for people who have been changed
+                // posts_for people who have been changed
                 console.log('New was', New)
-                old = old._
-                New = New._
                 console.log('old is', old, !old)
-                if (!old) old = {to: [], from: [], cc: []}
+                if (!old._) old = {_:{to: [], from: [], cc: []}}
                 console.log('now old is', old, 'and new', New)
-                var dirtied = old.to.concat(New.to)
-                    .concat(old.cc).concat(New.cc)
-                    .concat(old.from).concat(New.from)
-                dirtied.forEach(u => master.dirty('emails_for/' + u))
-                t.done()
+
+                old._.to = old._.to.map(a=>canonicalize_address(a))
+                old._.cc = old._.cc.map(a=>canonicalize_address(a))
+                old._.from = old._.from.map(a=>canonicalize_address(a))
+                New._.to = New._.to.map(a=>canonicalize_address(a))
+                New._.cc = New._.cc.map(a=>canonicalize_address(a))
+                New._.from = New._.from.map(a=>canonicalize_address(a))
+
+                console.log('canonicalized to', New._.to)
+
+                var dirtied = old._.to.concat(New._.to)
+                    .concat(old._.cc).concat(New._.cc)
+                    .concat(old._.from).concat(New._.from)
+                dirtied.forEach(u => master.dirty('posts_for/' + u))
+                t.done(New)
             }
         }
 
         // Define state on client
-        client('emails*').to_fetch = (k, rest) => {
+        client('posts*').to_fetch = (k, rest) => {
             var args = bus.parse(rest.substr(1))
             var c = client.fetch('current_user')
-            args.for_user = (c.logged_in ? c.user.key : 'public')
-            var e = master.fetch('emails_for/' + JSON.stringify(args))
+            args.for = (c.logged_in ? c.user.key : 'public')
+            var e = master.fetch('posts_for/' + JSON.stringify(args))
             return {_: master.clone(e._)}
         }
 
-        client('email/*').to_fetch = (k) => {
+        client('post/*').to_fetch = (k) => {
             var e = master.clone(master.fetch(k))
             if (!e._) return {}
             var c = client.fetch('current_user')
@@ -1215,12 +1238,12 @@ function import_server (bus, options)
             if (allowed.indexOf(c.logged_in ? c.user.key : 'public') === -1)
                 return {}
             
-            //console.log('getting email children for', k, email_children(e).map(e=>e.key))
-            e._.children = email_children(e).map(e=>e.key)
+            //console.log('getting post children for', k, post_children(e).map(e=>e.key))
+            e._.children = post_children(e).map(e=>e.key)
             return e
         }
 
-        client('email/*').to_save = (o, t) => {
+        client('post/*').to_save = (o, t) => {
             if (!client.validate(o, {key: 'string',
                                      _: {to: 'array',
                                          cc: 'array',
@@ -1230,7 +1253,7 @@ function import_server (bus, options)
                                          body: 'string',
                                          '?title': 'string',
                                          '*': '*'}})) {
-                console.error('email no be valid', o)
+                console.error('post no be valid', o)
                 t.abort()
                 return
             }
@@ -1958,8 +1981,8 @@ function import_server (bus, options)
                                                                              sourceMap: true})
                 } catch (e) {
                     if (!bus.loading())
-                        console.error('Could not compile ' + filename + ': ', e)
-                    return ''
+                        console.error('Could not compile ' + e.toString())
+                    return 'console.error(' + JSON.stringify(e.toString()) + ')'
                 }
 
                 var source_map = JSON.parse(compiled.v3SourceMap)
