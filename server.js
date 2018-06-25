@@ -1141,7 +1141,7 @@ function import_server (bus, options)
                 + ')'
 
             if (args.about) {
-                console.log('getting one about', args.about)
+                // console.log('getting one about', args.about)
                 var interested_in = [{to: [args.about]},
                                      {cc: [args.about]},
                                      {from: [args.about]}]
@@ -1154,7 +1154,7 @@ function import_server (bus, options)
             var q = "select value from store where key like 'post/%' and " + terms
             q += " order by value #>'{_,date}' desc"
             if (args.to) q += ' limit ' + to
-            console.log('here comes query', q)
+            console.log('with query', q)
             return master.pg_db.querySync(q).map(x=>x.value)
         }
         function post_children (post) {
@@ -1190,10 +1190,11 @@ function import_server (bus, options)
             master('post/*').to_save = (old, New, t) => {
                 // To do: diff the cc, to, and from lists, and only dirty
                 // posts_for people who have been changed
-                console.log('New was', New)
-                console.log('old is', old, !old)
+
+                // console.log('New was', New)
+                // console.log('old is', old, !old)
                 if (!old._) old = {_:{to: [], from: [], cc: []}}
-                console.log('now old is', old, 'and new', New)
+                // console.log('now old is', old, 'and new', New)
 
                 old._.to = old._.to.map(a=>canonicalize_address(a))
                 old._.cc = old._.cc.map(a=>canonicalize_address(a))
@@ -1202,7 +1203,7 @@ function import_server (bus, options)
                 New._.cc = New._.cc.map(a=>canonicalize_address(a))
                 New._.from = New._.from.map(a=>canonicalize_address(a))
 
-                console.log('canonicalized to', New._.to)
+                // console.log('canonicalized to', New._.to)
 
                 var dirtied = old._.to.concat(New._.to)
                     .concat(old._.cc).concat(New._.cc)
