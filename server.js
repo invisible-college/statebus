@@ -868,27 +868,21 @@ function import_server (bus, options)
             bus.log('Read ' + opts.url)
         } catch (e) {
             console.error(e)
-            console.error('Bad sqlite db')
+            console.error('Bad pg db')
         }
 
         // Add save handlers
-        function pg_save (obj, t) {
+        function pg_save (obj) {
             abstract_pointers(obj)
 
-            console.time('save pg db')
             db.querySync('insert into store (key, value) values ($1, $2) '
                          + 'on conflict (key) do update set value = $2',
                          [obj.key, JSON.stringify(obj)])
-            console.timeEnd('save pg db')
-            t.done()
         }
         pg_save.priority = true
-        bus(opts.prefix).to_save = pg_save
-        bus(opts.prefix).to_delete = function (key, t) {
-            console.time('save pg db')
-            db.query('delete from store where key = $1', [key], e)
-            console.timeEnd('save pg db')
-            t.done()
+        bus(opts.prefix).on_save = pg_save
+        bus(opts.prefix).to_delete = function (key) {
+            db.query('delete from store where key = $1', [key])
         }
 
         // Replaces every nested keyed object with {_key: <key>}
@@ -1157,8 +1151,8 @@ function import_server (bus, options)
                     + ')'
             }
 
-            var q = "select value from store where " + terms
-            q += " order by value #>'{_,date}' asc"
+            var q = "select value from store where key like 'post/%' and " + terms
+            q += " order by value #>'{_,date}' desc"
             if (args.to) q += ' limit ' + to
             console.log('here comes query', q)
             return master.pg_db.querySync(q).map(x=>x.value)
@@ -1188,10 +1182,7 @@ function import_server (bus, options)
         if (master('posts_for/*').to_fetch.length === 0) {
             // Get posts for each user
             master('posts_for/*').to_fetch = (json) => {
-                // var matches = rest.match(
-                //         /\/((user\/[^\/]+)|public)(\/to=(\d+))?(\/about=(\d+))?/)
-                // var for = matches[1], to = matches[3], about = matches[4]
-                if (json.to) master.fetch('dirty_posts_for/' + json.for) // for dirtying later
+                master.fetch('dirty_posts_for/' + json.for) // for dirtying later
                 return {_: get_posts(json)}
             }
             // Saving any post will dirty the list for all users mentioned in
@@ -1216,7 +1207,8 @@ function import_server (bus, options)
                 var dirtied = old._.to.concat(New._.to)
                     .concat(old._.cc).concat(New._.cc)
                     .concat(old._.from).concat(New._.from)
-                dirtied.forEach(u => master.dirty('posts_for/' + u))
+                dirtied.forEach(u => master.save.fire({key:'dirty_posts_for/' + u,
+                                                       n:Math.random()}))
                 t.done(New)
             }
         }
@@ -1227,7 +1219,7 @@ function import_server (bus, options)
             var c = client.fetch('current_user')
             args.for = (c.logged_in ? c.user.key : 'public')
             var e = master.fetch('posts_for/' + JSON.stringify(args))
-            return {_: master.clone(e._)}
+            return {_: master.clone(e._).map(x=>client.fetch(x.key))}
         }
 
         client('post/*').to_fetch = (k) => {
@@ -1241,6 +1233,13 @@ function import_server (bus, options)
             //console.log('getting post children for', k, post_children(e).map(e=>e.key))
             e._.children = post_children(e).map(e=>e.key)
             return e
+        }
+
+        function is_author (post) {
+            var from = post._.from
+            var c = client.fetch('/current_user')
+            return !(from.includes('public')
+                     || (c.logged_in && from.includes(c.user.key)))
         }
 
         client('post/*').to_save = (o, t) => {
@@ -1261,7 +1260,8 @@ function import_server (bus, options)
             var c = client.fetch('current_user')
 
             // Make sure this user is an author
-            if (!c.logged_in || o._.from.indexOf(c.user.key) === -1) {
+            var from = o._.from
+            if (!is_author(o)) {
                 t.abort()
                 return
             }
@@ -1269,6 +1269,31 @@ function import_server (bus, options)
             delete o.children
             master.save(o)
             t.done()
+        }
+
+        client('post/*').to_delete = (key, o, t) => {
+            // Validate
+            if (!is_author(o)) {
+                t.abort()
+                return
+            }
+
+            // Dirty everybody
+            var dirtied = o._.to.concat(o._.cc).concat(o._.from)
+            dirtied.forEach(u => master.save.fire({key:'dirty_posts_for/' + u,
+                                                   n:Math.random()}))
+
+            master.pg_db.query('delete from store where key = $1', [key])
+            // To do: handle nested threads.  Either detach them, or insert a
+            // 'deleted' stub, or splice together
+
+            // Complete
+            t.done()
+        }
+
+        client('friends').to_fetch = t => {
+            return {_: master.fetch('users').all
+                    .map(u=>({name: u.name, id: u.key, email: u.email}))}
         }
     },
 
