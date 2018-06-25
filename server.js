@@ -1239,8 +1239,7 @@ function import_server (bus, options)
         function is_author (post) {
             var from = post._.from
             var c = client.fetch('/current_user')
-            return !(from.includes('public')
-                     || (c.logged_in && from.includes(c.user.key)))
+            return from.includes('public') || c.logged_in && from.includes(c.user.key)
         }
 
         client('post/*').to_save = (o, t) => {
@@ -1263,6 +1262,7 @@ function import_server (bus, options)
             // Make sure this user is an author
             var from = o._.from
             if (!is_author(o)) {
+                console.error('User', o._.from, 'is not the author of this post')
                 t.abort()
                 return
             }
