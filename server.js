@@ -1296,7 +1296,7 @@ function import_server (bus, options)
         }
 
         client('friends').to_fetch = t => {
-            return {_: master.fetch('users').all
+            return {_: (master.fetch('users').all||[])
                     .map(u=>({name: u.name, id: u.key, email: u.email}))}
         }
     },
