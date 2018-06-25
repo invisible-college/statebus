@@ -1238,7 +1238,7 @@ function import_server (bus, options)
 
         function is_author (post) {
             var from = post._.from
-            var c = client.fetch('/current_user')
+            var c = client.fetch('current_user')
             return from.includes('public') || c.logged_in && from.includes(c.user.key)
         }
 
@@ -1262,7 +1262,8 @@ function import_server (bus, options)
             // Make sure this user is an author
             var from = o._.from
             if (!is_author(o)) {
-                console.error('User', o._.from, 'is not the author of this post')
+                console.error('User', client.fetch('current_user').user.key,
+			      'is not author', o._.from)
                 t.abort()
                 return
             }
@@ -1275,6 +1276,8 @@ function import_server (bus, options)
         client('post/*').to_delete = (key, o, t) => {
             // Validate
             if (!is_author(o)) {
+                console.error('User', client.fetch('current_user').user.key,
+			      'is not author', o._.from)
                 t.abort()
                 return
             }
