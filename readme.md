@@ -1,1 +1,1 @@
-**Readme: https://wiki.invisible.college/statebus**
+Go to https://stateb.us
