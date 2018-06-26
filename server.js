@@ -1116,7 +1116,8 @@ function import_server (bus, options)
         opts = opts || {}
         var client = this
         var email_regex = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
-        var local_addie_regex = new RegExp('state://' + opts.domain + '/user/([^\/]+)')
+        var peemail_regex = /^public$|^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+        // var local_addie_regex = new RegExp('state://' + opts.domain + '/user/([^\/]+)')
         // Todo on Server:
         //  - Connect with mailin, so we can receive SMTP shit
         //  
@@ -1164,19 +1165,19 @@ function import_server (bus, options)
                     + "' order by value #>'{_,date}' desc").map(x=>x.value)
         }
 
-        function canonicalize_address (addie) {
-            if (opts.domain) {
-                // Try foo@gar.boo
-                var m = addie.match(email_regex)
-                if (m && m[5].toLowerCase() === opts.domain)
-                    return 'user/' + m[1]
+        // function canonicalize_address (addie) {
+        //     if (opts.domain) {
+        //         // Try foo@gar.boo
+        //         var m = addie.match(email_regex)
+        //         if (m && m[5].toLowerCase() === opts.domain)
+        //             return 'user/' + m[1]
 
-                // Try state://gar.boo/user/foo
-                m = addie.match(local_addie_regex)
-                if (m) return 'user/' + m[1]
-            }
-            return addie
-        }
+        //         // Try state://gar.boo/user/foo
+        //         m = addie.match(local_addie_regex)
+        //         if (m) return 'user/' + m[1]
+        //     }
+        //     return addie
+        // }
 
         // Define state on master
         if (master('posts_for/*').to_fetch.length === 0) {
@@ -1191,19 +1192,14 @@ function import_server (bus, options)
                 // To do: diff the cc, to, and from lists, and only dirty
                 // posts_for people who have been changed
 
-                // console.log('New was', New)
-                // console.log('old is', old, !old)
                 if (!old._) old = {_:{to: [], from: [], cc: []}}
-                // console.log('now old is', old, 'and new', New)
 
-                old._.to = old._.to.map(a=>canonicalize_address(a))
-                old._.cc = old._.cc.map(a=>canonicalize_address(a))
-                old._.from = old._.from.map(a=>canonicalize_address(a))
-                New._.to = New._.to.map(a=>canonicalize_address(a))
-                New._.cc = New._.cc.map(a=>canonicalize_address(a))
-                New._.from = New._.from.map(a=>canonicalize_address(a))
-
-                // console.log('canonicalized to', New._.to)
+                // old._.to = old._.to.map(a=>canonicalize_address(a))
+                // old._.cc = old._.cc.map(a=>canonicalize_address(a))
+                // old._.from = old._.from.map(a=>canonicalize_address(a))
+                // New._.to = New._.to.map(a=>canonicalize_address(a))
+                // New._.cc = New._.cc.map(a=>canonicalize_address(a))
+                // New._.from = New._.from.map(a=>canonicalize_address(a))
 
                 var dirtied = old._.to.concat(New._.to)
                     .concat(old._.cc).concat(New._.cc)
@@ -1214,11 +1210,22 @@ function import_server (bus, options)
             }
         }
 
+        function user_addy (u) {
+            return u.name + '@' + opts.domain
+        }
+        function current_addy () {
+            var c = client.fetch('current_user')
+            return c.logged_in ? user_addy(c.user) : 'public'
+        }
+        client('current_email').to_fetch = () => {
+            return {_: current_addy()}
+        }
+
         // Define state on client
         client('posts*').to_fetch = (k, rest) => {
             var args = bus.parse(rest.substr(1))
             var c = client.fetch('current_user')
-            args.for = (c.logged_in ? c.user.key : 'public')
+            args.for = current_addy()
             var e = master.fetch('posts_for/' + JSON.stringify(args))
             return {_: master.clone(e._).map(x=>client.fetch(x.key))}
         }
@@ -1228,10 +1235,9 @@ function import_server (bus, options)
             if (!e._) return {}
             var c = client.fetch('current_user')
             var allowed = e._.to.concat(e._.cc).concat(e._.from)
-            if (allowed.indexOf(c.logged_in ? c.user.key : 'public') === -1)
+            if (!allowed.includes(current_addy()))
                 return {}
             
-            //console.log('getting post children for', k, post_children(e).map(e=>e.key))
             e._.children = post_children(e).map(e=>e.key)
             return e
         }
@@ -1239,11 +1245,11 @@ function import_server (bus, options)
         function is_author (post) {
             var from = post._.from
             var c = client.fetch('current_user')
-            return from.includes('public') || c.logged_in && from.includes(c.user.key)
+            return from.includes(current_addy())
         }
 
         client('post/*').to_save = (o, t) => {
-            if (!client.validate(o, {key: 'string',
+            if (!(client.validate(o, {key: 'string',
                                      _: {to: 'array',
                                          cc: 'array',
                                          from: 'array',
@@ -1251,7 +1257,10 @@ function import_server (bus, options)
                                          '?parent': 'string',
                                          body: 'string',
                                          '?title': 'string',
-                                         '*': '*'}})) {
+                                         '*': '*'}})
+                  && o._.to.every(a=>a.match(peemail_regex))
+                  && o._.cc.every(a=>a.match(peemail_regex))
+                  && o._.from.every(a=>a.match(peemail_regex)))) {
                 console.error('post no be valid', o)
                 t.abort()
                 return
@@ -1262,8 +1271,8 @@ function import_server (bus, options)
             // Make sure this user is an author
             var from = o._.from
             if (!is_author(o)) {
-                console.error('User', client.fetch('current_user').user.key,
-			      'is not author', o._.from)
+                console.error('User', current_addy(),
+			                  'is not author', o._.from)
                 t.abort()
                 return
             }
@@ -1276,18 +1285,19 @@ function import_server (bus, options)
         client('post/*').to_delete = (key, o, t) => {
             // Validate
             if (!is_author(o)) {
-                console.error('User', client.fetch('current_user').user.key,
-			      'is not author', o._.from)
+                console.error('User', current_addy(),
+			                  'is not author', o._.from)
                 t.abort()
                 return
             }
 
             // Dirty everybody
-            var dirtied = o._.to.concat(o._.cc).concat(o._.from)
-            dirtied.forEach(u => master.save.fire({key:'dirty_posts_for/' + u,
-                                                   n:Math.random()}))
+            // var dirtied = o._.to.concat(o._.cc).concat(o._.from)
+            // dirtied.forEach(u => master.save.fire({key:'dirty_posts_for/' + u,
+            //                                        n:Math.random()}))
 
-            master.pg_db.query('delete from store where key = $1', [key])
+            master.delete(key)
+            // master.pg_db.query('delete from store where key = $1', [key])
             // To do: handle nested threads.  Either detach them, or insert a
             // 'deleted' stub, or splice together
 
@@ -1297,7 +1307,29 @@ function import_server (bus, options)
 
         client('friends').to_fetch = t => {
             return {_: (master.fetch('users').all||[])
-                    .map(u=>({name: u.name, id: u.key, email: u.email}))}
+                    .map(u=>client.fetch('email/' + user_addy(u)))
+                    .concat([client.fetch('email/public')])
+            }
+        }
+
+        client('email/*').to_fetch = (rest) => {
+            var m = rest.match(email_regex)
+            var result = {address: rest}
+            if (rest === 'public') {
+                result.name = 'public'
+            }
+            else if (m && m[5].toLowerCase() === opts.domain) {
+                result.user = client.fetch('user/' + m[1])
+                result.name = result.user.name
+                result.pic = result.user.pic
+                result.upgraded = true
+            }
+            else if (m) {
+                result.name = m[1]
+                result.upgraded = false
+            }
+
+            return result
         }
     },
 
