@@ -1291,13 +1291,14 @@ function import_server (bus, options)
                 return
             }
 
-            // Dirty everybody
-            // var dirtied = o._.to.concat(o._.cc).concat(o._.from)
-            // dirtied.forEach(u => master.save.fire({key:'dirty_posts_for/' + u,
-            //                                        n:Math.random()}))
+            // master.delete(key)
+            master.pg_db.query('delete from store where key = $1', [key])
 
-            master.delete(key)
-            // master.pg_db.query('delete from store where key = $1', [key])
+            // Dirty everybody
+            var dirtied = o._.to.concat(o._.cc).concat(o._.from)
+            dirtied.forEach(u => master.save.fire({key:'dirty_posts_for/' + u,
+                                                   n:Math.random()}))
+
             // To do: handle nested threads.  Either detach them, or insert a
             // 'deleted' stub, or splice together
 
