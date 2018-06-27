@@ -873,7 +873,7 @@ function import_server (bus, options)
 
         // Add save handlers
         function pg_save (obj) {
-            abstract_pointers(obj)
+            obj = abstract_pointers(obj)
 
             db.querySync('insert into store (key, value) values ($1, $2) '
                          + 'on conflict (key) do update set value = $2',
@@ -890,18 +890,20 @@ function import_server (bus, options)
             o = bus.clone(o)
             var result = {}
             for (var k in o)
-                result[k] = bus.deep_map(o[k], (o) => {
-                    if (o && o.key) return {_key: o.key}
-                    else return o
+                result[k] = bus.deep_map(o[k], (x) => {
+                    if (x && x.key) return {_key: x.key}
+                    else return x
                 })
             return result
         }
         // ...and the inverse
         function inline_pointers (obj, bus) {
             return bus.deep_map(obj, (o) => {
-                if (o && o._key)
+                if (o && o._key) {
+                    if (!bus.cache[o._key])
+                        bus.cache[o._key] = {key: o._key}
                     return bus.cache[o._key]
-                else return o
+                } else return o
             })
         }
     },
@@ -1162,7 +1164,7 @@ function import_server (bus, options)
             return master.pg_db.querySync(
                 "select value from store where value #>'{_,parent}' = '"
                     + JSON.stringify(post.key)
-                    + "' order by value #>'{_,date}' desc").map(x=>x.value)
+                    + "' order by value #>'{_,date}' asc").map(x=>x.value)
         }
 
         // function canonicalize_address (addie) {
@@ -1183,7 +1185,7 @@ function import_server (bus, options)
         if (master('posts_for/*').to_fetch.length === 0) {
             // Get posts for each user
             master('posts_for/*').to_fetch = (json) => {
-                master.fetch('dirty_posts_for/' + json.for) // for dirtying later
+                watch_for_dirt('posts-for/' + json.for)
                 return {_: get_posts(json)}
             }
             // Saving any post will dirty the list for all users mentioned in
@@ -1204,8 +1206,11 @@ function import_server (bus, options)
                 var dirtied = old._.to.concat(New._.to)
                     .concat(old._.cc).concat(New._.cc)
                     .concat(old._.from).concat(New._.from)
-                dirtied.forEach(u => master.save.fire({key:'dirty_posts_for/' + u,
-                                                       n:Math.random()}))
+                dirtied.forEach(u=>dirty('posts-for/' + u))
+
+                if (old._.parent) dirty(old._.parent)
+                if (New._.parent) dirty(New._.parent)
+
                 t.done(New)
             }
         }
@@ -1217,6 +1222,15 @@ function import_server (bus, options)
             var c = client.fetch('current_user')
             return c.logged_in ? user_addy(c.user) : 'public'
         }
+        function is_author (post) {
+            var from = post._.from
+            var c = client.fetch('current_user')
+            return from.includes(current_addy())
+        }
+        var drtbus = master//require('./statebus')()
+        function dirty (key) { drtbus.save({key: 'dirty-'+key, n: Math.random()}) }
+        function watch_for_dirt (key) { drtbus.fetch('dirty-'+key) }
+
         client('current_email').to_fetch = () => {
             return {_: current_addy()}
         }
@@ -1239,13 +1253,9 @@ function import_server (bus, options)
                 return {}
             
             e._.children = post_children(e).map(e=>e.key)
-            return e
-        }
+            watch_for_dirt(k)
 
-        function is_author (post) {
-            var from = post._.from
-            var c = client.fetch('current_user')
-            return from.includes(current_addy())
+            return e
         }
 
         client('post/*').to_save = (o, t) => {
@@ -1278,6 +1288,7 @@ function import_server (bus, options)
             }
             o = client.clone(o)
             delete o.children
+
             master.save(o)
             t.done()
         }
@@ -1296,8 +1307,8 @@ function import_server (bus, options)
 
             // Dirty everybody
             var dirtied = o._.to.concat(o._.cc).concat(o._.from)
-            dirtied.forEach(u => master.save.fire({key:'dirty_posts_for/' + u,
-                                                   n:Math.random()}))
+            dirtied.forEach(u => dirty('posts-for/' + u))
+            if (o._.parent) dirty(o._.parent)
 
             // To do: handle nested threads.  Either detach them, or insert a
             // 'deleted' stub, or splice together
