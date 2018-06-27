@@ -1227,6 +1227,11 @@ function import_server (bus, options)
             var c = client.fetch('current_user')
             return from.includes(current_addy())
         }
+        function can_see (post) {
+            var c = client.fetch('current_user')
+            var allowed = post._.to.concat(post._.cc).concat(post._.from)
+            return allowed.includes(current_addy()) || allowed.includes('public')
+        }
         var drtbus = master//require('./statebus')()
         function dirty (key) { drtbus.save({key: 'dirty-'+key, n: Math.random()}) }
         function watch_for_dirt (key) { drtbus.fetch('dirty-'+key) }
@@ -1247,9 +1252,7 @@ function import_server (bus, options)
         client('post/*').to_fetch = (k) => {
             var e = master.clone(master.fetch(k))
             if (!e._) return {}
-            var c = client.fetch('current_user')
-            var allowed = e._.to.concat(e._.cc).concat(e._.from)
-            if (!allowed.includes(current_addy()))
+            if (!can_see(e))
                 return {}
             
             e._.children = post_children(e).map(e=>e.key)
