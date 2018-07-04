@@ -7,6 +7,7 @@ function default_options (bus) { return {
     backdoor: null,
     client: (c) => {c.shadows(bus)},
     file_store: {save_delay: 250, filename: 'db', backup_dir: 'backups', prefix: '*'},
+    sync_files: [{state_path: 'files', fs_path: null}],
     serve: true,
     certs: {private_key: 'certs/private-key',
             certificate: 'certs/certificate',
@@ -68,6 +69,11 @@ function import_server (bus, options)
         bus.http = express.Router()
         bus.install_express(bus.express)
 
+        // use gzip compression if available
+        try { bus.http.use(require('compression')())
+              console.log('Enabled http compression!') } catch (e) {}
+
+
         // Initialize new clients with an id.  We put the client id on
         // req.client, and also in a cookie for the browser to see.
         if (bus.options.client)
@@ -84,14 +90,14 @@ function import_server (bus, options)
                 next()
             })
 
+        // Initialize file sync
+        ; (bus.options.sync_files || []).forEach( x => {
+            if (require('fs').existsSync(x.fs_path || x.state_path))
+                bus.sync_files(x.state_path, x.fs_path)
+        })
+
         // User will put their routes in here
         bus.express.use('/', bus.http)
-
-        // use gzip compression if available
-        try {
-            bus.http.use(require('compression')())
-            console.log('Enabled http compression!')
-        } catch (e) {}
 
         // Add a fallback that goes to state
         bus.express.get('*', function (req, res) {
@@ -138,8 +144,6 @@ function import_server (bus, options)
             })
             bus.sockjs_server(this.backdoor_http_server)
         }
-        
-        bus.universal_ws_client()
     },
 
     bus_for_http_client: function (req, res) {
@@ -460,33 +464,28 @@ function import_server (bus, options)
         s.installHandlers(httpserver, {prefix:'/' + unique_sockjs_string})
     },
 
+    make_websocket: function make_websocket (url) {
+        url = url.replace(/^state:\/\//, 'wss://')
+        url = url.replace(/^istate:\/\//, 'ws://')
+        url = url.replace(/^statei:\/\//, 'ws://')
+        WebSocket = require('websocket').w3cwebsocket
+        return new WebSocket(url+'/'+unique_sockjs_string+'/websocket')
+    },
+    client_creds: function client_creds (server_url) {
+        // Right now the server just creates a different random id each time
+        // it connects.
+        return {clientid: (Math.random().toString(36).substring(2)
+                           + Math.random().toString(36).substring(2)
+                           + Math.random().toString(36).substring(2))}
+    },
+
+    // Deprecated
     ws_client: function (prefix, url, account) {
-        function make_sock (url) {
-            url = url.replace(/^state:\/\//, 'wss://')
-            url = url.replace(/^istate:\/\//, 'ws://')
-            url = url.replace(/^statei:\/\//, 'ws://')
-            WebSocket = require('websocket').w3cwebsocket
-            return new WebSocket(url+'/'+unique_sockjs_string+'/websocket')
-        }
-        function login (send_login_info) {
-            account = account || bus.account || {}
-            account.clientid = (account.clientid
-                                || (Math.random().toString(36).substring(2)
-                                    + Math.random().toString(36).substring(2)
-                                    + Math.random().toString(36).substring(2)))
-
-            send_login_info(account.clientid, account.name, account.pass)
-        }
-        bus.net_client(prefix, url, make_sock, login)
-    },
-
+        console.error('ws_client() is deprecated; use net_mount() instead')
+        bus.net_mount(prefix, url, account) },
+    // Deprecated
     universal_ws_client: function () {
-        function make_sock (url) {
-            WebSocket = require('websocket').w3cwebsocket
-            return new WebSocket(url+'/'+unique_sockjs_string+'/websocket')
-        }
-        bus.go_net(make_sock)
-    },
+        console.error('calling universal_ws_client is deprecated and no longer necessary') },
 
     file_store: (function () {
         // Make a database
@@ -2013,6 +2012,94 @@ function import_server (bus, options)
         return bus.read_file(arguments[0])
     },
 
+    read_file_b64: function init () {
+        // The first time this is run, we initialize it by loading some
+        // libraries
+        var chokidar = require('chokidar')
+        var watchers = {}
+        var fs = require('fs')
+
+        console.log('initializing read_file_b64')
+
+        // Now we redefine the function
+        bus.read_file_b64 = bus.uncallback(
+            function (filename, cb) {
+                console.log('running read_file_b64', filename)
+                fs.readFile(filename, (err, result) => {
+                    if (err) console.error('Error from read_file_b64:', err)
+                    cb(null, ((result || '*error*').toString('base64')))
+                })
+            },
+            {
+                start_watching: (args, dirty) => {
+                    var filename = args[0]
+                    //console.log('## starting to watch', filename)
+                    watchers[filename] = chokidar.watch(filename, {atomic: true})
+                    watchers[filename].on('change', () => { dirty() })
+                },
+                stop_watching: (json) => {
+                    var filename = json[0]
+                    //console.log('## stopping to watch', filename)
+                    // log('unwatching', filename)
+                    watchers[filename].close()
+                    delete watchers[filename]
+                }
+            })
+        return bus.read_file_b64(arguments[0])
+    },
+
+    // Synchronizes the recursive path starting with <state_path> to the
+    // file or recursive directory structure at fs_path
+    sync_files: function sync_files (state_path, file_path) {
+        // To do:
+        //  - Hook up a to_delete handler
+        //    - recursively remove directories if all files gone
+
+        console.assert(state_path.substr(-1) !== '*'
+                       && (!file_path || file_path.substr(-1) !== '*'),
+                       'The sync_files paths should not end with *')
+
+        file_path = file_path || state_path
+        var buffer = {}
+        var full_file_path = require('path').join(__dirname, file_path)
+
+        bus(state_path + '*').to_fetch = (rest) => {
+            // We DO want to handle:
+            //   - "foo"
+            //   - "foo/*"
+            // But not:
+            //   - "foobar"
+            if (rest.length>0 && rest[0] !== '/') return  // Bail on e.g. "foobar"
+
+            var f = bus.read_file_b64(file_path + rest)
+
+            // Clear buffer of items after 1 second. If fs results are delayed
+            // longer, we'll just deal with those flashbacks.
+            for (k in buffer)
+                if (new Date().getTime() - buffer[k] > 1 * 1000)
+                    delete buffer[k]
+
+            // If we are expecting this, skip the read
+            console.log('read file', typeof f == 'string' ? f.substr(0,40) + '..': f)
+            if (buffer[f]) {
+                console.log('skipping cause its in buffer')
+                return
+            }
+
+            return {_:f}
+        }
+
+        bus(state_path + '/*').to_save = (o, rest, t) => {
+            if (rest.length>0 && rest[0] !== '/') return
+            var f = Buffer.from(o._, 'base64')
+            require('fs').writeFile(file_path + rest, f)
+            buffer[f] = new Date().getTime()
+            t.done()
+        }
+
+        bus.http.use('/'+state_path, require('express').static(full_file_path))
+    },
+
     // Installs a GET handler at route that gets state from a fetcher function
     // Note: Makes too many textbusses.  Should re-use one.
     http_serve: function http_serve (route, fetcher) {
@@ -2164,7 +2251,7 @@ function import_server (bus, options)
     set_options(bus, options)
 
     // Automatically make state:// fetch over a websocket
-    bus.handle_state_urls()
+    bus.net_automount()
     return bus
 }
 

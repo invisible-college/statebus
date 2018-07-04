@@ -517,7 +517,7 @@
                     var v = f.fetched_keys[JSON.stringify([this.id, keys[i]])]
                     //log('re-run:', keys[i], f.statebus_id, f.fetched_keys)
                     if (v && v.indexOf(versions[keys[i]]) !== -1) {
-                        log('skipping', funk_name(f), 'already at version', v)
+                        log('skipping', funk_name(f), 'already at version', versions[keys[i]], 'proof:', v)
                         continue
                     }
                 } else {
@@ -1488,13 +1488,19 @@
 
     // ******************
     // Network client
+    function get_domain (key) { // Returns e.g. "state://foo.com"
+        var m = key.match(/^i?statei?\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
+        return m && m[0]
+    }
     function message_method (m) {
         return (m.fetch && 'fetch')
             || (m.save && 'save')
             || (m['delete'] && 'delete')
             || (m.forget && 'forget')
     }
-    function net_client(prefix, url, socket_api, login) {
+
+    function net_mount (prefix, url, client_creds) {
+        // Local: state://foo.com/* or /*
         var preprefix = prefix.slice(0,-1)
         var is_absolute = /^i?statei?:\/\//
         var has_prefix = new RegExp('^' + preprefix)
@@ -1514,7 +1520,7 @@
             var m = message_method(o)
             if (m == 'fetch' || m == 'delete' || m == 'forget')
                 o[m] = rem_prefix(o[m])
-            bus.log('net_client.send:', JSON.stringify(o))
+            bus.log('net_mount.send:', JSON.stringify(o))
             outbox[pushpop](JSON.stringify(o))
             flush_outbox()
         }
@@ -1526,13 +1532,13 @@
                 setTimeout(flush_outbox, 400)
         }
         function add_prefix (key) {
-            return is_absolute.test(key) ? key : preprefix + key
-        }
+            return is_absolute.test(key) ? key : preprefix + key }
         function rem_prefix (key) {
-            return has_prefix.test(key) ? key.substr(preprefix.length) : key
-        }
-        function add_prefixes (obj) { return bus.translate_keys(bus.clone(obj), add_prefix) }
-        function rem_prefixes (obj) { return bus.translate_keys(bus.clone(obj), rem_prefix) }
+            return has_prefix.test(key) ? key.substr(preprefix.length) : key }
+        function add_prefixes (obj) {
+            return bus.translate_keys(bus.clone(obj), add_prefix) }
+        function rem_prefixes (obj) {
+            return bus.translate_keys(bus.clone(obj), rem_prefix) }
 
         bus(prefix).to_save   = function (obj, t) {
             bus.save.fire(obj)
@@ -1551,7 +1557,7 @@
 
         function connect () {
             nlog('[ ] trying to open ' + url)
-            sock = socket_api(url)
+            sock = bus.make_websocket(url)
             sock.onopen = function()  {
                 nlog('[*] opened ' + url)
 
@@ -1562,15 +1568,25 @@
                 save(peers)
 
                 // Login
-                login && login(function (clientid, name, pass) {
+                var creds = client_creds || (bus.client_creds && bus.client_creds(url))
+                if (creds) {
                     var i = []
                     function intro (o) {i.push(JSON.stringify({save: o}))}
-                    if (clientid)
-                        intro({key: 'current_user', client: clientid})
-                    if (name && pass)
-                        intro({key: 'current_user', login_as: {name: name, pass: pass}})
+                    if (creds.clientid)
+                        intro({key: 'current_user', client: creds.clientid})
+                    if (creds.name && creds.pass)
+                        intro({key: 'current_user', login_as: {name: creds.name, pass: creds.pass}})
+                    // Todo: make this kinda thing work:
+                    if (creds.private_key && creds.public_key) {
+                        // Send public_key... start waiting for a
+                        // challenge... look up server's public key, verify
+                        // signature from server's challenge, then respond to
+                        // challenge.
+
+                        // This will be used for mailbus
+                    }
                     outbox = i.concat(outbox); flush_outbox()
-                })
+                }
 
                 // Reconnect
                 if (attempts > 0) {
@@ -1625,7 +1641,7 @@
 
                     // We only take saves from the server for now
                     if (method !== 'save' && method !== 'pong') throw 'barf'
-                    bus.log('net_client received', message)
+                    bus.log('net client received', message)
                     var t = {version: message.version,
                              parents: message.parents,
                              patch: message.patch}
@@ -1646,89 +1662,26 @@
         connect()
 
         var done = false
+
+        // Note: this return value is probably not necessary anymore.
         return {send: send, sock: sock, close: function () {done = true; sock.close()}}
     }
 
-    // To do:
-    //  - make it recognize custom ports, but default to 3006
-    //  - merge the code in go_net and handle_state_urls and client.js
-    //  - pick better names here
-    function go_net (socket_api, login) {
-        var connections = {}
-        function get_domain(key) { // Returns e.g. "state://foo.com"
-            var m = key.match(/^i?statei?\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
-            // if (!m) throw Error('Bad url: ', key)
-            return m && m[0]
-        }
-
-        function make_connection (k) {
-            var d = get_domain(k)
-            if (d && !connections[d]) {
-                connections[d] = bus.net_client(d + '/*', d, socket_api, login)
-                connections[d].domain = d
-                connections[d].fetches_out = {}
-                connections[d].fetches_out_count = 0
-                return connections[d]
-            }
-        }
-
-        for (var prefix in {'state://*':0, 'istate://*':0, 'statei://*':0}) {
-            bus(prefix).to_fetch = function (k) {
-                var c = make_connection(k)
-                if (c) c.send({fetch: k})
-                else c = connections[get_domain(k)]
-                if (!c.fetches_out[k]) {
-                    c.fetches_out[k] = true
-                    c.fetches_out_count++
-                }
-            }
-            bus(prefix).to_save = function (o, t) {
-                var c = make_connection(o.key)
-                var msg = {save: o}
-                if (t && t.patch) msg.patch = t.patch
-                if (c) c.send(msg)
-            }
-            bus(prefix).to_delete = function (k) {
-                var c = make_connection(k)
-                if (c) c.send({'delete': k})
-            }
-            bus(prefix).to_forget = function (k) {
-                var d = get_domain(k)
-
-                // Make sure we've fetched on this domain
-                if (!connections.hasOwnProperty(d)
-                    || !connections[d].fetches_out.hasOwnProperty(k))
-                    console.error('Trying to forget', k, "that hasn't been fetched")
-
-                // Now clean up
-                delete connections[d].fetches_out[k]
-                connections[d].fetches_out_count--
-                if (connections[d].fetches_out_count == 0) {
-                    connections[d].close()
-                    delete connections[d]
-                }
-            }
-        }
-    }
-
-    function handle_state_urls () {
+    function net_automount () {
         var bus = this
         var old_route = bus.route
         var connections = {}
         bus.route = function (key, method, arg, opts) {
             var d = get_domain(key)
             if (d && !connections[d]) {
-                (bus.sockjs_client || bus.ws_client)(d + '/*', d)
+                bus.net_mount(d + '/*', d)
                 connections[d] = true
             }
 
             return old_route(key, method, arg, opts)
         }
-        function get_domain(key) {
-            var m = key.match(/^statei?\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
-            return m && m[0]
-        }
     }
+
 
     // ******************
     // Key translation
@@ -2208,7 +2161,7 @@
                'pending_fetches fetches_in loading_keys loading once',
                'global_funk busses rerunnable_funks',
                'encode_field decode_field translate_keys apply_patch',
-               'net_client go_net message_method handle_state_urls',
+               'net_mount net_automount message_method',
                'parse Set One_To_Many clone extend deep_map deep_equals prune validate sorta_diff log deps'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)

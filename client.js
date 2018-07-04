@@ -11,66 +11,46 @@
         return c ? c.pop() : '';
     }
     try { document.cookie } catch (e) {get_cookie = set_cookie = function (){}}
-    function sockjs_client (prefix, url) {
-	var bus = this;
+    function make_websocket (url) {
+        if (!url.match(/^\w{0,7}:\/\//))
+            url = location.protocol+'//'+location.hostname+(location.port ? ':'+location.port : '') + url
 
-        function socket_api (url) {
-            if (!url.match(/^\w{0,7}:\/\//))
-                url = location.protocol+'//'+location.hostname+(location.port ? ':'+location.port : '') + url
+        url = url.replace(/^state:\/\//, 'wss://')
+        url = url.replace(/^istate:\/\//, 'ws://')
+        url = url.replace(/^statei:\/\//, 'ws://')
 
-            url = url.replace(/^state:\/\//, 'wss://')
-            url = url.replace(/^istate:\/\//, 'http://')
-            url = url.replace(/^statei:\/\//, 'http://')
-            // {   // Convert to absolute
-            //     var link = document.createElement("a")
-            //     link.href = url
-            //     url = link.href
-            // }
-            url = url.replace(/^http:\/\//, 'ws://')
-            url = url.replace(/^https:\/\//, 'wss://')
-            console.log('opening websocket to', url)
-            return new WebSocket(url + '/' + unique_sockjs_string + '/websocket')
-        }
-        function socket_api_sjs (url) {
-            url = url.replace(/^state:\/\//, 'https://')
-            url = url.replace(/^istate:\/\//, 'http://')
-            url = url.replace(/^statei:\/\//, 'http://')
-            return new SockJS(url + '/' + unique_sockjs_string)
-        }
-        function login (send_login_info) {
-            // Warning:
-            //
-            //  - This is giving every domain we connect to the secret client
-            //    key from the site that *loaded this page*.  If you don't
-            //    trust a site you're connecting to, you're basically letting
-            //    them log in as you into the site you loaded this page from.
-            //
-            //  Let's implement a better distributed auth.  In fact, we'd
-            //  probably prefer to NOT send login info to these third-party
-            //  sites than sending them our secret client id for another site.
-            //  Perhaps our best interim solution is to hold different client
-            //  secrets for every domain we connect to, within each domain's
-            //  localStorage space.
-            
-            var me = bus.fetch('ls/me')
-            bus.log('connect: me is', me)
-            if (!me.client) {
-                // Create a client id if we have none yet.
-                // Either from a cookie set by server, or a new one from scratch.
-                var c = get_cookie('client')
-                me.client = c || (Math.random().toString(36).substring(2)
-                                  + Math.random().toString(36).substring(2)
-                                  + Math.random().toString(36).substring(2))
-                bus.save(me)
-            }
+        url = url.replace(/^https:\/\//, 'wss://')
+        url = url.replace(/^http:\/\//, 'ws://')
 
-            set_cookie('client', me.client)
-            send_login_info(me.client)
+        // {   // Convert to absolute
+        //     var link = document.createElement("a")
+        //     link.href = url
+        //     url = link.href
+        // }
+        console.log('opening websocket to', url)
+        return new WebSocket(url + '/' + unique_sockjs_string + '/websocket')
+        // return new SockJS(url + '/' + unique_sockjs_string)
+    }
+    function client_creds (server_url) {
+        var me = bus.fetch('ls/me')
+        bus.log('connect: me is', me)
+        if (!me.client) {
+            // Create a client id if we have none yet.
+            // Either from a cookie set by server, or a new one from scratch.
+            var c = get_cookie('client')
+            me.client = c || (Math.random().toString(36).substring(2)
+                              + Math.random().toString(36).substring(2)
+                              + Math.random().toString(36).substring(2))
+            bus.save(me)
         }
-        bus.net_client(prefix, url, socket_api, login)
-        bus.go_net(socket_api, login)
+
+        set_cookie('client', me.client)
+        return {clientid: me.client}
     }
 
+
+    // ****************
+    // Manipulate Localstorage
     function localstorage_client (prefix) {
         try { localStorage } catch (e) { return }
 
@@ -172,6 +152,7 @@
             window.live_reload_initialized = true
         }
     }
+
 
     // ****************
     // Wrapper for React Components
@@ -335,7 +316,7 @@
     // ###
 
     function make_client_statebus_maker () {
-        var extra_stuff = ['sockjs_client localstorage_client',
+        var extra_stuff = ['localstorage_client make_websocket client_creds',
                            'url_store components live_reload_from'].join(' ').split(' ')
         if (window.statebus) {
             var orig_statebus = statebus
@@ -394,12 +375,13 @@
         window.dom = window.ui = window.dom || window.ui || {}
         window.ignore_flashbacks = false
         if (statebus_server !== 'none')
-            bus.sockjs_client ('/*', statebus_server)
+            bus.net_mount ('/*', statebus_server)
 
         if (window.statebus_backdoor) {
             window.master = statebus()
-            master.sockjs_client('*', statebus_backdoor)
+            master.net_mount('*', statebus_backdoor)
         }
+        bus.net_automount()
 
         // bus('*').to_save = function (obj) { bus.save.fire(obj) }
         bus('/new/*').to_save = function (o) {
@@ -516,6 +498,19 @@
 
         make_better_input("INPUT", window.INPUT)
         make_better_input("TEXTAREA", window.TEXTAREA)
+
+        // Make IMG accept data from state:
+        var og_img = window.IMG
+        window.IMG = function () {
+            var args = []
+            for (var i=0; i<arguments.length; i++) {
+                args.push(arguments[i])
+                if (arguments[i].state)
+                    args[i].src = 'data:;base64,' + fetch(args[i].state)._
+            }
+            return og_img.apply(this, args)
+        }
+
 
         // Unfortunately, React's default STYLE and TITLE tags are useless
         // unless you "dangerously set inner html" because they wrap strings
@@ -640,9 +635,9 @@
         if (code) eval(code)
         else { dom = window.dom; ui = window.ui }
         for (var k in ui) dom[k] = dom[k] || ui[k]
-        for (var view in dom) {
-            window.dom[view] = dom[view]
-            make_component(view, safe)
+        for (var widget_name in dom) {
+            window.dom[widget_name] = dom[widget_name]
+            make_component(widget_name, safe)
         }
     }
     function load_coffee () {
