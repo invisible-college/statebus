@@ -1988,43 +1988,10 @@ function import_server (bus, options)
 
         // Now we redefine the function
         bus.read_file = bus.uncallback(
-            function readFile (filename, cb) {
+            function readFile (filename, encoding, cb) {
                 fs.readFile(filename, (err, result) => {
-                    if (err) console.error('Error in read_file:', err)
-                    cb(null, result.toString())
-                })
-            },
-            {
-                start_watching: (args, dirty) => {
-                    var filename = args[0]
-                    //console.log('## starting to watch', filename)
-                    watchers[filename] = chokidar.watch(filename)
-                    watchers[filename].on('change', () => { dirty() })
-                },
-                stop_watching: (json) => {
-                    var filename = json[0]
-                    //console.log('## stopping to watch', filename)
-                    // log('unwatching', filename)
-                    watchers[filename].close()
-                    delete watchers[filename]
-                }
-            })
-        return bus.read_file(arguments[0])
-    },
-
-    read_file_b64: function init () {
-        // The first time this is run, we initialize it by loading some
-        // libraries
-        var chokidar = require('chokidar')
-        var watchers = {}
-        var fs = require('fs')
-
-        // Now we redefine the function
-        bus.read_file_b64 = bus.uncallback(
-            function readFile64 (filename, cb) {
-                fs.readFile(filename, (err, result) => {
-                    if (err) console.error('Error from read_file_b64:', err)
-                    cb(null, ((result || '*error*').toString('base64')))
+                    if (err) console.error('Error from read_file:', err)
+                    cb(null, ((result || '*error*').toString(encoding || undefined)))
                 })
             },
             {
@@ -2048,7 +2015,7 @@ function import_server (bus, options)
                     delete watchers[filename]
                 }
             })
-        return bus.read_file_b64(arguments[0])
+        return bus.read_file(arguments[0], arguments[1])
     },
 
     // Synchronizes the recursive path starting with <state_path> to the
@@ -2074,7 +2041,7 @@ function import_server (bus, options)
             //   - "foobar"
             if (rest.length>0 && rest[0] !== '/') return  // Bail on e.g. "foobar"
 
-            var f = bus.read_file_b64(file_path + rest)
+            var f = bus.read_file(file_path + rest, 'base64')
 
             // Clear buffer of items after 1 second. If fs results are delayed
             // longer, we'll just deal with those flashbacks.
@@ -2138,7 +2105,7 @@ function import_server (bus, options)
         bus.http_serve('/client/:filename', (filename) => {
             filename = /\/client\/(.*)/.exec(filename)[0]
             var source_filename = filename.substr(1)
-            var source = bus.read_file(source_filename)
+            var source = bus.read_file(source_filename, undefined)
             if (filename.match(/\.coffee$/)) {
 
                 try {
