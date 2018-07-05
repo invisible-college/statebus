@@ -1988,7 +1988,7 @@ function import_server (bus, options)
 
         // Now we redefine the function
         bus.read_file = bus.uncallback(
-            function (filename, cb) {
+            function readFile (filename, cb) {
                 fs.readFile(filename, (err, result) => {
                     if (err) console.error('Error in read_file:', err)
                     cb(null, result.toString())
@@ -2019,28 +2019,31 @@ function import_server (bus, options)
         var watchers = {}
         var fs = require('fs')
 
-        console.log('initializing read_file_b64')
-
         // Now we redefine the function
         bus.read_file_b64 = bus.uncallback(
-            function (filename, cb) {
-                console.log('running read_file_b64', filename)
+            function readFile64 (filename, cb) {
                 fs.readFile(filename, (err, result) => {
                     if (err) console.error('Error from read_file_b64:', err)
                     cb(null, ((result || '*error*').toString('base64')))
                 })
             },
             {
-                start_watching: (args, dirty) => {
+                start_watching: (args, dirty, del) => {
                     var filename = args[0]
-                    //console.log('## starting to watch', filename)
-                    watchers[filename] = chokidar.watch(filename, {atomic: true})
+                    console.log('## starting to watch', filename)
+                    watchers[filename] = chokidar.watch(filename, {
+                        atomic: true,
+                        disableGlobbing: true
+                    })
                     watchers[filename].on('change', () => { dirty() })
+                    watchers[filename].on('add', () => { dirty() })
+                    watchers[filename].on('unlink', () => { del() })
                 },
                 stop_watching: (json) => {
                     var filename = json[0]
-                    //console.log('## stopping to watch', filename)
+                    console.log('## stopping to watch', filename)
                     // log('unwatching', filename)
+                    // To do: this should probably use.unwatch() instead.
                     watchers[filename].close()
                     delete watchers[filename]
                 }
@@ -2080,7 +2083,7 @@ function import_server (bus, options)
                     delete buffer[k]
 
             // If we are expecting this, skip the read
-            console.log('read file', typeof f == 'string' ? f.substr(0,40) + '..': f)
+            // console.log('read file', typeof f == 'string' ? f.substr(0,40) + '..': f)
             if (buffer[f]) {
                 console.log('skipping cause its in buffer')
                 return

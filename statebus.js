@@ -1100,8 +1100,8 @@
     function uncallback (f, options) {
         name = (options && options.name) || f.name || (uncallback_counter+'')
         if (!name) throw 'Uncallback function needs a name'
-        var prefix = 'uncallback/' + name
         var watching = {}
+        var prefix = 'uncallback/' + name
         bus(prefix + '/*').to_fetch = function (key, json) {
             var args = json
             function cb (err, result) {
@@ -1113,11 +1113,23 @@
             }
             args.push(cb)
             f.apply({key:key}, args)
-            if (options.start_watching && !(watching.hasOwnProperty(key)))
-                options.start_watching(args, function () {bus.dirty(key)})
+            if (options.start_watching && !watching[key]) {
+                watching[key] = true
+                options.start_watching(
+                    args,
+                    function () { bus.dirty(key) },
+                    function () { bus.del(key) }
+                )
+            }
         }
         if (options.stop_watching)
-            bus(prefix + '/*').to_forget = options.stop_watching
+            bus(prefix + '/*').to_forget = function (key, json) {
+                console.assert(watching[key],
+                               'Forgetting a watcher for ' + JSON.stringify(key)
+                               + ' that is not enabled')
+                delete watching[key]
+                options.stop_watching(json)
+            }
         return function () {
             var args = [].slice.call(arguments)
             return bus.fetch(prefix + '/' + JSON.stringify(args))._
