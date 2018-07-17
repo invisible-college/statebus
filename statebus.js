@@ -1111,7 +1111,11 @@
                 } else
                     bus.save.fire({key: key, _: result})
             }
-            args.push(cb)
+
+            // Inject the callback into the right place
+            args[options.callback_at || args.length] = cb
+
+            // And call the underlying function
             f.apply({key:key}, args)
             if (options.start_watching && !watching[key]) {
                 watching[key] = true

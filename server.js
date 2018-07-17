@@ -1995,6 +1995,7 @@ function import_server (bus, options)
                 })
             },
             {
+                callback_at: 2,
                 start_watching: (args, dirty, del) => {
                     var filename = args[0]
                     console.log('## starting to watch', filename)
@@ -2105,7 +2106,7 @@ function import_server (bus, options)
         bus.http_serve('/client/:filename', (filename) => {
             filename = /\/client\/(.*)/.exec(filename)[0]
             var source_filename = filename.substr(1)
-            var source = bus.read_file(source_filename, undefined)
+            var source = bus.read_file(source_filename)
             if (filename.match(/\.coffee$/)) {
 
                 try {
