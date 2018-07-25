@@ -720,7 +720,134 @@ function import_server (bus, options)
             1000 * 60 // Every minute
         )
     },
+    fast_load_sqlite_store: function sqlite_store (opts) { // just one line different from sqlite_store (bus.save.fire replaced)
+        var prefix = '*'
+        var open_transaction = null
 
+        if (!opts) opts = {}
+        if (!opts.filename) opts.filename = 'db.sqlite'
+
+        // Load the db on startup
+        try {
+            var db = bus.sqlite_store_db || new (require('better-sqlite3'))(opts.filename)
+            bus.sqlite_store_db = db
+            db.pragma('journal_mode = WAL')
+            db.prepare('create table if not exists cache (key text primary key, obj text)').run()
+            var temp_db = {}
+
+            for (var row of db.prepare('select * from cache').iterate()) {
+                var obj = JSON.parse(row.obj)
+                temp_db[obj.key] = obj
+            }
+						console.log("DONE LOADING", Object.keys(temp_db).length)
+            if (global.pointerify)
+                temp_db = inline_pointers(temp_db)
+
+            for (var key in temp_db)
+                if (temp_db.hasOwnProperty(key)){
+                    // bus.save.fire(temp_db[key])
+                    bus.cache[key] = temp_db[key]
+                    temp_db[key] = undefined
+                }
+            bus.log('Read ' + opts.filename)
+        } catch (e) {
+            console.error(e)
+            console.error('Bad sqlite db')
+        }
+
+        // Add save handlers
+        function on_save (obj) {
+            if (global.pointerify)
+                obj = abstract_pointers(obj)
+
+            if (opts.use_transactions && !open_transaction){
+                console.time('save db')
+                db.prepare('BEGIN TRANSACTION').run()
+            }
+
+            db.prepare('replace into cache (key, obj) values (?, ?)').run(
+                [obj.key, JSON.stringify(obj)])
+
+            if (opts.use_transactions && !open_transaction) {
+
+                open_transaction = setTimeout(function(){
+                    console.log('Committing transaction to database')
+                    db.prepare('COMMIT').run()
+                    open_transaction = false
+                    console.timeEnd('save db')
+                })
+            }
+
+        }
+        if (opts.save_sync) {
+            var old_route = bus.route
+            bus.route = function (key, method, arg, t) {
+                if (method === 'to_save') on_save(arg)
+                return old_route(key, method, arg, t)
+            }
+        } else {
+            on_save.priority = true
+            bus(prefix).on_save = on_save
+        }
+        bus(prefix).to_delete = function (key) {
+            if (opts.use_transactions && !open_transaction){
+                console.time('save db')
+                db.prepare('BEGIN TRANSACTION').run()
+            }
+            db.prepare('delete from cache where key = ?').run([key])
+            if (opts.use_transactions && !open_transaction)
+                open_transaction = setTimeout(function(){
+                    console.log('committing')
+                    db.prepare('COMMIT').run()
+                    open_transaction = false
+                    console.timeEnd('save db')
+                })
+        }
+
+        // Replaces every nested keyed object with {_key: <key>}
+        function abstract_pointers (o) {
+            o = bus.clone(o)
+            var result = {}
+            for (var k in o)
+                result[k] = bus.deep_map(o[k], (o) => {
+                    if (o && o.key) return {_key: o.key}
+                    else return o
+                })
+            return result
+        }
+        // ...and the inverse
+        function inline_pointers (db) {
+            return bus.deep_map(db, (o) => {
+                if (o && o._key)
+                    return db[o._key]
+                else return o
+            })
+        }
+
+        // Rotating backups
+        setInterval(
+            // Copy the current db over backups/db.<curr_date> every minute
+            function backup_db() {
+                if (opts.backups === false) return
+                var backup_dir = opts.backup_dir || 'backups'
+                if (fs.existsSync && !fs.existsSync(backup_dir))
+                    fs.mkdirSync(backup_dir)
+
+                var d = new Date()
+                var y = d.getYear() + 1900
+                var m = d.getMonth() + 1
+                if (m < 10) m = '0' + m
+                var day = d.getDate()
+                if (day < 10) day = '0' + day
+                var date = y + '-' + m + '-' + day
+
+                require('child_process').execFile(
+                    'sqlite3',
+                    [opts.filename, '.backup '+"'"+backup_dir+'/'+opts.filename+'.'+date+"'"])
+            },
+            1000 * 60 // Every minute
+        )
+    },
     sqlite_store: function sqlite_store (opts) {
         var prefix = '*'
         var open_transaction = null
