@@ -498,6 +498,7 @@
 
         make_better_input("INPUT", window.INPUT)
         make_better_input("TEXTAREA", window.TEXTAREA)
+        make_syncarea()
 
         // Make IMG accept data from state:
         var og_img = window.IMG
@@ -601,100 +602,102 @@
         })
     }
 
-    // a textarea that syncs with other textareas via diffsync
-    // options:
-    //     textarea_style : hashmap of styles to add to the textarea
-    //     cursor_style : hashmap of styles to add to each peer's cursor
-    //     autosize : true --> resizes the textarea vertically to fit the text inside it
-    //     ws_url : websocket url for the diffsync server,
-    //              e.g. 'wss://invisible.college:' + diffsync.port
-    //     channel : 'diffsync_channel' --> diffsync channel to connect to
-    window['SYNCAREA'] = users_widgets['SYNCAREA'] = React.createClass({
-        getInitialState : function () {
-            return { cursor_positions : {} }
-        },
-        on_text_changed : function () {
-            if (this.props.autosize) {
-                var t = this.textarea_ref
-                t.style.height = null
-                while (t.rows > 1 && t.scrollHeight < t.offsetHeight) t.rows--
-                while (t.scrollHeight > t.offsetHeight) t.rows++
-            }
-        },
-        componentDidMount : function () {
-            var self = this
-            self.on_ranges = function (ranges) {
-                self.ranges = ranges
-                var cursor_positions = {}
-                Object.keys(ranges).forEach(function (k) {
-                    var r = ranges[k]
-                    var xy = getCaretCoordinates(self.textarea_ref, r[0])
-                    var x = self.textarea_ref.offsetLeft - self.textarea_ref.scrollLeft + xy.left + 'px'
-                    var y = self.textarea_ref.offsetTop - self.textarea_ref.scrollTop + xy.top + 'px'
-                    cursor_positions[k] = [x, y]
-                })
-                self.setState({ cursor_positions : cursor_positions })
-            }
+    function make_syncarea () {
+        // a textarea that syncs with other textareas via diffsync
+        // options:
+        //     textarea_style : hashmap of styles to add to the textarea
+        //     cursor_style : hashmap of styles to add to each peer's cursor
+        //     autosize : true --> resizes the textarea vertically to fit the text inside it
+        //     ws_url : websocket url for the diffsync server,
+        //              e.g. 'wss://invisible.college:' + diffsync.port
+        //     channel : 'diffsync_channel' --> diffsync channel to connect to
+        window['SYNCAREA'] = users_widgets['SYNCAREA'] = React.createClass({
+            getInitialState : function () {
+                return { cursor_positions : {} }
+            },
+            on_text_changed : function () {
+                if (this.props.autosize) {
+                    var t = this.textarea_ref
+                    t.style.height = null
+                    while (t.rows > 1 && t.scrollHeight < t.offsetHeight) t.rows--
+                    while (t.scrollHeight > t.offsetHeight) t.rows++
+                }
+            },
+            componentDidMount : function () {
+                var self = this
+                self.on_ranges = function (ranges) {
+                    self.ranges = ranges
+                    var cursor_positions = {}
+                    Object.keys(ranges).forEach(function (k) {
+                        var r = ranges[k]
+                        var xy = getCaretCoordinates(self.textarea_ref, r[0])
+                        var x = self.textarea_ref.offsetLeft - self.textarea_ref.scrollLeft + xy.left + 'px'
+                        var y = self.textarea_ref.offsetTop - self.textarea_ref.scrollTop + xy.top + 'px'
+                        cursor_positions[k] = [x, y]
+                    })
+                    self.setState({ cursor_positions : cursor_positions })
+                }
 
-            this.ds = diffsync.create_client({
-                ws_url : this.props.ws_url,
-                channel : this.props.channel,
-                get_text : function () {
-                    return self.textarea_ref.value
-                },
-                get_range : function () {
-                    var t = self.textarea_ref
-                    return [t.selectionStart, t.selectionEnd]
-                },
-                on_text : function (s, range) {
-                    self.textarea_ref.value = s
-                    self.textarea_ref.setSelectionRange(range[0], range[1])
-                    self.on_text_changed()
-                },
-                on_ranges : this.on_ranges
-            })
-        },
-        render : function () {
-            var self = this
-            var cursors = []
-            Object.keys(this.state.cursor_positions).forEach(function (k) {
-                var p = self.state.cursor_positions[k]
-                var style = {
-                    position : 'absolute',
-                    left : p[0],
-                    top : p[1]
-                }
-                Object.keys(self.props.cursor_style).forEach(function (k) {
-                    style[k] = self.props.cursor_style[k]
+                this.ds = diffsync.create_client({
+                    ws_url : this.props.ws_url,
+                    channel : this.props.channel,
+                    get_text : function () {
+                        return self.textarea_ref.value
+                    },
+                    get_range : function () {
+                        var t = self.textarea_ref
+                        return [t.selectionStart, t.selectionEnd]
+                    },
+                    on_text : function (s, range) {
+                        self.textarea_ref.value = s
+                        self.textarea_ref.setSelectionRange(range[0], range[1])
+                        self.on_text_changed()
+                    },
+                    on_ranges : this.on_ranges
                 })
-                cursors.push(React.createElement('div', {
-                    key : k,
-                    style : style
-                }))
-            })
-            return React.createElement('div', {
-                style : {
-                    clipPath : 'inset(0px 0px 0px 0px)'
-                },
-            }, React.createElement('textarea', {
-                ref : function (t) { self.textarea_ref = t },
-                style : this.props.textarea_style,
-                onChange : function (e) {
-                    self.ds.on_change()
-                    self.on_text_changed()
-                },
-                onMouseDown : function () {
-                    setTimeout(function () { self.ds.on_change() }, 0)
-                },
-                onKeyDown : function () {
-                    setTimeout(function () { self.ds.on_change() }, 0)
-                },
-                onScroll : function () {
-                    self.on_ranges(self.ranges)
-                }
-            }), cursors)
-        }
-    })
+            },
+            render : function () {
+                var self = this
+                var cursors = []
+                Object.keys(this.state.cursor_positions).forEach(function (k) {
+                    var p = self.state.cursor_positions[k]
+                    var style = {
+                        position : 'absolute',
+                        left : p[0],
+                        top : p[1]
+                    }
+                    Object.keys(self.props.cursor_style).forEach(function (k) {
+                        style[k] = self.props.cursor_style[k]
+                    })
+                    cursors.push(React.createElement('div', {
+                        key : k,
+                        style : style
+                    }))
+                })
+                return React.createElement('div', {
+                    style : {
+                        clipPath : 'inset(0px 0px 0px 0px)'
+                    },
+                }, React.createElement('textarea', {
+                    ref : function (t) { self.textarea_ref = t },
+                    style : this.props.textarea_style,
+                    onChange : function (e) {
+                        self.ds.on_change()
+                        self.on_text_changed()
+                    },
+                    onMouseDown : function () {
+                        setTimeout(function () { self.ds.on_change() }, 0)
+                    },
+                    onKeyDown : function () {
+                        setTimeout(function () { self.ds.on_change() }, 0)
+                    },
+                    onScroll : function () {
+                        self.on_ranges(self.ranges)
+                    }
+                }), cursors)
+            }
+        })
+    }
 
     function compile_coffee (coffee, filename) {
         var compiled
