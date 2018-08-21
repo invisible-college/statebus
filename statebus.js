@@ -112,7 +112,8 @@
             return
         }
 
-        var message = save_msg(obj, t, 'save')
+        if (honking_at(obj.key))
+            var message = save_msg(obj, t, 'save')
 
         // Ignore if nothing happened
         if (obj.key && !changed(obj)) {
@@ -147,39 +148,43 @@
         // Make sure it has a version.
         t.version = t.version || new_version()
 
-        // First, let's print out the statelog entry.
-        // (And abort if there's no change.)
-        var message = save_msg(obj, t, 'save.fire')
-        var color, icon
-        if (currently_saving === obj.key &&
-            !(obj.key && !changed(obj))) {
-          statelog_indent--
-          statelog(obj.key, red, '•', '↵' + (t.version ? '\t\t\t[' + t.version + ']' : ''))
-          statelog_indent++
-        } else {
-            // Ignore if nothing happened
-            if (obj.key && !changed(obj)) {
-                color = grey
-                icon = 'x'
-                if (t.to_fetch)
-                    message = (t.m) || 'Fetched ' + bus + "('"+obj.key+"')"
-                if (t.version) message += ' [' + t.version + ']'
+        // Print a statelog entry
+        if (obj.key && honking_at(obj.key)) {
+            // Warning: Changes to *nested* objects will *not* be printed out!
+            // In the future, we'll remove the recursion from fire() so that
+            // nested objects aren't even changed.
+            var message = save_msg(obj, t, 'save.fire')
+            var color, icon
+            if (currently_saving === obj.key &&
+                !(obj.key && !changed(obj))) {
+                statelog_indent--
+                statelog(obj.key, red, '•', '↵' +
+                         (t.version ? '\t\t\t[' + t.version + ']' : ''))
+                statelog_indent++
+            } else {
+                // Ignore if nothing happened
+                if (obj.key && !changed(obj)) {
+                    color = grey
+                    icon = 'x'
+                    if (t.to_fetch)
+                        message = (t.m) || 'Fetched ' + bus + "('"+obj.key+"')"
+                    if (t.version) message += ' [' + t.version + ']'
+                    statelog(obj.key, color, icon, message)
+                    return
+                }
+
+                color = red, icon = '•'
+                if (t.to_fetch || pending_fetches[obj.key]) {
+                    color = green
+                    icon = '^'
+                    message = add_diff_msg((t.m)||'Fetched '+bus+"('"+obj.key+"')",
+                                           obj)
+                    if (t.version) message += ' [' + t.version + ']'
+                }
+
                 statelog(obj.key, color, icon, message)
-                return
             }
-
-            color = red, icon = '•'
-            if (t.to_fetch || pending_fetches[obj.key]) {
-                color = green
-                icon = '^'
-                message = add_diff_msg((t.m)||'Fetched '+bus+"('"+obj.key+"')",
-                                       obj)
-                if (t.version) message += ' [' + t.version + ']'
-            }
-
-            statelog(obj.key, color, icon, message)
         }
-
         // Then we're gonna fire!
 
         // Recursively add all of obj, and its sub-objects, into the cache
@@ -1086,6 +1091,7 @@
         return message
     }
     function save_msg (obj, t, meth) {
+        if (!honking_at(obj.key)) return
         var message = (t && t.m) || bus + "."+meth+"('"+obj.key+"')"
         message = add_diff_msg(message, obj)
         if (t.version) message += ' [' + t.version + ']'
@@ -2137,7 +2143,9 @@
     }
 
     function log () {
-        if (bus.honk !== true) return
+        if (bus.honk === true) indented_log.apply(null, arguments)
+    }
+    function indented_log () {
         if (nodejs) {
             var indent = ''
             for (var i=0; i<statelog_indent; i++) indent += '   '
@@ -2145,16 +2153,15 @@
         } else
             console.log.apply(console, arguments)
     }
-
     function statelog (key, color, icon, message) {
-        var old_honk = bus.honk
-        if (bus.honk) bus.honk = true
-        if (old_honk instanceof RegExp) bus.honk = old_honk.test(key)
-        log(color + icon + ' ' + message + normal)
-        //log.apply(null, arguments)
-        bus.honk = old_honk
+        if (honking_at(key))
+            indented_log(color + icon + ' ' + message + normal)
     }
-
+    function honking_at (key) {
+        return (bus.honk instanceof RegExp
+                ? bus.honk.test(key)
+                : bus.honk)
+    }
     var bogus_keys = {constructor:1, hasOwnProperty:1, isPrototypeOf:1,
                       propertyIsEnumerable:1, toLocaleString:1, toString:1, valueOf:1,
                       __defineGetter__:1, __defineSetter__:1,
