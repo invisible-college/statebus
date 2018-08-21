@@ -2143,7 +2143,7 @@ function import_server (bus, options)
                     delete watchers[filename]
                 }
             })
-        return bus.read_file(arguments[0], arguments[1])
+        return bus.read_file.apply(bus, [].slice.call(arguments))
     },
 
     // Synchronizes the recursive path starting with <state_path> to the

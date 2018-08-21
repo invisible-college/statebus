@@ -636,19 +636,22 @@ test(function uncallback (done) {
             if (err) throw err
             else cb(null, result + '')
         })
-        if (!(filename in watchers)) {
-            watchers[filename] = chokidar.watch(filename)
-            watchers[filename].on('change', () => { bus.dirty(this.key) })
-        }
     }
 
-    read_file = bus.uncallback(read_file, {stop_watching: (json) => {
-        filename = json[0]
-        log('unwatching', filename)
-        //watchers[filename].unwatch(filename)
-        watchers[filename].close()
-        delete watchers[filename]
-    }})
+    read_file = bus.uncallback(read_file, {
+        start_watching: (args, dirty, del) => {
+            var filename = args[0]
+            assert(!(filename in watchers), 'WTF... the file ' + filename + ' is already being watched?')
+            watchers[filename] = chokidar.watch(filename)
+            watchers[filename].on('change', () => { bus.dirty(this.key) })
+        },
+        stop_watching: (json) => {
+            filename = json[0]
+            log('unwatching', filename)
+            //watchers[filename].unwatch(filename)
+            watchers[filename].close()
+            delete watchers[filename]
+        }})
 
     fs.writeFileSync('/tmp/blah', 'foo')
 
@@ -688,17 +691,18 @@ test(function uncallback (done) {
 test(function readfile (done) {
     var b = require('../statebus')(),
         count = 0
+
     fs.writeFileSync('/tmp/blah', '1')
     b(() => {
         var r = b.read_file('/tmp/blah')
-        log('Got', r)
+        log('Got', r, 'at count', count)
         switch(count++) {
         case 0:
-            console.assert(r == undefined); break
+            console.assert(r === undefined); break
         case 1:
-            console.assert(r == '1'); break
+            console.assert(r === '1'); break
         case 2:
-            console.assert(r == '2'); b.forget(); break
+            console.assert(r === '2'); b.forget(); break
         case 3:
             console.assert(false); break
         }
