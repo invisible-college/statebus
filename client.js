@@ -370,7 +370,7 @@
         window.bus.label = 'bus'
         window.sb = bus.sb
         statebus.widget = React_View
-        statebus.react_component = React_View
+        statebus.create_react_class = React_View
 
         improve_react()
         window.dom = window.ui = window.dom || window.ui || {}
