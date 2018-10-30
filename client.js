@@ -282,7 +282,7 @@
         return result
     }
     window.React_View = React_View
-
+    if (window.statebus) window.statebus.create_react_class = React_View
 
     // *****************
     // Re-rendering react components
