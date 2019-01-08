@@ -1106,6 +1106,22 @@ function import_server (bus, options)
             return {_: days}
         }
 
+        bus('recent_hits/*').to_fetch = (rest) => {
+            bus.fetch('time/' + refresh_interval)
+            var result = []
+            for (var row of db.prepare('select * from usage where '
+                                       + nots + ' order by date desc limit ?').iterate(
+                                           [parseInt(rest)])) {
+
+                row.details = JSON.parse(row.details)
+                if (row.details.agent && row.details.agent.match(/bot/)) continue
+
+                result.push({url: row.details.url, ip: row.details.ip, date: row.date})
+            }
+
+            return {_: result}
+        }
+
         bus('recent_referers/*').to_fetch = (rest) => {
             bus.fetch('time/' + refresh_interval)
             var result = []
@@ -2237,9 +2253,9 @@ function import_server (bus, options)
             if (filename.match(/\.coffee$/)) {
 
                 try {
-                    var compiled = require('coffee-script').compile(source, {filename,
-                                                                             bare: true,
-                                                                             sourceMap: true})
+                    var compiled = require('coffeescript').compile(source, {filename,
+                                                                            bare: true,
+                                                                            sourceMap: true})
                 } catch (e) {
                     if (!bus.loading())
                         console.error('Could not compile ' + e.toString())
