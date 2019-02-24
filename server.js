@@ -724,7 +724,7 @@ function import_server (bus, options)
         if (opts.lazy)
             // Add fetch handler
             bus(prefix).to_fetch = function (key, t) {
-                var x = db.prepare('select * from cache where key = ?').fetch([key])
+                var x = db.prepare('select * from cache where key = ?').get([key])
                 t.done(x ? JSON.parse(x.obj) : {})
             }
             
