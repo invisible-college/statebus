@@ -676,6 +676,8 @@ function import_server (bus, options)
 
         if (!opts) opts = {}
         if (!opts.filename) opts.filename = 'db.sqlite'
+        if (!opts.hasOwnProperty('inline_pointers'))
+            opts.inline_pointers = global.pointerify
 
         // Load the db on startup
         try {
@@ -701,7 +703,7 @@ function import_server (bus, options)
                     temp_db[obj.key] = obj
                 }
 
-                if (global.pointerify)
+                if (opts.inline_pointers)
                     temp_db = inline_pointers(temp_db)
 
                 for (var key in temp_db)
@@ -725,13 +727,14 @@ function import_server (bus, options)
             // Add fetch handler
             bus(prefix).to_fetch = function (key, t) {
                 var x = db.prepare('select * from cache where key = ?').get([key])
-                t.done(x ? JSON.parse(x.obj) : {})
+                x = x ? inline_pointers_singleobj(JSON.parse(x.obj)) : {}
+                t.done(x)
             }
             
 
         // Add save handlers
         function on_save (obj) {
-            if (global.pointerify)
+            if (opts.inline_pointers)
                 obj = abstract_pointers(obj)
 
             if (opts.use_transactions && !open_transaction){
@@ -794,6 +797,10 @@ function import_server (bus, options)
                     return db[o._key]
                 else return o
             })
+        }
+        function inline_pointers_singleobj (obj) {
+            return bus.deep_map(obj, (o) => (o && o._key)
+                                ? bus.cache[o._key] : o)
         }
 
         // Rotating backups
