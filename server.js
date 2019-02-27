@@ -723,11 +723,17 @@ function import_server (bus, options)
             console.error('Bad sqlite db')
         }
 
+        function sqlite_get (key) {
+            var x = db.prepare('select * from cache where key = ?').get([key])
+            return x ? JSON.parse(x.obj) : {}
+        }
         if (opts.lazy)
             // Add fetch handler
             bus(prefix).to_fetch = function (key, t) {
-                var x = db.prepare('select * from cache where key = ?').get([key])
-                x = x ? inline_pointers_singleobj(JSON.parse(x.obj)) : {}
+                var x = (bus.cache[key] && !bus.pending_fetches[key])
+                    || sqlite_get(key)
+                if (opts.inline_pointers) x = inline_pointers_singleobj(x)
+                x = bus.deep_map(x, (o) => o && o.key ? sqlite_get(o.key) : o)
                 t.done(x)
             }
             
