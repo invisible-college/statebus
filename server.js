@@ -1870,47 +1870,72 @@ function import_server (bus, options)
 
     persist: function (prefix_to_sync, validate) {
         var client = this
-        var was_logged_in = false
+        var was_logged_in = undefined
 
         function client_prefix (current_user) {
             return 'client/' + (current_user.logged_in
                                  ? current_user.user.key.substr('user/'.length)
-                                 : client.client_id)
+                                 : client.client_id) + '/'
         }
 
         function copy_client_to_user(client, user) {
             var old_prefix = 'client/' + client.client_id
             var new_prefix = 'client/' + user.key.substr('user/'.length)
-            var cache = client.master.cache
 
-            var keys = Object.keys(cache)         // Make a copy
-            for (var i=0; i<keys.length; i++) {   // Because we'll mutate
-                var old_key = keys[i]             // As we iterate
+            var keys = client.master.fetch('persisted_keys/' + client.client_id)
+            if (!keys.val) return
+            for (var old_key in keys.val) {
+                var new_key = new_prefix + old_key.substr(old_prefix.length)
+                var o = client.clone(client.master.fetch(old_key))
+                // Delete the old
+                client.master.del(old_key)
 
-                if (old_key.startsWith(old_prefix)) {
-                    var new_key = new_prefix + old_key.substr(old_prefix.length)
-                    var o = client.clone(cache[old_key])
-                    // Delete the old
-                    client.master.del(old_key)
-
-                    if (!(cache.hasOwnProperty(new_key))) {
-                        // Save the new
-                        o.key = new_key
-                        client.master.save(o)
-                    }
+                var new_o = client.master.fetch(new_key)
+                // If the new key doesn't clobber any existing data on the user...
+                if (Object.keys(new_o).length === 1) {
+                    // Save the new
+                    o.key = new_key
+                    client.master.save(o)
                 }
             }
+            keys.val = {}
+            client.master.save(keys)
+
+            // var cache = client.master.cache
+
+            // var keys = Object.keys(cache)         // Make a copy
+            // for (var i=0; i<keys.length; i++) {   // Because we'll mutate
+            //     var old_key = keys[i]             // As we iterate
+
+            //     if (old_key.startsWith(old_prefix)) {
+            //         var new_key = new_prefix + old_key.substr(old_prefix.length)
+            //         var o = client.clone(cache[old_key])
+            //         // Delete the old
+            //         client.master.del(old_key)
+
+            //         if (!(cache.hasOwnProperty(new_key))) {
+            //             // Save the new
+            //             o.key = new_key
+            //             client.master.save(o)
+            //         }
+            //     }
+            // }
         }
+
+        // Copy client to user if we log in
+        client(_=>{
+            var c = client.fetch('current_user')
+            if (client.loading()) return
+            if (was_logged_in == false && c.logged_in)
+                // User just logged in!  Let's copy his stuff over
+                copy_client_to_user(client, c.user)
+            was_logged_in = c.logged_in
+        })
 
         client(prefix_to_sync).to_fetch = function (key) {
             var c = client.fetch('current_user')
             if (client.loading()) return
             var prefix = client_prefix(c)
-
-            if (!was_logged_in && c.logged_in)
-                // User just logged in!  Let's copy his stuff over
-                copy_client_to_user(client, c.user)
-            was_logged_in = c.logged_in
 
             // Get the state from master
             var obj = client.clone(client.master.fetch(prefix + key))
@@ -1936,19 +1961,36 @@ function import_server (bus, options)
             var prefix = client_prefix(c)
 
             // Make it safe
+            var p_keys = client_persisted_keys()
             obj = client.clone(obj)
             obj = client.deep_map(obj, function (o) {
-                if (typeof o === 'object' && 'key' in o && typeof o.key === 'string')
+                if (typeof o === 'object' && 'key' in o && typeof o.key === 'string') {
                     o.key = prefix + o.key
+                    if (p_keys)
+                        p_keys.val[o.key] = true
+                }
                 return o
             })
 
             // Save to master
             client.master.save(obj)
+            p_keys && client.master.save(p_keys)
         }
 
         client(prefix_to_sync).to_delete = function (k) {
-            client.master.delete(client_prefix(client.fetch('current_user')) + k)
+            k = client_prefix(client.fetch('current_user')) + k
+            client.master.delete(k)
+
+            var p_keys = client_persisted_keys()
+            delete p_keys.val[k]
+            client.master.save(p_keys)
+        }
+
+        function client_persisted_keys () {
+            if (client.fetch('current_user').logged_in) return
+            var result = client.master.fetch('persisted_keys/' + client.client_id)
+            if (result && !result.val) result.val = {}
+            return result
         }
     },
 
