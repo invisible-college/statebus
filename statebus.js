@@ -2181,7 +2181,7 @@
                'versions new_version',
                'make_proxy state sb',
                'funk_key funk_name funks key_id key_name id',
-               'pending_fetches fetches_in loading_keys loading once',
+               'pending_fetches fetches_in fetches_out loading_keys loading once',
                'global_funk busses rerunnable_funks',
                'encode_field decode_field translate_keys apply_patch',
                'net_mount net_automount message_method',
