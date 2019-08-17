@@ -764,7 +764,7 @@
 
             // Initialize transaction
             t = clone(t || {})
-            if (!(method in {to_fetch:1, to_forget:1}))
+            if (method in {to_save:1, to_delete:1})
                 t.abort = function () {
                     var key = method === 'to_save' ? arg.key : arg
                     if (f.loading()) return
@@ -777,12 +777,12 @@
                     var key = method === 'to_save' ? arg.key : arg
                     bus.log('We are DONE()ing', method, key, o||arg)
 
-                    // We use a simple (and crappy?) heuristic to know if to
+                    // We use a simple (and crappy?) heuristic to know if the
                     // to_save handler has changed the state: whether the
                     // programmer passed (o) to the t.done(o) handler.  If
                     // not, we assume it hasn't changed.  If so, we assume it
                     // *has* changed, and thus we change the version of the
-                    // state.  I imagine it would be more accurate to diff o
+                    // state.  I imagine it would be more accurate to diff
                     // from before the to_save handler began with when
                     // t.done(o) ran.
                     if (o) t.version = new_version()
@@ -2016,11 +2016,11 @@
 
             // Recurse through each property on objects
             else if (typeof(o) === 'object')
-                if (o.key)
+                if (o !== null && o.key)
                     return bus.fetch(o.key)
-            else
-                for (var k in o)
-                    o[k] = recurse(o[k])
+                else
+                    for (var k in o)
+                        o[k] = recurse(o[k])
 
             return o
         }
