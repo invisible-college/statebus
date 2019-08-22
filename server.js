@@ -129,6 +129,7 @@ function import_server (bus, options)
             // reflecting it to all clients!
             if (count === 0 && method === 'to_save') {
                 bus.save.fire(arg, opts)
+                bus.route(arg.key, 'on_set_sync', arg, opts)
                 count++
             }
 
@@ -764,10 +765,9 @@ function import_server (bus, options)
                 if (method === 'to_save') on_save(arg)
                 return old_route(key, method, arg, t)
             }
-        } else {
-            on_save.priority = true
-            bus(prefix).on_save = on_save
-        }
+        } else
+            bus(prefix).on_set_sync = on_save
+
         bus(prefix).to_delete = function (key) {
             if (opts.use_transactions && !open_transaction){
                 console.time('save db')
@@ -1551,6 +1551,21 @@ function import_server (bus, options)
     serves_auth: function serves_auth (conn, master) {
         var client = this // to keep me straight while programming
 
+        function logout (key) {
+            var clients = master.fetch('logged_in_clients')
+            for (var k in clients)
+                if (k !== 'key')
+                    if (Object.keys(clients[k]).length === 0) {
+                        client.log('Found a deleted user. Removing.', k, clients[k])
+                        delete clients[k]
+                        master.save(clients)
+                    } else if (clients[k].key === key) {
+                        client.log('Logging out!', k, clients[k])
+                        delete clients[k]
+                        master.save(clients)
+                    }
+        }
+
         // Initialize master
         if (!master.auth_initialized) {
             master('users/passwords').to_fetch = function (k) {
@@ -1559,6 +1574,10 @@ function import_server (bus, options)
                 users.all = users.all || []
                 for (var i=0; i<users.all.length; i++) {
                     var u = master.fetch(users.all[i])
+                    if (!(u.login || u.name)) {
+                        console.error('upass: this user has bogus name/login', u.key, u.name, u.login)
+                        continue
+                    }
                     var login = (u.login || u.name).toLowerCase()
                     console.assert(login, 'Missing login for user', u)
                     if (result.hasOwnProperty(login)) {
@@ -1571,6 +1590,38 @@ function import_server (bus, options)
             }
             master.auth_initialized = true
             master.fetch('users/passwords')
+
+            master('user/*').to_delete = (key, t) => {
+                master.log('Deleteinggg!!!', key)
+                // Remove from users.all
+                var users = master.fetch('users')
+                users.all = users.all.filter(u => u.key && u.key !== key)
+                master.save(users)
+
+                // Log out
+                master.log('Logging out', key)
+                logout(key)
+
+                // Remove connection
+                master.log('Removing connections for', key)
+                var conns = master.fetch('connections')
+                for (var k in conns) {
+                    console.log('Trying key', k)
+                    if (k !== 'key')
+                        if (conns[k].user && !conns[k].user.key) {
+                            console.log('Cleaning keyless user', conss[k].user)
+                            delete conns[k].user
+                            master.save(conns)
+                            continue
+                        }
+                }
+
+                master.log('Dirtying users/passwords for', key)
+                master.dirty('users/passwords')
+
+                // Done.
+                t.done()
+            }
         }
 
         // Authentication functions
@@ -1620,6 +1671,7 @@ function import_server (bus, options)
                                pass: params.pass,
                                email: params.email }
             for (var k in new_account) if (!new_account[k]) delete new_account[k]
+            master.save(new_account)
 
             var users = master.fetch('users')
             users.all = users.all || []
