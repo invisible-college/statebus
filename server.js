@@ -2194,6 +2194,7 @@ function import_server (bus, options)
                 // res.setHeader('Cache-Control', 'public, max-age='
                 //               + (60 * 60 * 24 * 30))  // 1 month
                 res.setHeader('ETag', o.etag)
+                res.setHeader('Access-Control-Allow-Origin', '*')
                 res.setHeader('content-type', 'application/javascript')
                 res.send(o._)
                 textbus.forget(o.key, cb)  // But we do want to forget the cb
