@@ -334,8 +334,10 @@
     function load_scripts() {
         // console.info('Loading scripts!', window.statebus)
         if (!window.statebus) {
-            var statebus_dir = script_elem().getAttribute('src').match(/(.*)[\/\\]/)
-            statebus_dir = (statebus_dir && statebus_dir[1] + '/')||''
+            var statebus_dir = script_option('src')
+            if (statebus_dir) statebus_dir = statebus_dir.match(/(.*)[\/\\]/)
+            if (statebus_dir) statebus_dir = statebus_dir[1] + '/'
+            else statebus_dir = ''
 
             var js_urls = {
                 react: statebus_dir + 'extras/react.js',
@@ -353,15 +355,14 @@
         document.addEventListener('DOMContentLoaded', scripts_ready, false)
     }
 
-    function script_elem () {
-        return document.querySelector('script[src*="client"][src$=".js"]')
+    function script_option (option_name) {
+        var script_elem = document.querySelector('script[src*="client"][src$=".js"]')
+        return script_elem && script_elem.getAttribute(option_name)
     }
     var loaded_from_file_url = window.location.href.match(/^file:\/\//)
-    window.statebus_server = window.statebus_server ||
-        script_elem().getAttribute('server') ||
+    window.statebus_server = window.statebus_server || script_option('server') ||
         (loaded_from_file_url ? 'https://stateb.us:3006' : '/')
-    window.statebus_backdoor = window.statebus_backdoor ||
-        script_elem().getAttribute('backdoor')
+    window.statebus_backdoor = window.statebus_backdoor || script_option('backdoor')
     var react_render
     function scripts_ready () {
         react_render = React.version >= '0.14.' ? ReactDOM.render : React.render
