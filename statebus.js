@@ -2198,6 +2198,7 @@
 
     // Export globals
     if (nodejs || !(document.querySelector('script[src*="client"][src$=".js"]')
+                    && document.querySelector('script[src*="client"][src$=".js"]')
                     .getAttribute('globals') == 'false')) {
         var globals = ['loading', 'clone', 'forget']
         var client_globals = ['fetch', 'save', 'del', 'state']
