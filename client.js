@@ -330,9 +330,8 @@
         }
     }
 
-    load_scripts() // This function could actually be inlined
     function load_scripts() {
-        // console.info('Loading scripts!', window.statebus)
+        // console.info('Loading scripts! if', !!!window.statebus)
         if (!window.statebus) {
             var statebus_dir = script_option('src')
             if (statebus_dir) statebus_dir = statebus_dir.match(/(.*)[\/\\]/)
@@ -350,9 +349,11 @@
 
             for (var name in js_urls)
                 document.write('<script src="' + js_urls[name] + '" charset="utf-8"></script>')
-        }
 
-        document.addEventListener('DOMContentLoaded', scripts_ready, false)
+            document.addEventListener('DOMContentLoaded', scripts_ready, false)
+        }
+        else
+            scripts_ready()
     }
 
     function script_option (option_name) {
@@ -767,6 +768,7 @@
 
     function dom_to_widget (node) {
         if (node.nodeName === '#text') return node.textContent
+        if (!(node.nodeName in users_widgets)) return node
 
         node.seen = true
         var children = [], props = {}
@@ -795,4 +797,6 @@
                     react_render(dom_to_widget(nodes[i]), nodes[i])
         }
     }
+
+    load_scripts()
 })()
