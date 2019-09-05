@@ -282,7 +282,7 @@
         return result
     }
     window.React_View = React_View
-    if (window.statebus) window.statebus.create_react_class = React_View
+    if (window.statebus) window.statebus.create_react_class = window.statebus.createReactClass = React_View
 
     // *****************
     // Re-rendering react components
@@ -373,6 +373,7 @@
         window.sb = bus.sb
         statebus.widget = React_View
         statebus.create_react_class = React_View
+        statebus.createReactClass = React_View
 
         improve_react()
         window.dom = window.ui = window.dom || window.ui || {}
