@@ -410,7 +410,7 @@
         statebus.load_client_code = load_client_code
         statebus.load_widgets = load_widgets
 
-        document.addEventListener('DOMContentLoaded', _=> {
+        document.addEventListener('DOMContentLoaded', function () {
             if (window.statebus_ready)
                 for (var i=0; i<statebus_ready.length; i++)
                     statebus_ready[i]()
