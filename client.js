@@ -2,8 +2,8 @@
     var unique_sockjs_string = '_connect_to_statebus_'
 
     window.dom = window.dom || new Proxy({}, {
-        get: (o, k) => o[k],
-        set: (o, k, v) => {
+        get: function (o, k) { return o[k] },
+        set: function (o, k, v) {
             o[k] = v
             make_component(k, v)
         }
