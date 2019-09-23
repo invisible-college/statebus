@@ -6,6 +6,7 @@
         set: function (o, k, v) {
             o[k] = v
             make_component(k, v)
+            return true
         }
     })
 
