@@ -2207,6 +2207,7 @@ function import_server (bus, options)
             filename = /\/client\/(.*)/.exec(filename)[0]
             var source_filename = filename.substr(1)
             var source = bus.read_file(source_filename)
+            if (bus.loading()) throw 'loading'
             if (filename.match(/\.coffee$/)) {
 
                 try {
@@ -2214,8 +2215,7 @@ function import_server (bus, options)
                                                                             bare: true,
                                                                             sourceMap: true})
                 } catch (e) {
-                    if (!bus.loading())
-                        console.error('Could not compile ' + e.toString())
+                    console.error('Could not compile ' + e.toString())
                     return 'console.error(' + JSON.stringify(e.toString()) + ')'
                 }
 
@@ -2239,12 +2239,13 @@ function import_server (bus, options)
 
     serve_clientjs: function serve_clientjs (path) {
         path = path || 'client.js'
-        bus(path).to_fetch = () =>
-            ({_:
-              ['extras/coffee.js', 'extras/sockjs.js', 'extras/react.js',
-               'statebus.js', 'client.js']
-              .map((f) => bus.read_file('node_modules/statebus/' + f))
-              .join(';\n')})
+        bus.http.get('/' + path, (req, res) => {
+            res.send(
+                ['extras/coffee.js', 'extras/sockjs.js', 'extras/react.js',
+                 'statebus.js', 'client.js']
+                    .map((f) => fs.readFileSync('node_modules/statebus/' + f))
+                    .join(';\n'))
+        })
     },
 
     serve_wiki: () => {
