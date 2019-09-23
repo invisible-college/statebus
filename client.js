@@ -1,6 +1,14 @@
 (function () {
     var unique_sockjs_string = '_connect_to_statebus_'
 
+    window.dom = window.dom || new Proxy({}, {
+        get: (o, k) => o[k],
+        set: (o, k, v) => {
+            o[k] = v
+            make_component(k, v)
+        }
+    })
+
     // ****************
     // Connecting over the Network
     function set_cookie (key, val) {
@@ -376,7 +384,6 @@
         statebus.createReactClass = React_View
 
         improve_react()
-        window.dom = window.ui = window.dom || window.ui || {}
         window.ignore_flashbacks = false
         if (statebus_server !== 'none')
             bus.net_mount ('/*', statebus_server)
@@ -403,11 +410,14 @@
         statebus.load_client_code = load_client_code
         statebus.load_widgets = load_widgets
 
-        if (window.statebus_ready)
-            for (var i=0; i<statebus_ready.length; i++)
-                statebus_ready[i]()
+        document.addEventListener('DOMContentLoaded', _=> {
+            if (window.statebus_ready)
+                for (var i=0; i<statebus_ready.length; i++)
+                    statebus_ready[i]()
+        }, false)
 
-        load_widgets()
+        document.addEventListener('DOMContentLoaded', load_widgets, false)
+        
         // if (dom.Body || dom.body || dom.BODY)
         //     react_render((window.Body || window.body || window.BODY)(), document.body)
     }
@@ -553,13 +563,13 @@
 
     // Load the components
     var users_widgets = {}
-    function make_component(name, safe_renders) {
+    function make_component(name, func) {
         // Define the component
 
         window[name] = users_widgets[name] = window.React_View({
             displayName: name,
             render: function () {
-                var args = [], func = window.dom[name]
+                var args = []
 
                 // Parse the function's args, and pass props into them directly
                 autodetect_args(func)
@@ -569,14 +579,11 @@
 
                 // Now run the function.
                 var vdom
-                if (safe_renders)
-                    try {
-                        vdom = func.apply(this, args)
-                    } catch (error) {
-                        console.error(error)
-                    }
-                else  // TODO: kill support for this safe_renders = false branch?
+                try {
                     vdom = func.apply(this, args)
+                } catch (error) {
+                    console.error(error)
+                }
 
                 // This automatically adds two attributes "data-key" and
                 // "data-widget" to the root node of every react component.
@@ -594,20 +601,20 @@
                 return vdom
             },
             componentDidMount: function () {
-                var refresh = window.dom[name].refresh
+                var refresh = func.refresh
                 refresh && refresh.bind(this)()
             },
             componentWillUnmount: function () {
-                var down = window.dom[name].down
+                var down = func.down
                 return down && down.bind(this)()
             },
             componentDidUpdate: function () {
                 if (!this.initial_render_complete && !this.loading()) {
                     this.initial_render_complete = true
-                    var up = window.dom[name].up
+                    var up = func.up
                     up && up.bind(this)()
                 }
-                var refresh = window.dom[name].refresh
+                var refresh = func.refresh
                 return refresh && refresh.bind(this)()
             },
             getInitialState: function () { return {} }
@@ -745,10 +752,8 @@
         if (code) eval(code)
         else { dom = window.dom; ui = window.ui }
         for (var k in ui) dom[k] = dom[k] || ui[k]
-        for (var widget_name in dom) {
+        for (var widget_name in dom)
             window.dom[widget_name] = dom[widget_name]
-            make_component(widget_name, safe)
-        }
     }
     function load_coffee () {
         load_client_code()
