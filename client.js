@@ -579,17 +579,12 @@
                     args.push(this.props[func.args[i]])
 
                 // Now run the function.
-                var vdom
-                try {
-                    vdom = func.apply(this, args)
-                } catch (error) {
-                    console.error(error)
-                }
+                var vdom = func.apply(this, args)
 
                 // This automatically adds two attributes "data-key" and
                 // "data-widget" to the root node of every react component.
                 // I think we might wanna find a better solution.
-                if (vdom && vdom.props) {
+                if (vdom.props) {
                     vdom.props['data-widget'] = name
                     vdom.props['data-key'] = this.props['data-key']
                 }
@@ -748,7 +743,7 @@
         }
         return compiled
     }
-    function load_client_code (code, safe) {
+    function load_client_code (code) {
         var dom = {}, ui = {}
         if (code) eval(code)
         else { dom = window.dom; ui = window.ui }

@@ -395,17 +395,7 @@
                 // delete cache[key]
                 delete fetches_out[key]
                 delete to_be_forgotten[key]
-
-                // Todo: deactivate any reactive .on_fetch handler, or
-                // .on_save handler.
             }, 200)
-
-            // BUG: The delay on forgetting means that reactive functions that
-            // call forget() will still get re-run for a while.  For now, they
-            // cannot depend on forget() making them not re-run
-            // immediately... we could fix this by adding a check when
-            // re-running for a key to see if the key is in to_be_forgotten,
-            // and not run anything that is supposed to be forgotten.
         }
     }
     function del (key) {
