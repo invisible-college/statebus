@@ -584,7 +584,7 @@
                 // This automatically adds two attributes "data-key" and
                 // "data-widget" to the root node of every react component.
                 // I think we might wanna find a better solution.
-                if (vdom.props) {
+                if (vdom && vdom.props) {
                     vdom.props['data-widget'] = name
                     vdom.props['data-key'] = this.props['data-key']
                 }
