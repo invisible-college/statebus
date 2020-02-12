@@ -400,16 +400,8 @@ function import_server (bus, options)
             if (client_bus_func && !master.options.__secure) {
 
                 // A connection
-                client('connection/*').to_fetch = function (key, star) {
-                    var id = star
-                    var conn = master.fetch('connections')[id]
-                    if (!conn) return {error: 'connection ' + id + ' does not exist'}
-
-                    var result = master.clone(conn)
-                    result.key = key
-                    result.id = id
-                    result.client = id   // Deprecated
-
+                client('connection/*').to_fetch = function (key) {
+                    var result = bus.clone(master.fetch(key))
                     if (master.options.connections.include_users && result.user)
                         result.user = client.fetch(result.user.key)
                     return result
@@ -420,15 +412,9 @@ function import_server (bus, options)
                         t.abort()
                         return
                     }
-                    var connections = master.fetch('connections')
-                    var result = client.clone(o)
-                    var old = connections[star]
-                    delete result.key
-                    result.id = star
-                    result.client = star   // Deprecated
-                    result.user = old.user
-                    connections[star] = result
-                    master.save(connections)
+                    o.id     = star
+                    o.client = star      // Deprecated.  Delete this line in v7.
+                    master.save(client.clone(o))
                 }
 
                 // Your connection
