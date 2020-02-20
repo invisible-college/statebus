@@ -366,7 +366,7 @@
     }
 
     function script_option (option_name) {
-        var script_elem = document.querySelector('script[src*="client"][src$=".js"]')
+        var script_elem = document.querySelector('script[src*="/client"][src$=".js"]')
         return script_elem && script_elem.getAttribute(option_name)
     }
     var loaded_from_file_url = window.location.href.match(/^file:\/\//)
