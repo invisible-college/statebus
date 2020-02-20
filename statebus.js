@@ -2187,8 +2187,8 @@
     bus.executing_funk = function () {return executing_funk}
 
     // Export globals
-    if (nodejs || !(document.querySelector('script[src*="client"][src$=".js"]')
-                    && document.querySelector('script[src*="client"][src$=".js"]')
+    if (nodejs || !(document.querySelector('script[src*="/client"][src$=".js"]')
+                    && document.querySelector('script[src*="/client"][src$=".js"]')
                     .getAttribute('globals') == 'false')) {
         var globals = ['loading', 'clone', 'forget']
         var client_globals = ['fetch', 'save', 'del', 'state']
