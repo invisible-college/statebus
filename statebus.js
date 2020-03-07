@@ -2187,9 +2187,15 @@
     bus.executing_funk = function () {return executing_funk}
 
     // Export globals
-    if (nodejs || !(document.querySelector('script[src*="/client"][src$=".js"]')
-                    && document.querySelector('script[src*="/client"][src$=".js"]')
-                    .getAttribute('globals') == 'false')) {
+    function clientjs_option (option_name) {
+        // This function is duplicated in client.js.  Be sure to clone all
+        // edits there.
+        var script_elem = (
+            document.querySelector('script[src*="/client"][src$=".js"]') ||
+            document.querySelector('script[src^="client"][src$=".js"]'))
+        return script_elem && script_elem.getAttribute(option_name)
+    }
+    if (nodejs || clientjs_option('globals') !== 'false') {
         var globals = ['loading', 'clone', 'forget']
         var client_globals = ['fetch', 'save', 'del', 'state']
         if (!nodejs && Object.keys(busses).length == 0)
