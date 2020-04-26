@@ -1374,7 +1374,7 @@ function import_server (bus, options)
 
         bus('sql/*').to_fetch =
             function sql (key, rest) {
-                fetch('timer/60000')
+                fetch('time/60000')
                 var query = rest
                 try { query = JSON.parse(query) }
                 catch (e) { query = {stmt: query, args: []} }
