@@ -342,7 +342,7 @@
     function load_scripts() {
         // console.info('Loading scripts! if', !!!window.statebus)
         if (!window.statebus) {
-            var statebus_dir = script_option('src')
+            var statebus_dir = clientjs_option('src')
             if (statebus_dir) statebus_dir = statebus_dir.match(/(.*)[\/\\]/)
             if (statebus_dir) statebus_dir = statebus_dir[1] + '/'
             else statebus_dir = ''
@@ -365,14 +365,18 @@
             scripts_ready()
     }
 
-    function script_option (option_name) {
-        var script_elem = document.querySelector('script[src*="/client"][src$=".js"]')
+    function clientjs_option (option_name) {
+        // This function must be copy/paste synchronized with statebus.js.  Be
+        // sure to clone all edits there.
+        var script_elem = (
+            document.querySelector('script[src*="/client"][src$=".js"]') ||
+            document.querySelector('script[src^="client"][src$=".js"]'))
         return script_elem && script_elem.getAttribute(option_name)
     }
     var loaded_from_file_url = window.location.href.match(/^file:\/\//)
-    window.statebus_server = window.statebus_server || script_option('server') ||
+    window.statebus_server = window.statebus_server || clientjs_option('server') ||
         (loaded_from_file_url ? 'https://stateb.us:3006' : '/')
-    window.statebus_backdoor = window.statebus_backdoor || script_option('backdoor')
+    window.statebus_backdoor = window.statebus_backdoor || clientjs_option('backdoor')
     var react_render
     function scripts_ready () {
         react_render = React.version >= '0.14.' ? ReactDOM.render : React.render

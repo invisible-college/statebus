@@ -392,6 +392,7 @@ function import_server (bus, options)
                     client.forget(key, sockjs_pubber)
                 if (client_bus_func) {
                     delete connections[conn.id]; master.save(connections)
+                    master.delete('connection/' + conn.id)
                     client.delete_bus()
                 }
             })
@@ -400,10 +401,12 @@ function import_server (bus, options)
             if (client_bus_func && !master.options.__secure) {
 
                 // A connection
-                client('connection/*').to_fetch = function (key) {
+                client('connection/*').to_fetch = function (key, star) {
                     var result = bus.clone(master.fetch(key))
                     if (master.options.connections.include_users && result.user)
                         result.user = client.fetch(result.user.key)
+                    result.id     = star
+                    result.client = star  // Deprecated.  Delete this line in v7.
                     return result
                 }
                 client('connection/*').to_save = function (o, star, t) {
