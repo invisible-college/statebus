@@ -1647,6 +1647,12 @@ function import_server (bus, options)
             params.pass = require('bcrypt-nodejs').hashSync(params.pass)
 
             // Choose account key
+            //
+            //   NOTE: Checking if master.cache has the key probably sucks,
+            //   because if something fetches that key (hoping it exists), it
+            //   might create it, even though the account hasn't been created
+            //   yet, and then this will rename it to some random ID.
+            //
             var key = 'user/' + params.name
             if (!params.name)
                 key = 'user/' + Math.random().toString(36).substring(7,13)
@@ -1684,7 +1690,7 @@ function import_server (bus, options)
                 client.save.abort(o)
                 var c = client.fetch('current_user')
                 c.error = msg
-                client.save(c)
+                client.save.fire(c)
             }
 
             client.log('* saving: current_user!')
