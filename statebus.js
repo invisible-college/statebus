@@ -19,6 +19,7 @@
         var called_from_reactive_funk = !callback
         var funk = callback || executing_funk
 
+        // Initialize callback
         if (callback) {
             (callback.defined = callback.defined || []
             ).push({as:'fetch callback', key:key});
@@ -28,7 +29,7 @@
                 var seen_versions =
                     callback.seen_keys[bus_key] = callback.seen_keys[bus_key] || []
                 seen_versions.push(version)
-                if (versions.length > 50) versions.shift()
+                if (seen_versions.length > 50) seen_versions.shift()
             }
         }
 
@@ -522,6 +523,9 @@
                     f.seen_keys = f.seen_keys || {}
                     var v = f.seen_keys[JSON.stringify([this.id, keys[i]])]
                     if (v && v.indexOf(versions[keys[i]]) !== -1) {
+                        // Note: Is this even possible?  Isn't it impossible
+                        // for a fresh handler to have seen a version already?
+
                         //log('skipping', funk_name(f), 'already at version', v)
                         continue
                     }
@@ -989,7 +993,7 @@
             var seen_versions =
                 this.fetched_keys[bus_key] = this.fetched_keys[bus_key] || []
             seen_versions.push(version)
-            if (versions.length > 10) versions.shift()
+            if (seen_versions.length > 50) seen_versions.shift()
         }
         funk.react = function () {
             var result
