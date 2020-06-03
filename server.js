@@ -721,8 +721,7 @@ function import_server (bus, options)
                 var x = (bus.cache[key] && !bus.pending_fetches[key])
                     || sqlite_get(key)
                 if (opts.inline_pointers) x = inline_pointers_singleobj(x)
-                x = bus.deep_map(x, (o) => o && o.key ? sqlite_get(o.key) : o)
-                t.done(x)
+                return bus.deep_map(x, (o) => o && o.key ? sqlite_get(o.key) : o)
             }
             
 

@@ -35,8 +35,6 @@
 
         // ** Subscribe the calling funk **
 
-        if (called_from_reactive_funk)
-            funk.has_seen(bus, key, versions[key])  // Maybe this line should go below, in the existing "if (called_from_reactive_funk) {" ??
         fetches_in.add(key, funk_key(funk))
         if (to_be_forgotten[key]) {
             clearTimeout(to_be_forgotten[key])
@@ -64,6 +62,7 @@
 
         // If called reactively, we always return a value.
         if (called_from_reactive_funk) {
+            funk.has_seen(bus, key, versions[key])
             backup_cache[key] = backup_cache[key] || {key: key}
             return cache[key] = cache[key] || {key: key}
         }
@@ -458,7 +457,7 @@
 
     function mark_changed (key, t) {
         // Marks a key as dirty, meaning that functions on it need to update
-        log('Marking changed', bus, key)
+        log('Marking changed', bus.toString(), key)
         changed_keys.add(key)
         clean_timer = clean_timer || setTimeout(clean)
     }
