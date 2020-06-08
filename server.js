@@ -2227,7 +2227,7 @@ function import_server (bus, options)
         compiled = compiled.js
         compiled += '\n'
         compiled += '//# sourceMappingURL=data:application/json;base64,'
-        compiled += btoa(JSON.stringify(source_map)) + '\n'
+        compiled += btoa(unescape(encodeURIComponent(JSON.stringify(source_map)))) + '\n'
         compiled += '//# sourceURL=' + filename
         return compiled
     },

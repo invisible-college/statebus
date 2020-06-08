@@ -370,10 +370,7 @@
         if (!fetches_in.has(key, fkey)) {
             console.error("***\n****\nTrying to forget lost key", key,
                           'from', funk_name(save_handler), fkey,
-                          "that hasn't fetched that key.",
-                          funks[fetches_in.get(key)[0]],
-                          funks[fetches_in.get(key)[0]] && funks[fetches_in.get(key)[0]].statebus_id
-                         )
+                          "that hasn't fetched that key.")
             console.trace()
             return
             // throw Error('asdfalsdkfajsdf')
