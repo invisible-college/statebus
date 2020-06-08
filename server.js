@@ -2189,7 +2189,7 @@ function import_server (bus, options)
                 //               + (60 * 60 * 24 * 30))  // 1 month
                 res.setHeader('ETag', o.etag)
                 res.setHeader('Access-Control-Allow-Origin', '*')
-                res.setHeader('content-type', 'application/javascript')
+                res.setHeader('Content-Type', 'application/javascript')
                 res.send(o._)
                 textbus.forget(o.key, cb)  // But we do want to forget the cb
             })
@@ -2202,33 +2202,34 @@ function import_server (bus, options)
             var source_filename = filename.substr(1)
             var source = bus.read_file(source_filename)
             if (bus.loading()) throw 'loading'
-            if (filename.match(/\.coffee$/)) {
-
-                try {
-                    var compiled = require('coffeescript').compile(source, {filename,
-                                                                            bare: true,
-                                                                            sourceMap: true})
-                } catch (e) {
-                    console.error('Could not compile ' + e.toString())
-                    return 'console.error(' + JSON.stringify(e.toString()) + ')'
-                }
-
-                var source_map = JSON.parse(compiled.v3SourceMap)
-                source_map.sourcesContent = source
-                compiled = 'window.dom = window.dom || {}\n' + compiled.js
-                compiled = 'window.ui = window.ui || {}\n' + compiled
-
-                function btoa(s) { return new Buffer(s.toString(),'binary').toString('base64') }
-
-                // Base64 encode it
-                compiled += '\n'
-                compiled += '//# sourceMappingURL=data:application/json;base64,'
-                compiled += btoa(JSON.stringify(source_map)) + '\n'
-                compiled += '//# sourceURL=' + source_filename
-                return compiled
-            }
-            else return source
+            if (filename.match(/\.coffee$/))
+                return bus.compile_coffee(source, source_filename)
+            else
+                return source
         })
+    },
+
+    compile_coffee: function compile_coffee (source, filename) {
+        try {
+            var compiled = require('coffeescript').compile(source, {filename,
+                                                                    bare: true,
+                                                                    sourceMap: true})
+        } catch (e) {
+            console.error('Could not compile ' + e.toString())
+            return 'console.error(' + JSON.stringify(e.toString()) + ')'
+        }
+
+        var source_map = JSON.parse(compiled.v3SourceMap)
+        source_map.sourcesContent = source
+        function btoa(s) { return new Buffer(s.toString(),'binary').toString('base64') }
+
+        // Base64 encode it
+        compiled = compiled.js
+        compiled += '\n'
+        compiled += '//# sourceMappingURL=data:application/json;base64,'
+        compiled += btoa(JSON.stringify(source_map)) + '\n'
+        compiled += '//# sourceURL=' + filename
+        return compiled
     },
 
     serve_clientjs: function serve_clientjs (path) {
