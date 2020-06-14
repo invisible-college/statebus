@@ -120,20 +120,38 @@ function import_server (bus, options)
         // Serve Client Coffee
         bus.serve_client_coffee()
 
-        // Custom route
-        var OG_route = bus.route
-        bus.route = function(key, method, arg, opts) {
-            var count = OG_route(key, method, arg, opts)
+        // Custom router
+        bus.route = function server_route (key, method, arg, t) {
+            var handlers = bus.bindings(key, method)
+            var count = handlers.length
+            if (count)
+                bus.log('route:', bus+'("'+key+'").'+method+'['+handlers.length+'](key:"'+(arg.key||arg)+'")')
 
-            // This whitelists anything we don't have a specific handler for,
-            // reflecting it to all clients!
-            if (count === 0 && method === 'to_save') {
-                bus.save.fire(arg, opts)
-                bus.route(arg.key, 'on_set_sync', arg, opts)
-                count++
+            // Call all handlers!
+            for (var i=0; i<handlers.length; i++)
+                bus.run_handler(handlers[i].func, method, arg, {t: t, binding: handlers[i].key})
+
+            // Now handle backup handlers
+            if (count === 0) {
+
+                // A save to master without a to_save defined should be
+                // automatically reflected to all clients.
+                if (method === 'to_save') {
+                    bus.save.fire(arg, t)
+                    bus.route(arg.key, 'on_set_sync', arg, t)
+                    count++
+                }
+
+                // A fetch to master without a to_fetch defined should go to
+                // the database, if we have one.
+                if (method === 'to_fetch') {
+                    bus.db_fetch(key)
+                    // This basically renders the count useless-- you probably
+                    // don't want to wrap this route() with another route().
+                    count++
+                }
             }
-
-            return count
+            return handlers.length
         }
 
         // Back door to the control room
@@ -648,6 +666,7 @@ function import_server (bus, options)
         }
     },
 
+    db_fetch: function db_fetch (key) {/* does nothing unless overridden */},
     lazy_sqlite_store: function lazy_sqlite_store (opts) {
         if (!opts) opts = {}
         opts.lazy = true
@@ -712,18 +731,31 @@ function import_server (bus, options)
         }
 
         function sqlite_get (key) {
+            // console.log('sqlite_get:', key)
             var x = db.prepare('select * from cache where key = ?').get([key])
             return x ? JSON.parse(x.obj) : {}
         }
-        if (opts.lazy)
-            // Add fetch handler
-            bus(prefix).to_fetch = function (key, t) {
-                var x = (bus.cache[key] && !bus.pending_fetches[key])
-                    || sqlite_get(key)
-                if (opts.inline_pointers) x = inline_pointers_singleobj(x)
-                return bus.deep_map(x, (o) => o && o.key ? sqlite_get(o.key) : o)
+        if (opts.lazy) {
+            var db_fetched_keys = {}
+            bus.db_fetch = function (key) {
+                if (db_fetched_keys[key]) return
+                db_fetched_keys[key] = true
+
+                // Get it from the database
+                var obj = sqlite_get(key)
+
+                // Inline pointers if enabled (does this still work?)
+                if (opts.inline_pointers) obj = inline_pointers_singleobj(obj)
+
+                // Ensure we have the latest version of everything nested
+                obj = bus.deep_map(obj, (o) => (o && o.key
+                                                ? sqlite_get(o.key)
+                                                : o))
+
+                // Publish this to the bus
+                bus.save.fire(obj, {to_fetch: true})
             }
-            
+        }
 
         // Add save handlers
         function on_save (obj) {
@@ -1624,7 +1656,7 @@ function import_server (bus, options)
             if (login === 'key') return false
             if (!userpass || !userpass.pass) return null
 
-            //console.log('comparing passwords', pass, userpass.pass)
+            // console.log('comparing passwords', pass, userpass.pass)
             if (require('bcrypt-nodejs').compareSync(pass, userpass.pass))
                 return master.fetch(userpass.user)
         }
