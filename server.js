@@ -737,7 +737,7 @@ function import_server (bus, options)
         }
         if (opts.lazy) {
             var db_fetched_keys = {}
-            bus.db_fetch = function (key) {
+            bus.db_fetch = bus.reactive(function (key) {
                 if (db_fetched_keys[key]) return
                 db_fetched_keys[key] = true
 
@@ -754,7 +754,7 @@ function import_server (bus, options)
 
                 // Publish this to the bus
                 bus.save.fire(obj, {to_fetch: true})
-            }
+            })
         }
 
         // Add save handlers
