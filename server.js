@@ -924,24 +924,24 @@ function import_server (bus, options)
         db.prepare('create index if not exists date_index on usage (date)').run()
         var refresh_interval = 1000*60
 
-        var nots = ['details not like "%facebookexternalhit%"',
-                    'details not like "%/apple-touch-icon%"',
-                    'details not like "%Googlebot%"',
-                    'details not like "%AdsBot-Google%"',
-                    'details not like "%Google-Adwords-Instant%"',
-                    'details not like "%Apache-HttpClient%"',
-                    'details not like "%SafeDNSBot%"',
-                    'details not like "%RevueBot%"',
-                    'details not like "%MetaURI API%"',
-                    'details not like "%redback/v%"',
-                    'details not like "%Slackbot%"',
-                    'details not like "%HTTP_Request2/%"',
-                    'details not like "%python-requests/%"',
-                    'details not like "%LightspeedSystemsCrawler/%"',
-                    'details not like "%CipaCrawler/%"',
-                    'details not like "%Twitterbot/%"',
-                    'details not like "%Go-http-client/%"',
-                    'details not like "%/cheese_service%"'
+        var nots = ["details not like '%facebookexternalhit%'",
+                    "details not like '%/apple-touch-icon%'",
+                    "details not like '%Googlebot%'",
+                    "details not like '%AdsBot-Google%'",
+                    "details not like '%Google-Adwords-Instant%'",
+                    "details not like '%Apache-HttpClient%'",
+                    "details not like '%SafeDNSBot%'",
+                    "details not like '%RevueBot%'",
+                    "details not like '%MetaURI API%'",
+                    "details not like '%redback/v%'",
+                    "details not like '%Slackbot%'",
+                    "details not like '%HTTP_Request2/%'",
+                    "details not like '%python-requests/%'",
+                    "details not like '%LightspeedSystemsCrawler/%'",
+                    "details not like '%CipaCrawler/%'",
+                    "details not like '%Twitterbot/%'",
+                    "details not like '%Go-http-client/%'",
+                    "details not like '%/cheese_service%'"
                    ].join(' and ')
         bus.usage_log_nots = nots
 
