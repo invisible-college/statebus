@@ -411,6 +411,9 @@
             // And go ahead and delete if there aren't any!
             delete cache[key]
 
+        // Call the on_delete handlers
+        bus.route(key, 'on_delete', cache[key] || {key: key})
+
         // console.warn("Deleting " + key + "-- Statebus doesn't yet re-run functions subscribed to it, or update versions")
 
         // Todos:
@@ -548,7 +551,7 @@
     function subspace (key) {
         var result = {}
         for (var method in {to_fetch:null, to_save:null, on_save:null, on_set_sync:null,
-                            to_delete:null, to_forget:null})
+                            on_delete:null, to_delete:null, to_forget:null})
             (function (method) {
                 Object.defineProperty(result, method, {
                     set: function (func) {
