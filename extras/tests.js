@@ -1096,15 +1096,43 @@ test(function default_route (done) {
     done()
 })
 
-test(function setup_server (done) {
-    s = require('../statebus').serve({port: 3948, file_store: false})
+function setup_servers () {
+    var port = 3000 + Math.floor(Math.random() * 1000)
+
+    s = require('../statebus').serve({port, file_store: false})
     s.label = 's'
     log('Saving /far on server')
     s.save({key: 'far', away:'is this'})
 
     c = require('../statebus')()
     c.label = 'c'
-    c.ws_client('/*', 'statei://localhost:3948')
+    c.net_mount('/*', 'statei://localhost:' + port)
+
+    s.save({key: 'users',
+            all: [ {  key: 'user/1',
+                      name: 'mike',
+                      email: 'toomim@gmail.com',
+                      admin: true,
+                      pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y' }
+
+                   ,{ key: 'user/2',
+                      name: 'j',
+                      email: 'jtoomim@gmail.com',
+                      admin: true,
+                      pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y' }
+
+                   ,{ key: 'user/3',
+                      name: 'boo',
+                      email: 'boo@gmail.com',
+                      admin: false,
+                      pass: '$2a$10$4UTjzf5OOGdkrCEsT.hO/.csKqf7u8mZ23ZT6stamBAWNV7u5WJuu' } ] })
+
+    return {s, c}
+}
+
+
+test(function setup_server (done) {
+    var {s, c} = setup_servers()
 
     // s.honk = true
     // c.honk = true
@@ -1135,122 +1163,107 @@ test(function setup_server (done) {
 })
 
 test(function login (done) {
-    s.save({key: 'users',
-            all: [ {  key: 'user/1',
-                      name: 'mike',
-                      email: 'toomim@gmail.com',
-                      admin: true,
-                      pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y' }
+    var {s, c} = setup_servers()
 
-                   ,{ key: 'user/2',
-                      name: 'j',
-                      email: 'jtoomim@gmail.com',
-                      admin: true,
-                      pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y' }
-
-                   ,{ key: 'user/3',
-                      name: 'boo',
-                      email: 'boo@gmail.com',
-                      admin: false,
-                      pass: '$2a$10$4UTjzf5OOGdkrCEsT.hO/.csKqf7u8mZ23ZT6stamBAWNV7u5WJuu' } ] })
-
+    //c.honk = true
     c(function () {
         var u = c.fetch('/current_user')
+        log('Current user changed!', c.label, JSON.stringify(u))
         if (u.logged_in) {
             log('Yay! We are logged in as', u.user.name)
             forget()
-            setTimeout(function () {done()})
+            setTimeout(function () {done()}, 200)
         } else
             log("Ok... we aren't logged in yet.  We be patient.")
     })
-    // c.honk = user0.honk = true
-    var u = c.fetch('/current_user')
-    u.login_as = {name: 'mike', pass: 'yeah'}
-    log('Logging in')
-    c.save(u)
+
+    delay(200, () => {
+        // c.honk = user0.honk = true
+        var u = c.fetch('/current_user')
+        u.login_as = {name: 'mike', pass: 'yeah'}
+        log('Logging in')
+        //s.honk = true
+        c.save(u)
+        log('Let\'s see if that login worked!!')
+    })
 })
 
 test(function wrong_password (done) {
+    var {s, c} = setup_servers()
+    // s.honk = true; c.honk = true
+
     var u = c.fetch('/current_user')
-    assert(u.logged_in && u.user.name == 'mike')
+    //assert(u.logged_in && u.user.name == 'mike')
     u.login_as = {name: 'j', pass: 'nah'}
     c.save(u)
-    setTimeout(function () {
+    delay(500, () => {
         assert(!u.login_as, 'Aborted login needs to abort')
         log('Good, the login failed.')
         done()
-    }, 300)
+    })
 })
 
 test(function create_account (done) {
-    assert(c.fetch('/current_user').logged_in)
-    var count = 0
-    c(function () {
-        count++
-        var u = c.fetch('/current_user')
+    var {s, c} = setup_servers()
+    var cu
+    // c.honk = true
+    // s.honk = false
 
-        log('Phase', count, '(logged '+(u.logged_in?'in)':'out)'))
+    delay(500, () => {
+        log('Logging in')
+        cu = c.fetch('/current_user')
+        cu.login_as = {name: 'mike', pass: 'yeah'}
+        c.save(cu)
+    })
 
-        switch (count) {
-        case 1:
-            log('In 1   -    Logging out')
-            assert(u.logged_in, '1 not logged in')
-            u.logout = true; c.save(u)
-            break
-        case 2: break
-        case 3:
-            // These are triggering a weird race condition bug, where the
-            // server sends a duplicate {user: {key: 'user/bob', name:
-            // 'bob', email: 'b@o.b'}, logged_in: true, key:
-            // 'current_user'} event, triggering a re-render at 7 before
-            // the logout has transpired.
-            // c.honk = true
-            // s.honk = true
-            log('In 3   -    Creating bob, logging in as bob')
-            assert(!u.logged_in, '3 logged in')
-            u.create_account = {name: 'bob', email: 'b@o.b', pass: 'boob'}
-            c.save(u)
+    // Log out
+    delay(500, () => {
+        assert(c.fetch('/current_user').logged_in)
+        log('Logging out')
+        cu.logout = true; c.save(cu)
+    })
 
-            // Note: I hope this done line isn't necessary in the future!
-            delete u.create_account
+    // Create bob and log in as bob
+    delay(400, () => {
+        log('Creating bob')
+        assert(!cu.logged_in, '3 logged in')
+        cu.create_account = {name: 'bob', email: 'b@o.b', pass: 'boob'}
+        c.save(cu)
 
-            u.login_as = {name: 'bob', pass: 'boob'}
-            c.save(u)
-            break
-        case 4: break
-        case 5:
-            log('In 5   -    Logging out')
-            assert(u.logged_in)
-            assert(u.user.name === 'bob'
-                   && u.user.email === 'b@o.b'
-                   && u.user.pass === undefined
-                   && u.user.key.match(/\/user\/.*/),
-                   'Bad user', u)
-            // Now let's log out
-            log('Almost done 5')
-            u.logout = true; c.save(u)
-            log('Done 5')
-            break
-        case 6: break
-        case 7:
-            log('In 7   -    Logging back in as boob')
-            assert(!u.logged_in, '7. still logged in, as', u)
-            u.login_as = {name: 'bob', pass:'boob'}
-            c.save(u)
-            break
-        case 8: break
-        case 9:
-            log('In 9   -    Forget and finish.')
-            assert(u.logged_in, '9 not logged in')
-            forget()
-            setTimeout(function () {done()})
-            break
-        default:
-            assert(false)
-            break
-        }
+        log('Logging in as bob')
+        delete cu.create_account
+        cu.login_as = {name: 'bob', pass: 'boob'}
+        c.save(cu)
+    })
+
+    // Log out
+    delay(600, () => {
+        assert(cu.logged_in)
+        assert(cu.user.name === 'bob'
+               && cu.user.email === 'b@o.b'
+               && cu.user.pass === undefined
+               && cu.user.key.match(/\/user\/.*/),
+               'Bad user', cu)
+
+        log('Now let\'s log out!')
+        cu.logout = true; c.save(cu)
+    })
+
+    // Log back in as boob
+    delay(600, () => {
+        log('Logging back in as boob')
+        assert(!cu.logged_in, 'Still logged in, as ' + cu.key)
+        cu.login_as = {name: 'bob', pass:'boob'}
+        c.save(cu)
+    })
+    
+    delay(600, () => {
+        assert(cu.logged_in)
+        assert(cu.user.name === 'bob')
+        done()
     })
 })
+
 
 function connections_helper (done, port, options) {
     // Setup a server
@@ -1391,182 +1404,265 @@ test(function flashbacks (done) {
     })
 })
 
-test(function email_read_permissions (done) {
-    var phase = -1
-    var u, user1, user2, user3
-    var tmp1
+test(function common_time (done) {
+    var b = require('../statebus')()
+    b.label = 'bus'
+    b.honk = 3
 
-    var states = function () { return [
-        // Phase 0
-        [true,
-         function () {
-             log('Logging in as mike')
-             //s.honk=true
-             u.login_as = {name: 'mike', pass: 'yeah'}; c.save(u)
-         }],
-
-        // Phase 1
-        // Logged in as mike
-        [(u.logged_in
-          && u.user.name === 'mike'
-          && u.user.key === '/user/1'
-
-          // We can see our email
-          && u.user.email
-          && user1.email
-
-          // We can't see other emails
-          && !user2.email
-          && !user3.email),
-
-         function () {
-             !tmp1 && log('Logging in as j')
-             setTimeout(function () {
-                 if (tmp1) return
-                 tmp1 = true
-                 log('Firing the actual j login')
-                 //s.userbus.honk = true
-                 u.login_as = {name: 'j', pass: 'yeah'}; c.save(u)
-                 log('We just logged in as j. now user is:', u.user.name)
-             }, 10)
-         }],
-
-        // Phase 2
-        // Logged in as j
-        [(u.logged_in
-          && u.user.name === 'j'
-          && u.user.key === '/user/2'
-
-          // We can see j's email
-          && u.user.email
-          && user2.email
-
-          // We can't see other emails
-          && !user1.email
-          && !user3.email),
-
-         // That's all, Doc
-         function () { log("That's all, Doc."); setTimeout(function () {done()}) }]
-    ]}
-
-    c('/current_user').on_save = function (o) {
-        //if (o.user && o.user.name === 'j') {
-        // log(s.userbus.deps('/current_user'))
-        // log(s.userbus.deps('/user/2'))
-        //}
+    // Define a `front' that proxies for `back'
+    b('front').to_fetch = () => {
+        var copy = b.clone(b.fetch('back'))
+        copy.key = 'front'
+        return copy
     }
-    c('/user/*').on_save = function (o) {
-        //log('-> Got new', o.key, o.email ? 'with email' : '')
+    b('front').to_save = (o, t) => {
+        var copy = b.clone(o)
+        copy.key = 'back'
+
+        if (copy.special)
+            copy.alert = true
+
+        b.save.sync(copy)
     }
-    c('/current_user').on_save = function (o) {
-        //log('-> Got new /current_user')
-    }
-    c(function loop () {
-        u = c.fetch('/current_user')
-        user1 = c.fetch('/user/1')
-        user2 = c.fetch('/user/2')
-        user3 = c.fetch('/user/3')
-        var st = states()
 
-        if (phase===1)
-            log('\n\tcurr u:\t',u.user, '\n\t1:\t', user1,'\n\t2:\t', user2,'\n\t3:\t', user3)
+    // Register a handler to see how things change
+    var i = 0
+    b(() => {
+        var front = b.fetch('front')
+        log('Looks like front is currently', front, b.versions.front, '!')
 
-        if (phase >= st.length) {
-            loop.forget()
-            return
-        }
+        // Test it!
+        var expected_vals = [undefined, 'bar1', 'bar2', 'bar3']
+        var expected_vers = ['bus0', 'bus1', 'x2', 'x3']
+        assert(expected_vals[i] === front.val)
+        i++
 
-        if (phase + 1 < st.length && st[phase + 1][0]) {
-            phase++
-            log()
-            log('## Shifting to phase', phase)
-        }
-        
-        //log('Phase', phase, 'logged_in:', u.logged_in && u.user.name)
-        st[phase][1]()
+        // End it
+        if (i === 3) b.forget()
     })
+
+    // Now make changes through front
+    delay(50, _=> b.save({key: 'front', val: 'bar1'}))
+    delay(50, _=> b.save({key: 'front', val: 'bar2'}, {version: 'x2'}))
+    delay(50, _=> b.save({key: 'front', val: 'bar2'}, {version: 'x2.2'}))
+    delay(50, _=> b.save({key: 'front', val: 'bar3'}, {version: 'x3'}))
+    delay(50, _=> b.save({key: 'front'}, {version: '_'}))
+
+    delay(0, _=> log('Now trying with a client.'))
+
+    // Now let's make sure echoes don't go through to a client editing text
+    var j = 0
+    var client = (front) => {
+        log('Client got a front', front, b.versions.front, '!')
+
+        // Test it!
+        var expected_vals = [undefined, 'foo1', 'foo4']
+        var expected_vers = ['_', 'y1', 'y4']
+        assert(expected_vals[j] === front.val)
+        j++
+    }
+
+    // Make a couple changes.  These should go through.
+    delay(50, _=> b.fetch('front', client))
+    delay(50, _=> b.save({key: 'front', val: 'foo1'}, {version: 'y1'}))
+
+    // Now make some changes that the client has already seen
+    delay(50, _=> {
+        client.has_seen(b, 'front', 'y2')
+        b.save({key: 'front', val: 'foo2'}, {version: 'y2'})
+    })
+    delay(50, _=> {
+        client.has_seen(b, 'front', 'y3')
+        b.save({key: 'front', val: 'foo3', special: true}, {version: 'y3'})
+    })
+
+    // And one it hasn't seen again
+    delay(50, _=> b.save({key: 'front', val: 'foo4'}, {version: 'y4'}))
+
+    // And we're done!
+    delay(50, done)
 })
 
-test(function closet_space (done) {
-    var s = require('../statebus').serve({port: 3949,
-                                          file_store: false,
-                                          client: (c)=>{c.honk=true}})
-    s.label = 's'
 
-    var c = require('../statebus')()
-    c.label = 'c'
-    c.ws_client('/*', 'statei://localhost:3949')
+// The following tests are unfinished
+if (false) {
+    test(function email_read_permissions (done) {
+        var phase = -1
+        var u, user1, user2, user3
+        var tmp1
 
-    // Make stuff as user A
-    var cu = c.fetch('/current_user')
-    c.save({key: '/current_user', create_account: {name: 'a', pass: 'a'}})
-    c.save({key: '/current_user', login_as: {name: 'a', pass: 'a'}})
-    var a_closet = c.fetch('/user/a/foo')
-    var a_private = c.fetch('/user/a/private/foo')
+        var states = function () { return [
+            // Phase 0
+            [true,
+             function () {
+                 log('Logging in as mike')
+                 //s.honk=true
+                 u.login_as = {name: 'mike', pass: 'yeah'}; c.save(u)
+             }],
 
-    delay(400, () => {
-        c.save({key: '/user/a/foo', _: 3})
-        c.save({key: '/user/a/private/foo', _: 4})
-    })
+            // Phase 1
+            // Logged in as mike
+            [(u.logged_in
+              && u.user.name === 'mike'
+              && u.user.key === '/user/1'
 
-    // User A can see it
-    delay(450, ()=> {
-        log('1. Now curr user is', cu)
-        console.assert(cu.logged_in == true, 'not logged in')
-        log('closet is', a_closet)
-        console.assert(a_closet._ === 3, 'closet not right')
-        console.assert(a_private._ === 4, 'private not right')
+              // We can see our email
+              && u.user.email
+              && user1.email
 
-        // Set up User B
-        c.save({key: '/current_user', create_account: {name: 'b', pass: 'b'}})
-        c.save({key: '/current_user', login_as: {name: 'b', pass: 'b'}})
-    })
+              // We can't see other emails
+              && !user2.email
+              && !user3.email),
 
-    // User B can't see private stuff
-    delay(450, ()=> {
-        log('3. Now curr user is', cu)
-        log('closet is', {closet:a_closet, private:a_private})
-        console.assert(a_closet._ === 3, 'A\'s closet is not visible')
-        console.assert(a_private._ !== 4, 'damn can still see private')
+             function () {
+                 !tmp1 && log('Logging in as j')
+                 setTimeout(function () {
+                     if (tmp1) return
+                     tmp1 = true
+                     log('Firing the actual j login')
+                     //s.userbus.honk = true
+                     u.login_as = {name: 'j', pass: 'yeah'}; c.save(u)
+                     log('We just logged in as j. now user is:', u.user.name)
+                 }, 10)
+             }],
 
-        // User B tries editing the first closet
-        a_closet._ = 5; c.save(a_closet)
-    })
+            // Phase 2
+            // Logged in as j
+            [(u.logged_in
+              && u.user.name === 'j'
+              && u.user.key === '/user/2'
 
-    // User B could not edit that
-    delay(350, ()=> {
-        console.assert(a_closet._ === 3, 'damn he could edit it')
-    })
+              // We can see j's email
+              && u.user.email
+              && user2.email
 
-    delay(50, ()=>done())
-})
+              // We can't see other emails
+              && !user1.email
+              && !user3.email),
 
-test(function ambiguous_ordering (done) {
-    // Not fully implemented yet
+             // That's all, Doc
+             function () { log("That's all, Doc."); setTimeout(function () {done()}) }]
+        ]}
 
-    /*
-      Let's save within an on-save handler.  Which will trigger
-      first... the dirty(), or the new save()?  Hm, do we really
-      care?
-    */
-
-    var user = 3
-    bus('user').to_fetch =
-        function (k) {
-            return {user: user}
+        c('/current_user').on_save = function (o) {
+            //if (o.user && o.user.name === 'j') {
+            // log(s.userbus.deps('/current_user'))
+            // log(s.userbus.deps('/user/2'))
+            //}
         }
-
-    bus('user').to_save =
-        function (o) {
-            if (o.funny)
-                bus.save({key: 'user', user: 'funny'})
-
-            user = o.user
-            bus.dirty('user')
+        c('/user/*').on_save = function (o) {
+            //log('-> Got new', o.key, o.email ? 'with email' : '')
         }
+        c('/current_user').on_save = function (o) {
+            //log('-> Got new /current_user')
+        }
+        c(function loop () {
+            u = c.fetch('/current_user')
+            user1 = c.fetch('/user/1')
+            user2 = c.fetch('/user/2')
+            user3 = c.fetch('/user/3')
+            var st = states()
 
-    log("Eh, nevermind.")
-    done()
-})
+            if (phase===1)
+                log('\n\tcurr u:\t',u.user, '\n\t1:\t', user1,'\n\t2:\t', user2,'\n\t3:\t', user3)
 
+            if (phase >= st.length) {
+                loop.forget()
+                return
+            }
+
+            if (phase + 1 < st.length && st[phase + 1][0]) {
+                phase++
+                log()
+                log('## Shifting to phase', phase)
+            }
+            
+            //log('Phase', phase, 'logged_in:', u.logged_in && u.user.name)
+            st[phase][1]()
+        })
+    })
+
+    test(function closet_space (done) {
+        var s = require('../statebus').serve({port: 3949,
+                                              file_store: false,
+                                              client: (c)=>{c.honk=true}})
+        s.label = 's'
+
+        var c = require('../statebus')()
+        c.label = 'c'
+        c.ws_client('/*', 'statei://localhost:3949')
+
+        // Make stuff as user A
+        var cu = c.fetch('/current_user')
+        c.save({key: '/current_user', create_account: {name: 'a', pass: 'a'}})
+        c.save({key: '/current_user', login_as: {name: 'a', pass: 'a'}})
+        var a_closet = c.fetch('/user/a/foo')
+        var a_private = c.fetch('/user/a/private/foo')
+
+        delay(400, () => {
+            c.save({key: '/user/a/foo', _: 3})
+            c.save({key: '/user/a/private/foo', _: 4})
+        })
+
+        // User A can see it
+        delay(450, ()=> {
+            log('1. Now curr user is', cu)
+            assert(cu.logged_in == true, 'not logged in')
+            log('closet is', a_closet)
+            assert(a_closet._ === 3, 'closet not right')
+            assert(a_private._ === 4, 'private not right')
+
+            // Set up User B
+            c.save({key: '/current_user', create_account: {name: 'b', pass: 'b'}})
+            c.save({key: '/current_user', login_as: {name: 'b', pass: 'b'}})
+        })
+
+        // User B can't see private stuff
+        delay(450, ()=> {
+            log('3. Now curr user is', cu)
+            log('closet is', {closet:a_closet, private:a_private})
+            assert(a_closet._ === 3, 'A\'s closet is not visible')
+            assert(a_private._ !== 4, 'damn can still see private')
+
+            // User B tries editing the first closet
+            a_closet._ = 5; c.save(a_closet)
+        })
+
+        // User B could not edit that
+        delay(350, ()=> {
+            assert(a_closet._ === 3, 'damn he could edit it')
+        })
+
+        delay(50, ()=>done())
+    })
+
+
+    test(function ambiguous_ordering (done) {
+        // Not fully implemented yet
+
+        /*
+          Let's save within an on-save handler.  Which will trigger
+          first... the dirty(), or the new save()?  Hm, do we really
+          care?
+        */
+
+        var user = 3
+        bus('user').to_fetch =
+            function (k) {
+                return {user: user}
+            }
+
+        bus('user').to_save =
+            function (o) {
+                if (o.funny)
+                    bus.save({key: 'user', user: 'funny'})
+
+                user = o.user
+                bus.dirty('user')
+            }
+
+        log("Eh, nevermind.")
+        done()
+    })
+}
 run_tests()

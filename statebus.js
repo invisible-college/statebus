@@ -72,10 +72,9 @@
         // If there was a to_fetch, then it already got called.  Otherwise,
         // let's call it now.
         else if (!pending_fetches[key] && to_fetchers === 0) {
-            // TODO: my intuition suggests that we might prefer to
-            // delay this .on_save getting called in a
-            // setTimeout(f,0), to be consistent with other calls to
-            // .on_save.
+            // TODO: my intuition suggests that we might prefer to delay this
+            // .on_save getting called in a setTimeout(f,0), to be consistent
+            // with other calls to .on_save.
             backup_cache[key] = backup_cache[key] || {key: key}
             run_handler(funk, 'on_save', cache[key] = cache[key] || {key: key})
         }
@@ -99,8 +98,10 @@
             obj = apply_patch(bus.cache[obj] || {key: obj}, t.patch[0])
         }
 
-        if (!('key' in obj) || typeof obj.key !== 'string')
+        if (!('key' in obj) || typeof obj.key !== 'string') {
             console.error('Error: save(obj) called on object without a key: ', obj)
+            console.trace('Bad save(obj)')
+        }
         bogus_check(obj.key)
 
         t = t || {}
@@ -144,11 +145,27 @@
         // is shadowed by other handlers if I can get later handlers to shadow
         // earlier ones.
     }
+
+    // save.sync() will save with the version of the current executing reaction
+    save.sync = function save_sync (obj, t) {
+        save(obj, {
+            version: executing_funk?.transaction?.version
+                     || executing_funk?.latest_reaction_at,
+            ...t
+        })
+    }
+
+    // We might eventually want a save.fire.sync() too, which defaults the
+    // version to `executing_funk?.transaction?.version`
+
     save.fire = fire
     function fire (obj, t) {
         t = t || {}
+
         // Make sure it has a version.
-        t.version = t.version || new_version()
+        t.version = t.version
+            || executing_funk?.latest_reaction_at
+            || new_version()
 
         // Print a statelog entry
         if (obj.key && honking_at(obj.key)) {
@@ -353,7 +370,7 @@
     }
 
 
-    function forget (key, save_handler) {
+    function forget (key, save_handler, t) {
         if (arguments.length === 0) {
             // Then we're forgetting the executing funk
             console.assert(executing_funk !== global_funk,
@@ -386,7 +403,7 @@
             clearTimeout(to_be_forgotten[key])
             to_be_forgotten[key] = setTimeout(function () {
                 // Send a forget upstream
-                bus.route(key, 'to_forget', key)
+                bus.route(key, 'to_forget', key, t)
 
                 // Delete the cache entry...?
                 // delete cache[key]
@@ -395,7 +412,7 @@
             }, 200)
         }
     }
-    function del (key) {
+    function del (key, t) {
         key = key.key || key   // Prolly disable this in future
         bogus_check(key)
 
@@ -412,7 +429,7 @@
             delete cache[key]
 
         // Call the on_delete handlers
-        bus.route(key, 'on_delete', cache[key] || {key: key})
+        bus.route(key, 'on_delete', cache[key] || {key: key}, t)
 
         // console.warn("Deleting " + key + "-- Statebus doesn't yet re-run functions subscribed to it, or update versions")
 
@@ -437,16 +454,18 @@
     }
 
     var changed_keys = new Set()
-    var dirty_fetchers = new Set()
+    var dirty_fetchers = {}       // Maps funk_key => version dirtied at
     function dirty (key, t) {
         statelog(key, brown, '*', bus + ".dirty('"+key+"')")
         bogus_check(key)
+
+        var version = t?.version || 'dirty-' + new_version()
 
         // Find any .to_fetch, and mark as dirty so that it re-runs
         var found = false
         if (fetches_out.hasOwnProperty(key))
             for (var i=0; i<fetches_out[key].length; i++) {
-                dirty_fetchers.add(funk_key(fetches_out[key][i]))
+                dirty_fetchers[funk_key(fetches_out[key][i])] = version
                 found = true
             }
         clean_timer = clean_timer || setTimeout(clean)
@@ -464,41 +483,53 @@
 
     function clean () {
         // 1. Collect all functions for all keys and dirtied fetchers
-        var dirty_funks = new Set()
+        var dirty_funks = {}
         for (var b in busses) {
             var fs = busses[b].rerunnable_funks()
             for (var i=0; i<fs.length; i++)
-                dirty_funks.add(fs[i])
+                dirty_funks[fs[i].funk_key] = fs[i].at_version
         }
         clean_timer = null
 
         // 2. Run any priority function first (e.g. file_store's on_save)
-        dirty_funks = dirty_funks.values()
-        log('Cleaning up', dirty_funks.length, 'funks')
-        for (var i=0; i<dirty_funks.length; i++) {
+        log(bus.label, 'Cleaning up', Object.keys(dirty_funks).length, 'funks')
+        for (var k in dirty_funks) {
+            var funk    = funks[k],
+                version = dirty_funks[k]
+
             // console.log(funks[dirty_funks[i]].proxies_for)
-            var p = funks[dirty_funks[i]].proxies_for
+            var p = funk.proxies_for
             if (p && p.priority) {
-                log('Clean-early:', funk_name(funks[dirty_funks[i]]))
-                funks[dirty_funks[i]].react()
-                dirty_funks.splice(i,1)
-                i--
+                log('Clean-early:', funk_name(funk))
+                if (!funk.global_funk)
+                    funk.latest_reaction_at = version
+                funk.react()
+                delete dirty_funks[k]
             }
         }
 
         // 3. Re-run the functions
-        for (var i=0; i<dirty_funks.length; i++) {
-            log('Clean:', funk_name(funks[dirty_funks[i]]))
-            if (bus.render_when_loading || !funks[dirty_funks[i]].loading())
-                funks[dirty_funks[i]].react()
+        for (var k in dirty_funks) {
+            var funk    = funks[k],
+                version = dirty_funks[k]
+            log('Clean:', funk_name(funk))
+            if (bus.render_when_loading || !funk.loading()) {
+                if (!funk.global_funk)
+                    funk.latest_reaction_at = version
+                funk.react()
+            }
         }
         // log('We just cleaned up', dirty_funks.length, 'funks!')
     }
 
+    // Let's change this function to go through each key and grab the latest
+    // version of that key, and store that when we re-run the funk for it.
+    // Then we can pass this back to clean as [{version, funk} ...], and then
+    // clean can run it with a transaction that has that version in it.
+    // That'll stop a lot of echoes.
     function rerunnable_funks () {
         var result = []
         var keys = changed_keys.values()
-        var fetchers = dirty_fetchers.values()
 
         //log(bus+' Cleaning up!', keys, 'keys, and', fetchers.length, 'fetchers')
         for (var i=0; i<keys.length; i++) {          // Collect all keys
@@ -532,14 +563,16 @@
                     f = run_handler(f, 'on_save', cache[keys[i]], {dont_run: true,
                                                                    binding: keys[i]})
                 }
-                result.push(funk_key(f))
+                result.push({funk_key: funk_key(f),
+                             at_version: versions[keys[i]]})
             }
         }
-        for (var i=0; i<fetchers.length; i++)        // Collect all fetchers
-            result.push(fetchers[i])
+        for (var k in dirty_fetchers)  // Collect all fetchers
+            result.push({funk_key: k,
+                         at_version: dirty_fetchers[k]})
 
         changed_keys.clear()
-        dirty_fetchers.clear()
+        dirty_fetchers = {}
 
         //log('found', result.length, 'funks to re run')
 
@@ -719,16 +752,15 @@
             }
             return funk.react()
 
-            // This might not work that great.
-            // Ex:
+            // Hmm... does this do the right thing?  Example:
             //
             //    bus('foo').on_save = function (o) {...}
             //    save({key: 'foo'})
             //    save({key: 'foo'})
             //    save({key: 'foo'})
             //
-            // Does this spin up 3 reactive functions?  I think so.
-            // No, I think it does, but they all get forgotten once
+            // Does this spin up 3 reactive functions?  Hmm...
+            // Well, I think it does, but they all get forgotten once
             // they run once, and then are garbage collected.
             //
             //    bus('foo*').on_save = function (o) {...}
@@ -743,8 +775,8 @@
         // Alright then.  Let's wrap this func with some funk.
 
         // Fresh fetch/save/forget/delete handlers will just be regular
-        // functions.  We'll store their arg and let them re-run until they
-        // are done re-running.
+        // functions.  We'll store their arg and transaction and let them
+        // re-run until they are done re-running.
         function key_arg () { return ((typeof arg.key) == 'string') ? arg.key : arg }
         function rest_arg () { return (key_arg()).substr(binding.length-1) }
         function vars_arg () {
@@ -759,7 +791,9 @@
 
             // Initialize transaction
             t = clone(t || {})
-            if (method in {to_save:1, to_delete:1})
+
+            // Add .abort() method
+            if (method === 'to_save' || method === 'to_delete')
                 t.abort = function () {
                     var key = method === 'to_save' ? arg.key : arg
                     if (f.loading()) return
@@ -767,6 +801,8 @@
                     bus.backup_cache[key] = bus.backup_cache[key] || {key: key}
                     bus.save.abort(bus.cache[key])
                 }
+
+            // Add .done() method
             if (method !== 'to_forget')
                 t.done = function (o) {
                     var key = method === 'to_save' ? arg.key : arg
@@ -780,30 +816,38 @@
                     // state.  I imagine it would be more accurate to diff
                     // from before the to_save handler began with when
                     // t.done(o) ran.
+                    //
+                    // Note: We will likely solve this in the future by
+                    // preventing .to_save() from changing the incoming state,
+                    // except through an explicit .revise() function.
                     if (o) t.version = new_version()
 
                     if (method === 'to_delete')
                         delete bus.cache[key]
                     else if (method === 'to_save') {
                         bus.save.fire(o || arg, t)
-                        bus.route(key, 'on_set_sync', o||arg, t)
-                    } else { // Then method === to_fetch
+                        bus.route(key, 'on_set_sync', o || arg, t)
+                    } else {
+                        // Now method === 'to_fetch'
                         o.key = key
                         bus.save.fire(o, t)
                         // And now reset the version cause it could get called again
                         delete t.version
                     }
                 }
+
+            // Alias .return() to .done(), in case that feels better to you
             t.return = t.done
+
+            // Alias t.refetch() to bus.dirty()
             if (method === 'to_save')
                 t.refetch = function () { bus.dirty(arg.key) }
 
-            // Then in run_handler, we'll call it with:
+            // Now to call the handler, let's line up the function's special
+            // named arguemnts like key, o, t, rest, vars, etc.
             var args = []
             args[0] = arg
             args[1] = t
-
-            //console.log('This funcs args are', func.args)
             for (var k in (func.args||{})) {
                 switch (k) {
                 case 'key':
@@ -812,7 +856,6 @@
                     args[func.args[k]] = rest_arg(); break
                 case 'vars':
                     args[func.args[k]] = vars_arg();
-                    //console.log('We just made an arg', args[func.args[k]], 'in slot', func.args[k], 'for', k)
                     break
                 case 't':
                     args[func.args[k]] = t; break
@@ -823,9 +866,7 @@
                     args[func.args[k]] = bus.cache[key] || (bus.cache[key] = {key:key})
                     break
                 }
-                //console.log('processed', k, 'at slot', func.args[k], 'to make', args[func.args[k]])
             }
-            //console.log('args is', args)
 
             // Call the raw function here!
             var result = func.apply(null, args)
@@ -861,6 +902,7 @@
         })
         f.proxies_for = func
         f.arg = arg
+        f.transaction = t || {}
 
         // to_fetch handlers stop re-running when the key is forgotten
         if (method === 'to_fetch') {
@@ -1545,7 +1587,16 @@
         function flush_outbox() {
             if (sock.readyState === 1)
                 while (outbox.length > 0)
-                    sock.send(outbox.shift())
+
+                    // Debug mode can simulate network latency
+                    if (bus.simulate_network_delay) {
+                        let msg = outbox.shift()
+                        setTimeout((() => sock.send(msg)), bus.simulate_network_delay)
+                    }
+
+                    // But normally we just send the message immediately
+                    else
+                        sock.send(outbox.shift())
             else
                 setTimeout(flush_outbox, 400)
         }
@@ -1689,14 +1740,14 @@
         var bus = this
         var old_route = bus.route
         var connections = {}
-        bus.route = function (key, method, arg, opts) {
+        bus.route = function (key, method, arg, t) {
             var d = get_domain(key)
             if (d && !connections[d]) {
                 bus.net_mount(d + '/*', d)
                 connections[d] = true
             }
 
-            return old_route(key, method, arg, opts)
+            return old_route(key, method, arg, t)
         }
     }
 

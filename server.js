@@ -319,10 +319,10 @@ function import_server (bus, options)
                 if (t.patch)   msg.save    = msg.save.key
                 msg = JSON.stringify(msg)
 
-                if (global.network_delay) {
-                    console.log('>>>> DELAYING!!!', global.network_delay)
+                if (master.simulate_network_delay) {
+                    console.log('>>>> DELAYING!!!', master.simulate_network_delay)
                     obj = bus.clone(obj)
-                    setTimeout(() => {conn.write(msg)}, global.network_delay)
+                    setTimeout(() => {conn.write(msg)}, master.simulate_network_delay)
                 } else
                     conn.write(msg)
 
@@ -1589,6 +1589,7 @@ function import_server (bus, options)
         // Initialize master
         if (!master.auth_initialized) {
             master('users/passwords').to_fetch = function (k) {
+                master.log('users/passwords.to_fetch: Computing!')
                 var result = {key: 'users/passwords'}
                 var users = master.fetch('users')
                 users.all = users.all || []
@@ -1647,10 +1648,11 @@ function import_server (bus, options)
         // Authentication functions
         function authenticate (login, pass) {
             var userpass = master.fetch('users/passwords')[login.toLowerCase()]
-            master.log('authenticate: we see',
-                master.fetch('users/passwords'),
-                userpass && userpass.pass,
-                pass)
+            master.log('authenticate: we see', {
+                passwords: master.fetch('users/passwords'),
+                hash_to_match: userpass && userpass.pass,
+                password_guess: pass
+            })
 
             if (!(typeof login === 'string' && typeof pass === 'string')) return false
             if (login === 'key') return false
@@ -1811,7 +1813,7 @@ function import_server (bus, options)
         var private_closet_space_key = /^user\/[^\/]+\/private.*/
 
         // User
-        client('user/*').to_save = function (o) {
+        client('user/*').to_save = function (o, t) {
             var c = client.fetch('current_user')
             var user_key = o.key.match(/^user\/([^\/]+)/)
             user_key = user_key && ('user/' + user_key[1])
@@ -1828,7 +1830,7 @@ function import_server (bus, options)
             // Users have closet space at /user/<name>/*
             if (o.key.match(closet_space_key)) {
                 client.log('saving closet data')
-                master.save(o)
+                master.save(o, t)
                 return
             }
 
@@ -2383,7 +2385,7 @@ function log () {
     var pre = '   '
     console.log(pre+util.format.apply(null,arguments).replace('\n','\n'+pre))
 }
-function assert () { console.assert.apply(console, arguments) }
+var assert = require('assert')
 function delay (time, f) {
     delay_so_far = delay_so_far + time
     return setTimeout(f, delay_so_far)
