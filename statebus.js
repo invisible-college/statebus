@@ -148,16 +148,15 @@
 
     // save.sync() will save with the version of the current executing reaction
     save.sync = function save_sync (obj, t) {
-        save(obj, {
-            // version: executing_funk?.transaction?.version
-            //          || executing_funk?.latest_reaction_at
-            version: ((executing_funk
-                       && executing_funk.transaction
-                       && executing_funk.transaction.version)
-                      || (executing_funk
-                          && executing_funk.latest_reaction_at)),
-            ...t
-        })
+        t = bus.clone(t || {})
+        // t.version: executing_funk?.transaction?.version
+        //          || executing_funk?.latest_reaction_at
+        t.version = ((executing_funk
+                      && executing_funk.transaction
+                      && executing_funk.transaction.version)
+                     || (executing_funk
+                         && executing_funk.latest_reaction_at))
+        save(obj, t)
     }
 
     // We might eventually want a save.fire.sync() too, which defaults the
