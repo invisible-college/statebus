@@ -1596,7 +1596,7 @@
                     // Debug mode can simulate network latency
                     if (bus.simulate_network_delay) {
                         let msg = outbox.shift()
-                        setTimeout((() => sock.send(msg)), bus.simulate_network_delay)
+                        setTimeout((function () { sock.send(msg) }), bus.simulate_network_delay)
                     }
 
                     // But normally we just send the message immediately
