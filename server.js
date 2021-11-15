@@ -99,23 +99,50 @@ function import_server (bus, options)
         // User will put their routes in here
         bus.express.use('/', bus.http)
 
+        // Use braidify if it's available
+        try {
+            var braidify = require('braidify').http_server
+            console.log('Found braidify library. Braid-HTTP enabled!')
+        } catch (e) {
+            var braidify = undefined
+        }
+
         // Add a fallback that goes to state
         bus.express.get('*', function (req, res) {
             // Make a temporary client bus
             var cbus = bus.bus_for_http_client(req, res)
+            var cb
+            function end_it_all () {
+                cbus.forget(key, cb)
+                cbus.delete_bus()
+            }
+
+            braidify && braidify(req, res)
+            if (req.subscribe) {
+                res.startSubscription({ onClose: end_it_all })
+                console.log('yay subscription!')
+            } else
+                res.statusCode = 200
 
             // Do the fetch
             cbus.honk = 'statelog'
-            var singleton = req.path.match(/^\/code\//)
-            cbus.fetch_once(req.path.substr(1), (o) => {
-                var unwrap = (Object.keys(o).length === 2
-                              && '_' in o
-                              && typeof o._ === 'string')
-                // To do: translate pointers as keys
-                res.send(unwrap ? o._ : JSON.stringify(o))
-                cbus.delete_bus()
+            var key = req.path.substr(1)
+            cbus.fetch(key, cb = (o) => {
+                res.sendVersion({body: bus.to_http_body(o)})
+                if (!braidify || !req.subscribe)
+                    end_it_all()
             })
         })
+
+        // Set up default linked json converters
+        bus.to_http_body = (o) => {
+            var unwrap = (Object.keys(o).length === 2
+                          && '_' in o
+                          && typeof o._ === 'string')
+            // To do: translate pointers as keys
+            return unwrap ? o._ : JSON.stringify(o)
+        }
+        bus.from_http_body = (o) => {}
 
         // Serve Client Coffee
         bus.serve_client_coffee()
