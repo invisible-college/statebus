@@ -128,7 +128,11 @@ function import_server (bus, options)
             cbus.honk = 'statelog'
             var key = req.path.substr(1)
             cbus.fetch(key, cb = (o) => {
-                res.sendVersion({body: bus.to_http_body(o)})
+                if (braidify)
+                    res.sendVersion({body: bus.to_http_body(o)})
+                else
+                    res.send(bus.to_http_body(o))
+
                 if (!braidify || !req.subscribe)
                     end_it_all()
             })
