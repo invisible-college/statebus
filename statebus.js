@@ -2205,6 +2205,8 @@
             console.log.apply(console, arguments)
     }
     function statelog (key, color, icon, message) {
+        if (bus.colored_honk === false)
+            color = ''
         if (honking_at(key))
             indented_log(color + icon + ' ' + message + normal)
     }

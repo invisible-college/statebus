@@ -1,6 +1,6 @@
 {
   "name": "statebus",
-  "version": "6.1.6",
+  "version": "6.1.7",
   "description": "Synchronize state.",
   "main": "statebus.js",
   "scripts": {
