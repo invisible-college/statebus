@@ -2209,7 +2209,7 @@
             if (bus.honking_colors === false)
                 indented_log(icon + ' ' + message)
             else
-                indented_log(color + icon + ' ' + message + normal_color)
+                indented_log(color + icon + ' ' + message + normal)
     }
     function honking_at (key) {
         return (bus.honk instanceof RegExp
