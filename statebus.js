@@ -2205,10 +2205,11 @@
             console.log.apply(console, arguments)
     }
     function statelog (key, color, icon, message) {
-        if (bus.honking_colors === false)
-            color = ''
         if (honking_at(key))
-            indented_log(color + icon + ' ' + message + normal)
+            if (bus.honking_colors === false)
+                indented_log(icon + ' ' + message)
+            else
+                indented_log(color + icon + ' ' + message + normal_color)
     }
     function honking_at (key) {
         return (bus.honk instanceof RegExp
