@@ -96,7 +96,7 @@ function import_server (bus, options)
                 bus.sync_files(x.state_path, x.fs_path)
         })
 
-        // User will put their routes in here
+        // User will put his routes in here
         bus.express.use('/', bus.http)
 
         // Use braidify if it's available
@@ -107,7 +107,7 @@ function import_server (bus, options)
             var braidify = undefined
         }
 
-        // Add a fallback that goes to state
+        // Mirror state over HTTP
         bus.express.get('*', function (req, res) {
             // Make a temporary client bus
             var cbus = bus.bus_for_http_client(req, res)
@@ -115,6 +115,7 @@ function import_server (bus, options)
             function end_it_all () {
                 cbus.forget(key, cb)
                 cbus.delete_bus()
+                res.end()
             }
 
             braidify && braidify(req, res)
@@ -128,25 +129,86 @@ function import_server (bus, options)
             cbus.honk = 'statelog'
             var key = req.path.substr(1)
             cbus.fetch(key, cb = (o) => {
-                if (braidify)
-                    res.sendVersion({body: bus.to_http_body(o)})
-                else
-                    res.send(bus.to_http_body(o))
+                var body = bus.to_http_body(o)
 
-                if (!braidify || !req.subscribe)
+                // Return 404 if the value is undefined
+                if (!body) {
+                    console.log('no body! time to 404')
+                    res.statusCode = 404
+                    res.end()
+                }
+
+                // Or if we're braid, send via subscription
+                else if (braidify)
+                    res.sendVersion({body})
+
+                // Or just return the current version
+                else
+                    res.send(body)
+
+                // And shut down the connection if there's nothing left to do
+                if (!braidify || !req.subscribe || !body)
                     end_it_all()
             })
         })
 
+        bus.express.put('*', function (req, res) {
+            console.log('Got a put with body', req.body)
+
+            // Make a temporary client bus
+            var cbus = bus.bus_for_http_client(req, res)
+
+            // Maybe the new state is expressed in patches
+            if (req.headers.patches) {
+                console.error("We don't actually handle PUT patches yet")
+
+                // var patches = await req.patches()
+                // console.log("...but we see these patches:", patches)
+
+                res.statusCode = 500
+                res.end()
+            } else {
+                // Otherwise, we assume the body is content-type: json
+                if (typeof req.headers['content-type'] !== 'string'
+                    || req.headers['content-type'].toLowerCase() !== 'application/json')
+                    console.error('Error: PUT content-type is not application/json')
+                var body = ''
+                req.on('data', chunk => {body += chunk.toString()})
+                req.on('end', () => {
+                    try {
+                        console.log('gonna parse', body)
+                        var path = req.url.substr(1)
+                        var obj = bus.from_http_body(path, body)
+                    } catch (e) {
+                        console.error('Error: PUT body was not valid json', e)
+                        res.statusCode = 500
+                        res.end()
+                        return
+                    }
+                    cbus.save(obj)
+                    res.statusCode = 200
+                    res.end()
+                })
+            }
+        })
+
         // Set up default linked json converters
-        bus.to_http_body = (o) => {
-            var unwrap = (Object.keys(o).length === 2
-                          && '_' in o
-                          && typeof o._ === 'string')
-            // To do: translate pointers as keys
-            return unwrap ? o._ : JSON.stringify(o)
-        }
-        bus.from_http_body = (o) => {}
+        if (bus.options.braid_mode_test) {
+            bus.to_http_body = (o) => JSON.stringify(o.val)
+            bus.state = bus.braid_proxy()
+        } else
+            bus.to_http_body = (o) => {
+                var unwrap = (Object.keys(o).length === 2
+                              && '_' in o
+                              && typeof o._ === 'string')
+                // To do: translate pointers as keys
+                return unwrap ? o._ : JSON.stringify(o)
+            }
+
+        bus.from_http_body = (key, body) => ({
+            key,
+            val: JSON.parse(body)
+        })
 
         // Serve Client Coffee
         bus.serve_client_coffee()

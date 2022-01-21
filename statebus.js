@@ -1197,7 +1197,366 @@
         })
     }
 
-    var sb = (function sb () {
+
+    // Old Proxy Prototype
+    if (true) {
+        var sb = (function sb () {
+            // I have the cache behind the scenes
+            // Each proxy has a target object -- the raw data on cache
+            // If we're proxying a {_: ...} singleton then ...
+
+            function item_proxy (base, o) {
+                if (typeof o === 'number'
+                    || typeof o === 'string'
+                    || typeof o === 'boolean'
+                    || o === undefined
+                    || o === null
+                    || typeof o === 'function') return o
+
+                return new Proxy(o, {
+                    get: function get(o, k) {
+                        if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
+                            return undefined
+                        k = underscore_escape(k)
+                        return item_proxy(base, o[k])
+                    },
+                    set: function set(o, k, v) {
+                        var result = o[underscore_escape(k)] = v
+                        bus.save(base)
+                        return result
+                    },
+                    has: function has(o, k) {
+                        return o.hasOwnProperty(underscore_escape(k))
+                    },
+                    deleteProperty: function del (o, k) {
+                        delete o[underscore_escape(k)]
+                    },
+                    apply: function apply (o, This, args) {
+                        return o
+                    }
+                })}
+
+            return new Proxy(cache, {
+                get: function get(o, k) {
+                    if (k in bogus_keys) return o[k]
+                    if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
+                        return undefined
+                    var raw = bus.fetch(k),
+                        obj = raw
+                    while (typeof obj == 'object' && '_' in obj) obj = obj._
+                    return item_proxy(raw, obj)
+                },
+                set: function set(o, k, v) {
+                    if (typeof v === 'number'
+                        || typeof v === 'string'
+                        || typeof v === 'boolean'
+                        || v === undefined
+                        || v === null
+                        || typeof v === 'function'
+                        || Array.isArray(v))
+                        v = {_:v}
+                    else
+                        v = bus.clone(v)
+                    v.key = k
+                    bus.save(v)
+                },
+                // In future, this might check if there's a .to_fetch function OR
+                // something in the cache:
+                //
+                // has: function has(o, k) {
+                //     return k in o
+                // },
+                // ... but I haven't had a need yet.
+                deleteProperty: function del (o, k) {
+                    bus.delete(underscore_escape(k))
+                }
+            })
+        })()
+
+
+        // ******** State (Proxy) API *********
+        //
+        // The top-level state[..] object translates pointers of the
+        // special form:
+        //
+        //    {key: <s>, _: *}
+        //
+        // Examples:
+        //
+        //    state['uninitialized']
+        //    >> undefined
+        //
+        //    state['uninitialized'] = {}
+        //    >> {key: 'uninitialized'}
+        //
+        //    state['uninitialized'] = {a: 3}
+        //    >> {key: 'uninitialized', a: 3}
+        //
+        //    state['uninitialized'] = []
+        //    >> {key: 'uninitialized', _: []}
+        //
+        //    delete state['uninitialized']
+        //    state['uninitialized']
+        //    >> undefined
+        //
+        // ** Rules
+        //  Setting:
+        //    - Escape-translate each field recursively
+        //    - If setting an object, put each field directly on it
+        //    - If setting anything else, put it into ._
+        //
+        //  Getting:
+        //    - If it has unescaped fields other than ._, return object with them
+        //    - Otherwise, return ._
+        //    - Unescape all fields
+
+        var strict_mode = (function () {return !this})()
+        function pget (base, o, k) {
+            // console.log('pget:', {base, o, k})
+
+            if (base) {
+                o = o[k]
+
+                // If new base, update and subscribe
+                if (typeof o == 'object' && 'key' in o) {
+                    base = o
+                    bus.fetch(o.key)
+                }
+            } else {
+                // We are getting from the Root
+                o = bus.fetch(k)
+                // console.log('pget: fetched', k, 'and got', o)
+                base = o
+                if (bus.validate(o, {key: '*', '?_': '*'})) {
+                    // console.log('pget: jumping into the _')
+                    o = o._
+                }
+                if (typeof o === 'object' && o.key)
+                    base = o
+            }
+
+            // Follow symlinks
+            if (typeof o == 'object' && 'key' in o && '_' in o) {
+                // Note: I don't actually need this recursion here, because
+                // recursively linked state cannot be created by the proxy API.
+                // So it can be undefined behavior.
+                var tmp = pget(base, o, '_')
+                base = tmp[0]
+                o = tmp[1]
+            }
+
+            return [base, o]
+        }
+
+        function proxy_encode_val (x) {
+            // Arrays
+            if (Array.isArray(x)) {
+                var result = []
+                for (var i=0; i < x.length; i++)
+                    result[i] = proxy_encode_val(x[i])
+                return result
+            }
+
+            // Objects
+            else if (typeof x === 'object') {
+                // Actual objects need their keys translated
+                var result = {}
+                for (var k in x)
+                    result[underscore_escape(k)] = proxy_encode_val(x[k])
+                return result
+            }
+
+            // Proxieds: already have JSON, stored inside. Return it.
+            else if (typeof x === 'function' && x[symbols.is_proxy]) {
+                return x()
+            }
+
+            // Everything else return
+            return x
+        }
+        function proxy_decode_json (json) {
+            // Returns data for proxies
+            //  - Remove keys
+            //  - Translate
+
+            // Root objects of special form
+            if (bus.validate(json, {key: '*', '_': '*'}))
+                return proxy_decode_json(json._)
+
+            // Arrays
+            if (Array.isArray(json)) {
+                var arr = json.slice()
+                for (var i=0; i<arr.length; i++)
+                    arr[i] = proxy_decode_json(arr[i])
+                return arr
+            }
+
+            // Objects
+            if (typeof json === 'object' && json !== null) {
+                var obj = {}
+                for (var k in json)
+                    if (k !== 'key')
+                        obj[underscore_unescape(k)] = proxy_decode_json(json[k])
+                return obj
+            }
+
+            // Other primitives just return
+            return json
+        }
+
+        if (nodejs) var util = require('util')
+        function make_proxy (base, o) {
+            if (!symbols)
+                symbols = {is_proxy: Symbol('is_proxy'),
+                           get_json: Symbol('get_json'),
+                           get_base: Symbol('get_base')}
+
+            if (typeof o !== 'object' || o === null) return o
+
+            function get_json() {
+                // Pop up to parent if this is a singleton array.
+                // We know it's a singleton array if base._ === x(), and base is
+                // of the form {key: *, _: x}
+                if (base && base._ && Object.keys(base).length === 2
+                    && base._ === o)
+                    return base
+
+                // Otherwise return x's JSON.
+                return o
+            }
+
+            // Javascript won't let us function call a proxy unless the "target"
+            // is a function.  So we make a dummy target, and don't use it.
+            var dummy_obj = function () {}
+            return new Proxy(dummy_obj, {
+                get: function (dummy_obj, k) {
+                    // console.log('get:', k, '::'+typeof k, 'on', o)
+
+                    // Print something nice for Node console inspector
+                    if (nodejs && k === util.inspect.custom) {
+                        if (o == bus.cache)
+                            return function () {return 'state'+bus.toString().substr(3)}
+                        return function () {return 'p: '+util.format(proxy_decode_json(o))}
+                    }
+                    if (k in bogus_keys) return o[k]
+                    // Proxies distinguish themselves via proxy.is_proxy == true
+                    if (k === symbols.is_proxy) return true
+                    if (k === symbols.get_json) return get_json()
+                    if (k === symbols.get_base) return base
+                    if (k === Symbol.isConcatSpreadable) return Array.isArray(o)
+                    if (k === Symbol.toPrimitive) return function () {
+                        return JSON.stringify(proxy_decode_json(o))
+                    }
+                    if (typeof k === 'symbol') {
+                        console.warn('Got request for weird symbol', k)
+                        return undefined
+                    }
+
+                    var tmp2 = pget(base, o, underscore_escape(k))
+                    var base2 = tmp2[0]
+                    var o2 = tmp2[1]
+
+                    // console.log('returning proxy on', base2, o2)
+                    return make_proxy(base2, o2)
+                },
+                set: function (dummy_obj, k, v) {
+                    // console.log('set:', {base, o, k, v})
+
+                    if (base) {
+                        var encoded_v = o[underscore_escape(k)] = proxy_encode_val(v)
+                        // console.log('  set: saving', encoded_v, 'into', base)
+
+                        // Collapse state of the form:
+                        //    {key: '*', _: {foo: bar, ...}}
+                        // down to:
+                        //    {key: '*', foo: bar}
+                        if (base._
+                            && Object.keys(base).length === 2
+                            && typeof base._ === 'object'
+                            && base._ !== null
+                            && !Array.isArray(base._)
+                            && !base._.key
+                            && Object.keys(base._).length !== 0) {
+                            // console.log('Collapsing', JSON.stringify(base))
+                            for (var k2 in base._)
+                                base[k2] = base._[k2]
+                            delete base._
+                        }
+
+                        bus.save(base)
+                    }
+
+                    // Saving into top-level state
+                    else {
+                        var encoded_v = proxy_encode_val(v)
+                        // console.log('  set top-level:', {v, encoded_v})
+
+                        // Setting a top-level object to undefined wipes it out
+                        if (v === undefined)
+                            encoded_v = {key: k}
+
+                        // Prefix with _: anything that is:
+                        else if (// A proxy to another state
+                            (typeof v === 'object' && v[symbols.is_proxy])
+                            // An empty {} object
+                                || (typeof v === 'object' && Object.keys(v).length === 0)
+                            // A number, bool, string, function, etc
+                                || typeof v !== 'object' || v === null
+                            // An array
+                                || Array.isArray(v))
+                            encoded_v = {_: encoded_v}
+                        encoded_v.key = k
+
+                        // console.log('  set top-level: now encoded_v is', encoded_v)
+                        bus.save(encoded_v)
+                    }
+
+                    var newbase = (encoded_v && encoded_v.key) ? encoded_v : base
+                    return true
+                },
+                has: function has(O, k) {
+                    // XXX QUESTIONS:
+                    //
+                    //  - Do I want this to return true if there's a .to_fetch()
+                    //    function for this o, k?
+                    //
+                    //  - Does this need to do a fetch as well?
+                    //
+                    //  - For a keyed object, should this do a loading() check?
+                    return o.hasOwnProperty(underscore_escape(k))
+                },
+                deleteProperty: function del (O, k) {
+                    if (base) {
+                        // console.log('  deleting:', underscore_escape(k), 'of', o)
+                        delete o[underscore_escape(k)]   // Deleting innards
+                        if (Object.keys(o).length === 1 && o.key)
+                            o._ = {}
+                        bus.save(base)
+                    }
+                    else
+                        bus.delete(underscore_escape(k)) // Deleting top-level
+                },
+                apply: function apply (f, This, args) { return get_json() }
+            })
+        }
+        if (nodejs || window.Proxy)
+            var state = make_proxy(null, cache)
+
+        // So chrome can print out proxy objects decently
+        if (!nodejs)
+            window.devtoolsFormatters = [{
+                header: function (x) {
+                    return x[symbols.is_proxy] &&
+                        ['span', {style: 'background-color: #feb; padding: 3px;'},
+                         JSON.stringify(proxy_decode_json(x()))]
+                },
+                hasBody: function (x) {return false}
+            }]
+    }
+
+    // ******************
+    // Braid Test Mode Proxy
+    function braid_proxy () {
         // I have the cache behind the scenes
         // Each proxy has a target object -- the raw data on cache
         // If we're proxying a {_: ...} singleton then ...
@@ -1214,19 +1573,18 @@
                 get: function get(o, k) {
                     if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
                         return undefined
-                    k = encode_field(k)
-                    return item_proxy(base, o[k])
+                    return item_proxy(base, o[underscore_escape(k)])
                 },
                 set: function set(o, k, v) {
-                    var result = o[encode_field(k)] = v
+                    var result = o[underscore_escape(k)] = v
                     bus.save(base)
                     return result
                 },
                 has: function has(o, k) {
-                    return o.hasOwnProperty(encode_field(k))
+                    return o.hasOwnProperty(underscore_escape(k))
                 },
                 deleteProperty: function del (o, k) {
-                    delete o[encode_field(k)]
+                    delete o[underscore_escape(k)]
                 },
                 apply: function apply (o, This, args) {
                     return o
@@ -1235,27 +1593,15 @@
 
         return new Proxy(cache, {
             get: function get(o, k) {
-                if (k in bogus_keys) return o[k]
                 if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
                     return undefined
-                var raw = bus.fetch(k),
-                    obj = raw
-                while (typeof obj == 'object' && '_' in obj) obj = obj._
-                return item_proxy(raw, obj)
+                if (k in bogus_keys)
+                    return o[k]
+                var base = bus.fetch(k)
+                return item_proxy(base, base.val)
             },
-            set: function set(o, k, v) {
-                if (typeof v === 'number'
-                    || typeof v === 'string'
-                    || typeof v === 'boolean'
-                    || v === undefined
-                    || v === null
-                    || typeof v === 'function'
-                    || Array.isArray(v))
-                    v = {_:v}
-                else
-                    v = bus.clone(v)
-                v.key = k
-                bus.save(v)
+            set: function set(o, key, val) {
+                bus.save({key, val})
             },
             // In future, this might check if there's a .to_fetch function OR
             // something in the cache:
@@ -1265,290 +1611,10 @@
             // },
             // ... but I haven't had a need yet.
             deleteProperty: function del (o, k) {
-                bus.delete(encode_field(k))
+                bus.delete(underscore_escape(k))
             }
         })
-    })()
-
-
-    // ******** State (Proxy) API *********
-    //
-    // The top-level state[..] object translates pointers of the
-    // special form:
-    //
-    //    {key: <s>, _: *}
-    //
-    // Examples:
-    //
-    //    state['uninitialized']
-    //    >> undefined
-    //
-    //    state['uninitialized'] = {}
-    //    >> {key: 'uninitialized'}
-    //
-    //    state['uninitialized'] = {a: 3}
-    //    >> {key: 'uninitialized', a: 3}
-    //
-    //    state['uninitialized'] = []
-    //    >> {key: 'uninitialized', _: []}
-    //
-    //    delete state['uninitialized']
-    //    state['uninitialized']
-    //    >> undefined
-    //
-    // ** Rules
-    //  Setting:
-    //    - Escape-translate each field recursively
-    //    - If setting an object, put each field directly on it
-    //    - If setting anything else, put it into ._
-    //
-    //  Getting:
-    //    - If it has unescaped fields other than ._, return object with them
-    //    - Otherwise, return ._
-    //    - Unescape all fields
-
-    var strict_mode = (function () {return !this})()
-    function pget (base, o, k) {
-        // console.log('pget:', {base, o, k})
-
-        if (base) {
-            o = o[k]
-
-            // If new base, update and subscribe
-            if (typeof o == 'object' && 'key' in o) {
-                base = o
-                bus.fetch(o.key)
-            }
-        } else {
-            // We are getting from the Root
-            o = bus.fetch(k)
-            // console.log('pget: fetched', k, 'and got', o)
-            base = o
-            if (bus.validate(o, {key: '*', '?_': '*'})) {
-                // console.log('pget: jumping into the _')
-                o = o._
-            }
-            if (typeof o === 'object' && o.key)
-                base = o
-        }
-
-        // Follow symlinks
-        if (typeof o == 'object' && 'key' in o && '_' in o) {
-            // Note: I don't actually need this recursion here, because
-            // recursively linked state cannot be created by the proxy API.
-            // So it can be undefined behavior.
-            var tmp = pget(base, o, '_')
-            base = tmp[0]
-            o = tmp[1]
-        }
-
-        return [base, o]
     }
-
-    function proxy_encode_val (x) {
-        // Arrays
-        if (Array.isArray(x)) {
-            var result = []
-            for (var i=0; i < x.length; i++)
-                result[i] = proxy_encode_val(x[i])
-            return result
-        }
-
-        // Objects
-        else if (typeof x === 'object') {
-            // Actual objects need their keys translated
-            var result = {}
-            for (var k in x)
-                result[encode_field(k)] = proxy_encode_val(x[k])
-            return result
-        }
-
-        // Proxieds: already have JSON, stored inside. Return it.
-        else if (typeof x === 'function' && x[symbols.is_proxy]) {
-            return x()
-        }
-
-        // Everything else return
-        return x
-    }
-    function proxy_decode_json (json) {
-        // Returns data for proxies
-        //  - Remove keys
-        //  - Translate 
-
-        // Root objects of special form
-        if (bus.validate(json, {key: '*', '_': '*'}))
-            return proxy_decode_json(json._)
-
-        // Arrays
-        if (Array.isArray(json)) {
-            var arr = json.slice()
-            for (var i=0; i<arr.length; i++)
-                arr[i] = proxy_decode_json(arr[i])
-            return arr
-        }
-
-        // Objects
-        if (typeof json === 'object' && json !== null) {
-            var obj = {}
-            for (var k in json)
-                if (k !== 'key')
-                    obj[decode_field(k)] = proxy_decode_json(json[k])
-            return obj
-        }
-
-        // Other primitives just return
-        return json
-    }
-
-    if (nodejs) var util = require('util')
-    function make_proxy (base, o) {
-        if (!symbols)
-            symbols = {is_proxy: Symbol('is_proxy'),
-                       get_json: Symbol('get_json'),
-                       get_base: Symbol('get_base')}
-
-        if (typeof o !== 'object' || o === null) return o
-
-        function get_json() {
-            // Pop up to parent if this is a singleton array.
-            // We know it's a singleton array if base._ === x(), and base is
-            // of the form {key: *, _: x}
-            if (base && base._ && Object.keys(base).length === 2
-                && base._ === o)
-                return base
-
-            // Otherwise return x's JSON.
-            return o
-        }
-
-        // Javascript won't let us function call a proxy unless the "target"
-        // is a function.  So we make a dummy target, and don't use it.
-        var dummy_obj = function () {}
-        return new Proxy(dummy_obj, {
-            get: function (dummy_obj, k) {
-                // console.log('get:', k, '::'+typeof k, 'on', o)
-
-                // Print something nice for Node console inspector
-                if (nodejs && k === util.inspect.custom) {
-                    if (o == bus.cache)
-                        return function () {return 'state'+bus.toString().substr(3)}
-                    return function () {return 'p: '+util.format(proxy_decode_json(o))}
-                }
-                if (k in bogus_keys) return o[k]
-                // Proxies distinguish themselves via proxy.is_proxy == true
-                if (k === symbols.is_proxy) return true
-                if (k === symbols.get_json) return get_json()
-                if (k === symbols.get_base) return base
-                if (k === Symbol.isConcatSpreadable) return Array.isArray(o)
-                if (k === Symbol.toPrimitive) return function () {
-                    return JSON.stringify(proxy_decode_json(o))
-                }
-                if (typeof k === 'symbol') {
-                    console.warn('Got request for weird symbol', k)
-                    return undefined
-                }
-
-                var tmp2 = pget(base, o, encode_field(k))
-                var base2 = tmp2[0]
-                var o2 = tmp2[1]
-
-                // console.log('returning proxy on', base2, o2)
-                return make_proxy(base2, o2)
-            },
-            set: function (dummy_obj, k, v) {
-                // console.log('set:', {base, o, k, v})
-
-                if (base) {
-                    var encoded_v = o[encode_field(k)] = proxy_encode_val(v)
-                    // console.log('  set: saving', encoded_v, 'into', base)
-
-                    // Collapse state of the form:
-                    //    {key: '*', _: {foo: bar, ...}}
-                    // down to:
-                    //    {key: '*', foo: bar}
-                    if (base._
-                        && Object.keys(base).length === 2
-                        && typeof base._ === 'object'
-                        && base._ !== null
-                        && !Array.isArray(base._)
-                        && !base._.key
-                        && Object.keys(base._).length !== 0) {
-                        // console.log('Collapsing', JSON.stringify(base))
-                        for (var k2 in base._)
-                            base[k2] = base._[k2]
-                        delete base._
-                    }
-                        
-                    bus.save(base)
-                }
-
-                // Saving into top-level state
-                else {
-                    var encoded_v = proxy_encode_val(v)
-                    // console.log('  set top-level:', {v, encoded_v})
-
-                    // Setting a top-level object to undefined wipes it out
-                    if (v === undefined)
-                        encoded_v = {key: k}
-
-                    // Prefix with _: anything that is:
-                    else if (// A proxy to another state
-                        (typeof v === 'object' && v[symbols.is_proxy])
-                        // An empty {} object
-                        || (typeof v === 'object' && Object.keys(v).length === 0)
-                        // A number, bool, string, function, etc
-                        || typeof v !== 'object' || v === null
-                        // An array
-                        || Array.isArray(v))
-                        encoded_v = {_: encoded_v}
-                    encoded_v.key = k
-
-                    // console.log('  set top-level: now encoded_v is', encoded_v)
-                    bus.save(encoded_v)
-                }
-
-                var newbase = (encoded_v && encoded_v.key) ? encoded_v : base
-                return true
-            },
-            has: function has(O, k) {
-                // XXX QUESTIONS:
-                //
-                //  - Do I want this to return true if there's a .to_fetch()
-                //    function for this o, k?
-                //
-                //  - Does this need to do a fetch as well?
-                //
-                //  - For a keyed object, should this do a loading() check?
-                return o.hasOwnProperty(encode_field(k))
-            },
-            deleteProperty: function del (O, k) {
-                if (base) {
-                    // console.log('  deleting:', encode_field(k), 'of', o)
-                    delete o[encode_field(k)]   // Deleting innards
-                    if (Object.keys(o).length === 1 && o.key)
-                        o._ = {}
-                    bus.save(base)
-                }
-                else
-                    bus.delete(encode_field(k)) // Deleting top-level
-            },
-            apply: function apply (f, This, args) { return get_json() }
-        })
-    }
-    if (nodejs || window.Proxy)
-        var state = make_proxy(null, cache)
-
-    // So chrome can print out proxy objects decently
-    if (!nodejs)
-        window.devtoolsFormatters = [{
-            header: function (x) {
-                return x[symbols.is_proxy] &&
-                    ['span', {style: 'background-color: #feb; padding: 3px;'},
-                     JSON.stringify(proxy_decode_json(x()))]
-            },
-            hasBody: function (x) {return false}
-        }]
 
     // ******************
     // Network client
@@ -1779,10 +1845,10 @@
             }
         return obj
     }
-    function encode_field(k) {
+    function underscore_escape(k) {
         return k.replace(/(_(keys?|time)?$|^key$)/, '$1_')
     }
-    function decode_field (k) {
+    function underscore_unescape (k) {
         return k.replace(/(_$)/, '')
     }
 
@@ -2233,11 +2299,11 @@
     var api = ['cache backup_cache fetch save forget del fire dirty fetch_once',
                'subspace bindings run_handler bind unbind reactive uncallback',
                'versions new_version',
-               'make_proxy state sb',
+               'make_proxy braid_proxy state sb',
                'funk_key funk_name funks key_id key_name id',
                'pending_fetches fetches_in fetches_out loading_keys loading once',
                'global_funk busses rerunnable_funks',
-               'encode_field decode_field translate_keys apply_patch',
+               'underscore_escape underscore_unescape translate_keys apply_patch',
                'net_mount net_automount message_method',
                'parse Set One_To_Many clone extend deep_map deep_equals prune validate sorta_diff log deps'
               ].join(' ').split(' ')

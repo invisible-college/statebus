@@ -1,6 +1,6 @@
 {
   "name": "statebus",
-  "version": "6.1.10",
+  "version": "6.1.11",
   "description": "Synchronize state.",
   "main": "statebus.js",
   "scripts": {
@@ -10,6 +10,7 @@
   "repository": "invisible-college/statebus",
   "dependencies": {
     "bcrypt-nodejs": "0.0.3",
+    "braidify": "^0.1.18",
     "chokidar": "^3.4.0",
     "coffeescript": "^2.3.1",
     "cookie": "^0.3.1",
