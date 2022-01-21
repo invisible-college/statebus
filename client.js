@@ -57,6 +57,61 @@
         return {clientid: me.client}
     }
 
+    function braid_http_mount (prefix, url) {
+        var preprefix = prefix.slice(0,-1)
+        var has_prefix = new RegExp('^' + preprefix)
+        var client_fetched_keys = new bus.Set()
+        if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
+        function add_prefix (key) {
+            return is_absolute.test(key) ? key : preprefix + key }
+        function rem_prefix (key) {
+            return has_prefix.test(key) ? key.substr(preprefix.length) : key }
+        function add_prefixes (obj) {
+            return bus.translate_keys(bus.clone(obj), add_prefix) }
+        function rem_prefixes (obj) {
+            return bus.translate_keys(bus.clone(obj), rem_prefix) }
+
+        bus(prefix).to_save   = function (obj, t) {
+            console.log('saving', prefix, obj)
+            bus.save.fire(obj)
+
+            // var x = {save: obj}
+            // if (t.version) x.version = t.version
+            // if (t.parents) x.parents = t.parents
+            // if (t.patch)   x.patch   = t.patch
+            // if (t.patch)   x.save    = rem_prefix(x.save.key)
+
+            braid_fetch(url + obj.key,
+                        {
+                            method: 'put',
+                            body: JSON.stringify(obj.val)
+                        })
+        }
+
+        bus(prefix).to_fetch  = function (key, t) {
+            try {
+                braid_fetch(url + rem_prefix(key),
+                            {
+                                method: 'get',
+                                subscribe: true
+                            }
+                           ).andThen( x => {
+                               t.return({
+                                   key,
+                                   val: add_prefixes(JSON.parse(x.body))
+                               })
+                           })
+            } catch (e) {
+                console.error('Braid-HTTP network error:', e)
+            }
+            client_fetched_keys.add(key)
+        }
+        bus(prefix).to_forget = function (key) {
+            // send({forget: key}),
+            client_fetched_keys.delete(key)
+        }
+    }
+
 
     // ****************
     // Manipulate Localstorage
@@ -393,8 +448,11 @@
 
         improve_react()
         window.ignore_flashbacks = false
-        if (statebus_server !== 'none')
+        if (statebus_server !== 'none') {
             bus.net_mount ('/*', statebus_server)
+            if (clientjs_option('braid_mode_test'))
+                braid_http_mount ('http/*', statebus_server)
+        }
 
         if (window.statebus_backdoor) {
             window.master = statebus()
@@ -402,16 +460,19 @@
         }
         bus.net_automount()
 
-        // bus('*').to_save = function (obj) { bus.save.fire(obj) }
-        bus('/new/*').to_save = function (o) {
-            if (o.key.split('/').length > 3) return
+        // This /new/* code is deprecated
+        if (!clientjs_option('braid_mode_test')) {
+            bus('/new/*').to_save = function (o) {
+                if (o.key.split('/').length > 3) return
 
-            var old_key = o.key
-            o.key = old_key + '/' + Math.random().toString(36).substring(2,12)
-            statebus.cache[o.key] = o
-            delete statebus.cache[old_key]
-            bus.save(o)
+                var old_key = o.key
+                o.key = old_key + '/' + Math.random().toString(36).substring(2,12)
+                statebus.cache[o.key] = o
+                delete statebus.cache[old_key]
+                bus.save(o)
+            }
         }
+
         load_coffee()
 
         statebus.compile_coffee = compile_coffee
