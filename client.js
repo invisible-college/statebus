@@ -382,8 +382,11 @@
         react_render = React.version >= '0.14.' ? ReactDOM.render : React.render
         make_client_statebus_maker()
         window.bus = window.statebus()
-        window.bus.label = 'bus'
-        window.sb = bus.sb
+        bus.label = 'bus'
+        if (clientjs_option('braid_mode_test'))
+            bus.state = bus.braid_proxy()
+        else
+            window.sb = bus.sb
         statebus.widget = React_View
         statebus.create_react_class = React_View
         statebus.createReactClass = React_View
