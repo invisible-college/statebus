@@ -1625,7 +1625,7 @@
     }
 
     function link (url) {
-        var result = {key: url}
+        var result = fetch(url)
         result[symbols.is_link] = true
         return result
     }
@@ -1876,9 +1876,10 @@
     // Translating fields of objects
 
     // Recurse through JSON and swap all object fields with other field names,
-    // according to the function f(field).  Returns a copy.
+    // according to the function f(field, object).  Returns a copy.
     //
-    // f(field) takes a string and returns the new field name.
+    // f(field, object) takes a string `field` and returns the new field name
+    // for `object`.
     function translate_fields (input, f) {
         var result
 
@@ -1894,7 +1895,7 @@
         else if (typeof input === 'object') {
             var new_obj = {}
             for (var k in input)
-                new_obj[f(k)] = translate_fields(input[k], f)
+                new_obj[f(k, input)] = translate_fields(input[k], f)
             result = new_obj
         }
 
@@ -1905,8 +1906,11 @@
         return result
     }
     // Remove underscore from _key
-    function keyed_2_proxied (k) {
-        return k.replace(/^(_*)_key$/, '$1key')
+    function keyed_2_proxied (k, object) {
+        if (object[symbols.is_link])
+            return k
+        else
+            return k.replace(/^(_*)_key$/, '$1key')
     }
     // Add underscore to key
     function proxied_2_keyed (k) {
@@ -2360,7 +2364,7 @@
     var api = ['cache backup_cache fetch save forget del fire dirty fetch_once',
                'subspace bindings run_handler bind unbind reactive uncallback',
                'versions new_version',
-               'make_proxy braid_proxy state sb',
+               'make_proxy braid_proxy state sb link',
                'funk_key funk_name funks key_id key_name id',
                'pending_fetches fetches_in fetches_out loading_keys loading once',
                'global_funk busses rerunnable_funks',
