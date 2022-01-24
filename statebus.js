@@ -1217,19 +1217,19 @@
                     get: function get(o, k) {
                         if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
                             return undefined
-                        k = underscore_escape(k)
+                        k = escape_keys(k)
                         return item_proxy(base, o[k])
                     },
                     set: function set(o, k, v) {
-                        var result = o[underscore_escape(k)] = v
+                        var result = o[escape_keys(k)] = v
                         bus.save(base)
                         return result
                     },
                     has: function has(o, k) {
-                        return o.hasOwnProperty(underscore_escape(k))
+                        return o.hasOwnProperty(escape_keys(k))
                     },
                     deleteProperty: function del (o, k) {
-                        delete o[underscore_escape(k)]
+                        delete o[escape_keys(k)]
                     },
                     apply: function apply (o, This, args) {
                         return o
@@ -1268,7 +1268,7 @@
                 // },
                 // ... but I haven't had a need yet.
                 deleteProperty: function del (o, k) {
-                    bus.delete(underscore_escape(k))
+                    bus.delete(escape_keys(k))
                 }
             })
         })()
@@ -1362,7 +1362,7 @@
                 // Actual objects need their keys translated
                 var result = {}
                 for (var k in x)
-                    result[underscore_escape(k)] = proxy_encode_val(x[k])
+                    result[escape_keys(k)] = proxy_encode_val(x[k])
                 return result
             }
 
@@ -1396,7 +1396,7 @@
                 var obj = {}
                 for (var k in json)
                     if (k !== 'key')
-                        obj[underscore_unescape(k)] = proxy_decode_json(json[k])
+                        obj[unescape_keys(k)] = proxy_decode_json(json[k])
                 return obj
             }
 
@@ -1452,7 +1452,7 @@
                         return undefined
                     }
 
-                    var tmp2 = pget(base, o, underscore_escape(k))
+                    var tmp2 = pget(base, o, escape_keys(k))
                     var base2 = tmp2[0]
                     var o2 = tmp2[1]
 
@@ -1463,7 +1463,7 @@
                     // console.log('set:', {base, o, k, v})
 
                     if (base) {
-                        var encoded_v = o[underscore_escape(k)] = proxy_encode_val(v)
+                        var encoded_v = o[escape_keys(k)] = proxy_encode_val(v)
                         // console.log('  set: saving', encoded_v, 'into', base)
 
                         // Collapse state of the form:
@@ -1523,18 +1523,18 @@
                     //  - Does this need to do a fetch as well?
                     //
                     //  - For a keyed object, should this do a loading() check?
-                    return o.hasOwnProperty(underscore_escape(k))
+                    return o.hasOwnProperty(escape_keys(k))
                 },
                 deleteProperty: function del (O, k) {
                     if (base) {
-                        // console.log('  deleting:', underscore_escape(k), 'of', o)
-                        delete o[underscore_escape(k)]   // Deleting innards
+                        // console.log('  deleting:', escape_keys(k), 'of', o)
+                        delete o[escape_keys(k)]   // Deleting innards
                         if (Object.keys(o).length === 1 && o.key)
                             o._ = {}
                         bus.save(base)
                     }
                     else
-                        bus.delete(underscore_escape(k)) // Deleting top-level
+                        bus.delete(escape_keys(k)) // Deleting top-level
                 },
                 apply: function apply (f, This, args) { return get_json() }
             })
@@ -1556,41 +1556,55 @@
 
     // ******************
     // Braid Test Mode Proxy
-    function braid_proxy () {
-        // I have the cache behind the scenes
-        // Each proxy has a target object -- the raw data on cache
-        // If we're proxying a {_: ...} singleton then ...
 
+    var symbols = {is_proxy: Symbol('is_proxy'),
+                   get_json: Symbol('get_json'),
+                   get_base: Symbol('get_base')}
+    function braid_proxy () {
         function item_proxy (base, o) {
+
+            // We only create a proxy for objects.
             if (typeof o === 'number'
                 || typeof o === 'string'
                 || typeof o === 'boolean'
                 || o === undefined
                 || o === null
-                || typeof o === 'function') return o
+                || typeof o === 'function')
+                // Everything else passes through unscathed
+                return o
+
+            // We recursively descend through {key: ...} links
+            if (typeof o === 'object' && 'key' in o) {
+                var new_base = bus.fetch(o.key)
+                return item_proxy(new_base, new_base.val)
+            }
 
             return new Proxy(o, {
                 get: function get(o, k) {
-                    if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
+                    if (k === 'inspect'
+                        || k === 'valueOf' || typeof k === 'symbol')
                         return undefined
-                    return item_proxy(base, o[underscore_escape(k)])
+                    return item_proxy(base, o[proxy_2_keyed(k)])
                 },
                 set: function set(o, k, v) {
-                    var result = o[underscore_escape(k)] = v
+                    var value = translate_fields(v, proxy_2_keyed)
+                    o[proxy_2_keyed(k)] = value
                     bus.save(base)
-                    return result
+                    return value
                 },
                 has: function has(o, k) {
-                    return o.hasOwnProperty(underscore_escape(k))
+                    return o.hasOwnProperty(proxy_2_keyed(k))
                 },
                 deleteProperty: function del (o, k) {
-                    delete o[underscore_escape(k)]
+                    delete o[proxy_2_keyed(k)]
                 },
                 apply: function apply (o, This, args) {
                     return o
                 }
             })}
 
+
+        // The top-level Proxy object holds HTTP resources
         return new Proxy(cache, {
             get: function get(o, k) {
                 if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
@@ -1601,20 +1615,18 @@
                 return item_proxy(base, base.val)
             },
             set: function set(o, key, val) {
-                bus.save({key, val})
+                bus.save({key: key, val: val})
             },
-            // In future, this might check if there's a .to_fetch function OR
-            // something in the cache:
-            //
-            // has: function has(o, k) {
-            //     return k in o
-            // },
-            // ... but I haven't had a need yet.
             deleteProperty: function del (o, k) {
-                bus.delete(underscore_escape(k))
+                bus.delete(proxy_2_keyed(k))
             }
         })
     }
+
+    if ((nodejs && bus.options && bus.options.braid_mode_test)
+        || (!nodejs && window.Proxy && clientjs_option('braid_mode_test')))
+        state = braid_proxy()
+
 
     // ******************
     // Network client
@@ -1822,8 +1834,8 @@
     }
 
 
-    // ******************
-    // Key translation
+    // ************************************************
+    // Translating the URLs under keys of state
     function translate_keys (obj, f) {
         // Recurse through each element in arrays
         if (Array.isArray(obj))
@@ -1845,11 +1857,53 @@
             }
         return obj
     }
-    function underscore_escape(k) {
+    function escape_keys(k) {
         return k.replace(/(_(keys?|time)?$|^key$)/, '$1_')
     }
-    function underscore_unescape (k) {
+    function unescape_keys (k) {
         return k.replace(/(_$)/, '')
+    }
+
+
+    // ************************************************
+    // Translating fields of objects
+
+    // Recurse through JSON and swap all object fields with other field names,
+    // according to the function f(field).  Returns a copy.
+    //
+    // f(field) takes a string and returns the new field name.
+    function translate_fields (input, f) {
+        var result
+
+        // Recurse through each element in arrays
+        if (Array.isArray(input)) {
+            var new_array = input.slice()
+            for (var i=0; i < input.length; i++)
+                new_array[i] = translate_fields(input[i], f)
+            result = new_array
+        }
+
+        // Recurse through each property on objects
+        else if (typeof input === 'object') {
+            var new_obj = {}
+            for (var k in input)
+                new_obj[f(k)] = translate_fields(input[k], f)
+            result = new_obj
+        }
+
+        // Everything else passes through unscathed
+        else
+            result = input
+
+        return result
+    }
+    // Remove underscore from _key
+    function keyed_2_proxy (k) {
+        return k.replace(/^(_*)_key$/, '$1key')
+    }
+    // Add underscore to key
+    function proxy_2_keyed (k) {
+        return k.replace(/^(_*)key$/, '$1_key')
     }
 
 
@@ -2303,7 +2357,8 @@
                'funk_key funk_name funks key_id key_name id',
                'pending_fetches fetches_in fetches_out loading_keys loading once',
                'global_funk busses rerunnable_funks',
-               'underscore_escape underscore_unescape translate_keys apply_patch',
+               'escape_keys unescape_keys translate_keys apply_patch',
+               'keyed_2_proxy proxy_2_keyed translate_fields',
                'net_mount net_automount message_method',
                'parse Set One_To_Many clone extend deep_map deep_equals prune validate sorta_diff log deps'
               ].join(' ').split(' ')

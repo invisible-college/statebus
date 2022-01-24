@@ -294,6 +294,43 @@ test(function url_translation (done) {
     done()
 })
 
+test(function translate_fields (done) {
+    // Translate Statebus -> Proxy format
+    var tests1 = [
+        [{key: 'foo', link: 'boo'}, {key: 'foo', link: 'boo'}],
+        [{_key: 'foo', link: 'boo'}, {key: 'foo', link: 'boo'}],
+        [{__key: 'foo', link: 'boo'}, {_key: 'foo', link: 'boo'}],
+        [[{_key: 'foo', link: 'boo'}], [{key: 'foo', link: 'boo'}]],
+        [{a: [{_key: 'foo'}]}, {a: [{key: 'foo'}]}]
+    ]
+
+    // Translate Proxy -> Statebus format
+    var tests2 = [
+        [{key: 'foo', link: 'boo'}, {_key: 'foo', link: 'boo'}],
+        [{_key: 'foo', link: 'boo'}, {__key: 'foo', link: 'boo'}],
+        [[{_key: 'foo', link: ['boo']}], [{__key: 'foo', link: ['boo']}]]
+    ]
+
+    // Test 1
+    var tests = tests1
+    for (var i=0; i<tests.length; i++) {
+        var trans = bus.translate_fields(tests[i][0], bus.keyed_2_proxy)
+        assert(bus.deep_equals(trans, tests[i][1]),
+               'Bad translation1: ' + i + ' ' + JSON.stringify(trans))
+    }
+
+    // Test 2
+    tests = tests2
+    for (var i=0; i<tests2.length; i++) {
+        var trans = bus.translate_fields(tests[i][0], bus.proxy_2_keyed)
+        assert(bus.deep_equals(trans, tests[i][1]),
+               'Bad translation2: ' + i + ' ' + JSON.stringify(trans))
+    }
+
+    log('Passed translate_fields')
+    done()
+})
+
 test(function basics (done) {
     bus('basic wait').to_fetch = function () {
         setTimeout(function () {bus.save.fire({key:'basic wait', a:1})},
@@ -764,6 +801,101 @@ test(function proxies2 (done) {
     log('bar:', state.bar)
     assert(state.bar.a[1] === 2,
            "Array ref didn't link.\n\t"
+           + JSON.stringify(bus.cache.bar) + '\n\t'
+           + JSON.stringify(bus.cache.array))
+
+    state.undefining = undefined
+    assert(state.undefining === undefined)
+    state.undefining = {a: undefined}
+    log('state.undefining =', state.undefining)
+    // assert(state.undefining.a === undefined)
+    // TODO: fix https://github.com/invisible-college/statebus/issues/34
+    state.undefining = {}
+    assert(!('a' in state.undefining))
+    state.undefining.a = undefined
+    assert('a' in state.undefining)
+    assert(state.undefining.a === undefined)
+
+    state.b = {a: undefined}
+    assert('a' in state.b)
+    assert(state.b.a === undefined)
+    delete state.b.a
+    // TODO: https://github.com/invisible-college/statebus/issues/34
+    assert(!('a' in state.b))
+    assert(state.b.a === undefined)
+
+    return done()
+
+    /*
+      Things I want to test:
+
+      - Setting nested items
+      - Escaping their fields
+      - Calling fetch on them
+      - Converting state[..] to keyed objects internally
+      - has() potentially doing a fetch, or loading()
+      - set() returning a proxy object
+      - console output
+      - node AND chrome
+      - having nice colors and distinctions and shit
+    */
+
+    state.foo = 3
+    // This should set into _
+    console.assert(bus.validate(bus.cache.foo,
+                                {key: 'foo', _: 3}))
+
+
+    state.foo = {a: 5}
+    // This should set directly on it
+    console.assert(bus.validate(bus.cache.foo,
+                                {key: 'foo', a: 5}))
+    state.foo.b = 6
+    console.assert(bus.validate(bus.cache.foo,
+                                {key: 'foo', b: 6}))
+
+    state.bar = [3]
+    state.foo = {a: 3, bar: state.bar}
+
+    bus(() => {
+        state.foo      // foo triggers re-render
+        state.foo.bar  // bar triggers re-render
+        state.foo.a    // triggers re-render too
+    })
+
+    // Getting a linked item should do a fetch
+    bus(() => {
+        state.bar
+    })
+
+    // Getting a normal property should do a fetch
+})
+
+test(function braid_proxies (done) {
+    var bus = require('../statebus').serve({braid_mode_test: true})
+    var state = bus.state
+
+    assert(state.array === undefined)
+    assert(state.bar === undefined)
+
+    state.array = []
+    log('array:', state.array)
+    assert(state.array.length === 0)
+    state.array[0] = 1
+    log('array:', state.array)
+    assert(state.array.length === 1)
+    state.bar = {}
+    log('bar:', state.bar)
+    state.bar = {a: 1}
+    log('bar:', state.bar)
+    assert(state.bar.a === 1)
+    state.bar.a = state.array
+    log('bar:', state.bar)
+    state.array[1] = 2
+    log('array:', state.array)
+    log('bar:', state.bar)
+    assert(state.bar.a[1] !== 2,
+           "Array ref linked.\n\t"
            + JSON.stringify(bus.cache.bar) + '\n\t'
            + JSON.stringify(bus.cache.array))
 

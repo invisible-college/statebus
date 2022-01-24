@@ -60,6 +60,7 @@
     function braid_http_mount (prefix, url) {
         var preprefix = prefix.slice(0,-1)
         var has_prefix = new RegExp('^' + preprefix)
+        var is_absolute = /^https?:\/\//
         var client_fetched_keys = new bus.Set()
         if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
         function add_prefix (key) {
