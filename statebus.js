@@ -1558,6 +1558,7 @@
     // Braid Test Mode Proxy
 
     var symbols = {is_proxy: Symbol('is_proxy'),
+                   is_link: Symbol('is_link'),
                    get_json: Symbol('get_json'),
                    get_base: Symbol('get_base')}
     function braid_proxy () {
@@ -1584,19 +1585,19 @@
                     if (k === 'inspect'
                         || k === 'valueOf' || typeof k === 'symbol')
                         return undefined
-                    return item_proxy(base, o[proxy_2_keyed(k)])
+                    return item_proxy(base, o[proxied_2_keyed(k)])
                 },
                 set: function set(o, k, v) {
-                    var value = translate_fields(v, proxy_2_keyed)
-                    o[proxy_2_keyed(k)] = value
+                    var value = translate_fields(v, proxied_2_keyed)
+                    o[proxied_2_keyed(k)] = value
                     bus.save(base)
                     return value
                 },
                 has: function has(o, k) {
-                    return o.hasOwnProperty(proxy_2_keyed(k))
+                    return o.hasOwnProperty(proxied_2_keyed(k))
                 },
                 deleteProperty: function del (o, k) {
-                    delete o[proxy_2_keyed(k)]
+                    delete o[proxied_2_keyed(k)]
                 },
                 apply: function apply (o, This, args) {
                     return o
@@ -1618,9 +1619,15 @@
                 bus.save({key: key, val: val})
             },
             deleteProperty: function del (o, k) {
-                bus.delete(proxy_2_keyed(k))
+                bus.delete(proxied_2_keyed(k))
             }
         })
+    }
+
+    function link (url) {
+        var result = {key: url}
+        result[symbols.is_link] = true
+        return result
     }
 
     if ((nodejs && bus.options && bus.options.braid_mode_test)
@@ -1898,11 +1905,11 @@
         return result
     }
     // Remove underscore from _key
-    function keyed_2_proxy (k) {
+    function keyed_2_proxied (k) {
         return k.replace(/^(_*)_key$/, '$1key')
     }
     // Add underscore to key
-    function proxy_2_keyed (k) {
+    function proxied_2_keyed (k) {
         return k.replace(/^(_*)key$/, '$1_key')
     }
 
@@ -2358,7 +2365,7 @@
                'pending_fetches fetches_in fetches_out loading_keys loading once',
                'global_funk busses rerunnable_funks',
                'escape_keys unescape_keys translate_keys apply_patch',
-               'keyed_2_proxy proxy_2_keyed translate_fields',
+               'keyed_2_proxied proxied_2_keyed translate_fields',
                'net_mount net_automount message_method',
                'parse Set One_To_Many clone extend deep_map deep_equals prune validate sorta_diff log deps'
               ].join(' ').split(' ')

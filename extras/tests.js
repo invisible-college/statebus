@@ -314,7 +314,7 @@ test(function translate_fields (done) {
     // Test 1
     var tests = tests1
     for (var i=0; i<tests.length; i++) {
-        var trans = bus.translate_fields(tests[i][0], bus.keyed_2_proxy)
+        var trans = bus.translate_fields(tests[i][0], bus.keyed_2_proxied)
         assert(bus.deep_equals(trans, tests[i][1]),
                'Bad translation1: ' + i + ' ' + JSON.stringify(trans))
     }
@@ -322,7 +322,7 @@ test(function translate_fields (done) {
     // Test 2
     tests = tests2
     for (var i=0; i<tests2.length; i++) {
-        var trans = bus.translate_fields(tests[i][0], bus.proxy_2_keyed)
+        var trans = bus.translate_fields(tests[i][0], bus.proxied_2_keyed)
         assert(bus.deep_equals(trans, tests[i][1]),
                'Bad translation2: ' + i + ' ' + JSON.stringify(trans))
     }
@@ -872,7 +872,8 @@ test(function proxies2 (done) {
 })
 
 test(function braid_proxies (done) {
-    var bus = require('../statebus').serve({braid_mode_test: true})
+    var bus = require('../statebus').serve({braid_mode_test: true,
+                                            file_store: false})
     var state = bus.state
 
     assert(state.array === undefined)
