@@ -1591,7 +1591,7 @@
                     var value = translate_fields(v, proxied_2_keyed)
                     o[proxied_2_keyed(k)] = value
                     bus.save(base)
-                    return value
+                    return true
                 },
                 has: function has(o, k) {
                     return o.hasOwnProperty(proxied_2_keyed(k))
@@ -1616,7 +1616,9 @@
                 return item_proxy(base, base.val)
             },
             set: function set(o, key, val) {
-                bus.save({key: key, val: val})
+                bus.save({key: key,
+                          val: translate_fields(val, proxied_2_keyed)})
+                return true
             },
             deleteProperty: function del (o, k) {
                 bus.delete(proxied_2_keyed(k))
