@@ -196,6 +196,20 @@ function import_server (bus, options)
         if (bus.options.braid_mode_test) {
             bus.to_http_body = (o) => JSON.stringify(o.val)
             bus.state = bus.braid_proxy()
+
+            // Disable CORS if it's a braid request and thus we don't need to
+            // worry about backwards compatibility
+            bus.http.use((req, res, next) => {
+                if (req.version || req.parents || req.subscribe
+                    || req.headers.subscribe
+                    || req.method === 'OPTIONS')
+                    // Note: we need to think through exactly which booleans
+                    // should automatically disable cors.  These should be the
+                    // cases in which you're using braid.
+                    free_the_cors(req, res, next)
+                else
+                    next()
+            })
         } else
             bus.to_http_body = (o) => {
                 var unwrap = (Object.keys(o).length === 2
@@ -2447,6 +2461,31 @@ function import_server (bus, options)
     // Automatically make state:// fetch over a websocket
     bus.net_automount()
     return bus
+}
+
+
+// Disables CORS in HTTP servers
+function free_the_cors (req, res, next) {
+    console.log('free the cors!', req.method, req.url)
+
+    // Hey... these headers aren't about CORS!  Let's move them into the braid
+    // libraries:
+    res.setHeader('Range-Request-Allow-Methods', 'PATCH, PUT')
+    res.setHeader('Range-Request-Allow-Units', 'json')
+    res.setHeader("Patches", "OK")
+    // ^^ Actually, it looks like we're going to delete these soon.
+
+    var free_the_cors = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "OPTIONS, HEAD, GET, PUT, UNSUBSCRIBE",
+        "Access-Control-Allow-Headers": "subscribe, peer, version, parents, merge-type, content-type, patches, cache-control"
+    }
+    Object.entries(free_the_cors).forEach(x => res.setHeader(x[0], x[1]))
+    if (req.method === 'OPTIONS') {
+        res.writeHead(200)
+        res.end()
+    } else
+        next()
 }
 
 
