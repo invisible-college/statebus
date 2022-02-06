@@ -1546,9 +1546,12 @@
         if (!nodejs)
             window.devtoolsFormatters = [{
                 header: function (x) {
-                    return x[symbols.is_proxy] &&
-                        ['span', {style: 'background-color: #feb; padding: 3px;'},
-                         JSON.stringify(proxy_decode_json(x()))]
+                    if (x[symbols.is_proxy])
+                        return ['span', {style: 'background-color: #feb; padding: 3px;'},
+                                JSON.stringify(proxy_decode_json(x()))]
+                    else if (x[symbols.is_braid_proxy])
+                        return ['span', {style: 'background-color: #fffbe5; padding: 3px;'},
+                                JSON.stringify(x)]
                 },
                 hasBody: function (x) {return false}
             }]
@@ -1557,10 +1560,12 @@
     // ******************
     // Braid Test Mode Proxy
 
-    var symbols = {is_proxy: Symbol('is_proxy'),
+    var symbols = {is_braid_proxy: Symbol('is_braid_proxy'),
+                   is_proxy: Symbol('is_proxy'),
                    is_link: Symbol('is_link'),
                    get_json: Symbol('get_json'),
-                   get_base: Symbol('get_base')}
+                   get_base: Symbol('get_base')
+                  }
     function braid_proxy () {
         function item_proxy (base, o) {
 
@@ -1582,8 +1587,11 @@
 
             return new Proxy(o, {
                 get: function get(o, k) {
-                    if (k === 'inspect'
-                        || k === 'valueOf' || typeof k === 'symbol')
+                    if (k === 'inspect' || k === 'valueOf')
+                        return undefined
+                    if (k === symbols.is_braid_proxy)
+                        return true
+                    if (typeof k === 'symbol')
                         return undefined
                     return item_proxy(base, o[proxied_2_keyed(k)])
                 },
@@ -2373,7 +2381,7 @@
                'escape_keys unescape_keys translate_keys apply_patch',
                'keyed_2_proxied proxied_2_keyed translate_fields',
                'net_mount net_automount message_method',
-               'parse Set One_To_Many clone extend deep_map deep_equals prune validate sorta_diff log deps'
+               'parse Set One_To_Many clone extend deep_map deep_equals prune validate sorta_diff log deps symbols'
               ].join(' ').split(' ')
     for (var i=0; i<api.length; i++)
         bus[api[i]] = eval(api[i])

@@ -2,6 +2,15 @@ var fs = require('fs'),
     util = require('util')
 var unique_sockjs_string = '_connect_to_statebus_'
 
+// Import braidify if it's available
+try {
+    var braidify = require('braidify').http_server
+    console.log('Found braidify library. Braid-HTTP enabled!')
+} catch (e) {
+    var braidify = undefined
+}
+
+
 function default_options (bus) { return {
     port: 'auto',
     backdoor: null,
@@ -68,6 +77,7 @@ function import_server (bus, options)
         bus.express = express()
         bus.http = express.Router()
         bus.install_express(bus.express)
+        bus.initialize_braid_http()
 
         // use gzip compression if available
         try { bus.http.use(require('compression')())
@@ -99,130 +109,21 @@ function import_server (bus, options)
         // User will put his routes in here
         bus.express.use('/', bus.http)
 
-        // Use braidify if it's available
-        try {
-            var braidify = require('braidify').http_server
-            console.log('Found braidify library. Braid-HTTP enabled!')
-        } catch (e) {
-            var braidify = undefined
-        }
-
-        // Mirror state over HTTP
-        bus.express.get('*', function (req, res) {
-            // Make a temporary client bus
-            var cbus = bus.bus_for_http_client(req, res)
-            var cb
-            function end_it_all () {
-                cbus.forget(key, cb)
-                cbus.delete_bus()
-                res.end()
-            }
-
-            braidify && braidify(req, res)
-            if (req.subscribe) {
-                res.startSubscription({ onClose: end_it_all })
-                console.log('yay subscription!')
-            } else
-                res.statusCode = 200
-
-            // Do the fetch
-            cbus.honk = 'statelog'
-            var key = req.path.substr(1)
-            cbus.fetch(key, cb = (o) => {
-                var body = bus.to_http_body(o)
-
-                // Return 404 if the value is undefined
-                if (!body) {
-                    console.log('no body! time to 404')
-                    res.statusCode = 404
-                    res.end()
-                }
-
-                // Or if we're braid, send via subscription
-                else if (braidify)
-                    res.sendVersion({body})
-
-                // Or just return the current version
-                else
-                    res.send(body)
-
-                // And shut down the connection if there's nothing left to do
-                if (!braidify || !req.subscribe || !body)
-                    end_it_all()
-            })
+        // Free the CORS for Braid requests!
+        bus.express.use((req, res, next) => {
+            // If this requests knows about Braid then we presume the
+            // programmer knows that any client might make this cross-origin
+            // request.
+            if (req.version || req.parents || req.subscribe
+                || req.headers.subscribe
+                || req.method === 'OPTIONS')
+                free_the_cors(req, res, next)
+            else
+                next()
         })
 
-        bus.express.put('*', function (req, res) {
-            console.log('Got a put with body', req.body)
-
-            // Make a temporary client bus
-            var cbus = bus.bus_for_http_client(req, res)
-
-            // Maybe the new state is expressed in patches
-            if (req.headers.patches) {
-                console.error("We don't actually handle PUT patches yet")
-
-                // var patches = await req.patches()
-                // console.log("...but we see these patches:", patches)
-
-                res.statusCode = 500
-                res.end()
-            } else {
-                // Otherwise, we assume the body is content-type: json
-                if (typeof req.headers['content-type'] !== 'string'
-                    || req.headers['content-type'].toLowerCase() !== 'application/json')
-                    console.error('Error: PUT content-type is not application/json')
-                var body = ''
-                req.on('data', chunk => {body += chunk.toString()})
-                req.on('end', () => {
-                    try {
-                        console.log('gonna parse', body)
-                        var path = req.url.substr(1)
-                        var obj = bus.from_http_body(path, body)
-                    } catch (e) {
-                        console.error('Error: PUT body was not valid json', e)
-                        res.statusCode = 500
-                        res.end()
-                        return
-                    }
-                    cbus.save(obj)
-                    res.statusCode = 200
-                    res.end()
-                })
-            }
-        })
-
-        // Set up default linked json converters
-        if (bus.options.braid_mode_test) {
-            bus.to_http_body = (o) => JSON.stringify(o.val)
-            bus.state = bus.braid_proxy()
-
-            // Disable CORS if it's a braid request and thus we don't need to
-            // worry about backwards compatibility
-            bus.http.use((req, res, next) => {
-                if (req.version || req.parents || req.subscribe
-                    || req.headers.subscribe
-                    || req.method === 'OPTIONS')
-                    // Note: we need to think through exactly which booleans
-                    // should automatically disable cors.  These should be the
-                    // cases in which you're using braid.
-                    free_the_cors(req, res, next)
-                else
-                    next()
-            })
-        } else
-            bus.to_http_body = (o) => {
-                var unwrap = (Object.keys(o).length === 2
-                              && '_' in o
-                              && typeof o._ === 'string')
-                // To do: translate pointers as keys
-                return unwrap ? o._ : JSON.stringify(o)
-            }
-
-        bus.from_http_body = (key, body) => ({
-            key,
-            val: JSON.parse(body)
-        })
+        // Connect bus to the HTTP server
+        bus.express.use(bus.http_handlers)
 
         // Serve Client Coffee
         bus.serve_client_coffee()
@@ -270,6 +171,116 @@ function import_server (bus, options)
             })
             bus.sockjs_server(this.backdoor_http_server)
         }
+    },
+
+    initialize_braid_http: function () {
+        // Set up default linked json converters
+        if (bus.options.braid_mode_test) {
+            bus.to_http_body = (o) => JSON.stringify(o.val)
+            bus.state = bus.braid_proxy()
+        } else
+            bus.to_http_body = (o) => {
+                var unwrap = (Object.keys(o).length === 2
+                              && '_' in o
+                              && typeof o._ === 'string')
+                // To do: translate pointers as keys
+                return unwrap ? o._ : JSON.stringify(o)
+            }
+
+        bus.from_http_body = (key, body) => ({
+            key,
+            val: JSON.parse(body)
+        })
+    },
+
+    // Connect HTTP GET and PUT to our Fetch and Save
+    http_handlers: function (req, res, next) {
+        if (req.method === 'GET') {
+
+            // Make a temporary client bus
+            var cbus = bus.bus_for_http_client(req, res)
+            var cb
+            function end_it_all () {
+                cbus.forget(key, cb)
+                cbus.delete_bus()
+                res.end()
+            }
+
+            braidify && braidify(req, res)
+            if (req.subscribe) {
+                res.startSubscription({ onClose: end_it_all })
+                console.log('yay subscription!')
+            } else
+                res.statusCode = 200
+
+            // Do the fetch
+            cbus.honk = 'statelog'
+            var key = req.path.substr(1)
+            cbus.fetch(key, cb = (o) => {
+                var body = bus.to_http_body(o)
+
+                // Return 404 if the value is undefined
+                if (!body) {
+                    console.log('no body! time to 404')
+                    res.statusCode = 404
+                    res.end()
+                }
+
+                // Or if we're braid, send via subscription
+                else if (braidify)
+                    res.sendVersion({body})
+
+                // Or just return the current version
+                else
+                    res.send(body)
+
+                // And shut down the connection if nothing's left to do
+                if (!braidify || !req.subscribe || !body)
+                    end_it_all()
+            })
+        }
+
+        else if (req.method === 'PUT') {
+            console.log('Got a put with body', req.body)
+
+            // Make a temporary client bus
+            var cbus = bus.bus_for_http_client(req, res)
+
+            // Maybe the new state is expressed in patches
+            if (req.headers.patches) {
+                console.error("We don't actually handle PUT patches yet")
+
+                // var patches = await req.patches()
+                // console.log("...but we see these patches:", patches)
+
+                res.statusCode = 500
+                res.end()
+            } else {
+                // Otherwise, we assume the body is content-type: json
+                if (typeof req.headers['content-type'] !== 'string'
+                    || req.headers['content-type'].toLowerCase() !== 'application/json')
+                    console.error('Error: PUT content-type is not application/json')
+                var body = ''
+                req.on('data', chunk => {body += chunk.toString()})
+                req.on('end', () => {
+                    try {
+                        console.log('gonna parse', body)
+                        var path = req.url.substr(1)
+                        var obj = bus.from_http_body(path, body)
+                    } catch (e) {
+                        console.error('Error: PUT body was not valid json', e)
+                        res.statusCode = 500
+                        res.end()
+                        return
+                    }
+                    cbus.save(obj)
+                    res.statusCode = 200
+                    res.end()
+                })
+            }
+        }
+        else
+            next()
     },
 
     bus_for_http_client: function (req, res) {
@@ -2467,13 +2478,6 @@ function import_server (bus, options)
 // Disables CORS in HTTP servers
 function free_the_cors (req, res, next) {
     console.log('free the cors!', req.method, req.url)
-
-    // Hey... these headers aren't about CORS!  Let's move them into the braid
-    // libraries:
-    res.setHeader('Range-Request-Allow-Methods', 'PATCH, PUT')
-    res.setHeader('Range-Request-Allow-Units', 'json')
-    res.setHeader("Patches", "OK")
-    // ^^ Actually, it looks like we're going to delete these soon.
 
     var free_the_cors = {
         "Access-Control-Allow-Origin": "*",
