@@ -1552,6 +1552,8 @@
                     else if (x[symbols.is_braid_proxy])
                         return ['span', {style: 'background-color: #fffbe5; padding: 3px;'},
                                 JSON.stringify(x)]
+                                // For function proxies:
+                                // JSON.stringify(x(), null, 2)]
                 },
                 hasBody: function (x) {return false}
             }]
@@ -1585,6 +1587,15 @@
                 return item_proxy(new_base, new_base.val)
             }
 
+
+            // For function proxies:
+            //
+            // // Javascript won't let us function call a proxy unless the
+            // // "target" is a function.  So we make a dummy target, and
+            // // don't use it.
+            // var dummy = function () {}
+
+
             return new Proxy(o, {
                 get: function get(o, k) {
                     if (k === 'inspect' || k === 'valueOf')
@@ -1606,20 +1617,24 @@
                 },
                 deleteProperty: function del (o, k) {
                     delete o[proxied_2_keyed(k)]
-                },
-                apply: function apply (o, This, args) {
-                    return o
                 }
+                // For function proxies:
+                //
+                // apply: function apply (o, This, args) {
+                //     return translate_fields(o, keyed_2_proxied)
+                // }
             })}
 
+
+        // For function proxies:
+        // var dummy = function () {}
 
         // The top-level Proxy object holds HTTP resources
         return new Proxy(cache, {
             get: function get(o, k) {
                 if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
                     return undefined
-                if (k in bogus_keys)
-                    return o[k]
+                bogus_check(k)
                 var base = bus.fetch(k)
                 return item_proxy(base, base.val)
             },
@@ -1630,7 +1645,11 @@
             },
             deleteProperty: function del (o, k) {
                 bus.delete(proxied_2_keyed(k))
-            }
+            },
+            // For function proxies:
+            // apply: function apply (o, This, args) {
+            //     return 'fluffy'
+            // }
         })
     }
 
