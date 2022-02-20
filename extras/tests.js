@@ -896,8 +896,8 @@ test(function braid_proxies (done) {
     log('array:', state.array)
     log('bar:', state.bar)
     assert(state.bar.a[1] !== 2,
-           "Array ref linked.\n\t"
-           + JSON.stringify(bus.cache.bar) + '\n\t'
+           "Array ref linked.\n\tbar:   "
+           + JSON.stringify(bus.cache.bar) + '\n\tarray: '
            + JSON.stringify(bus.cache.array))
 
     state.undefining = undefined
