@@ -106,8 +106,10 @@ function import_server (bus, options)
                 bus.sync_files(x.state_path, x.fs_path)
         })
 
-        // User will put his routes in here
-        bus.express.use('/', bus.http)
+        bus.express.use((req, res, next) => {
+            console.log('server.js:', req.method, req.url)
+            next()
+        })
 
         // Free the CORS for Braid requests!
         bus.express.use((req, res, next) => {
@@ -121,6 +123,9 @@ function import_server (bus, options)
             else
                 next()
         })
+
+        // User will put his routes in here
+        bus.express.use(bus.http)
 
         // Connect bus to the HTTP server
         bus.express.use(bus.http_handlers)
@@ -175,7 +180,7 @@ function import_server (bus, options)
 
     initialize_braid_http: function () {
         // Set up default linked json converters
-        if (bus.options.braid_mode_test) {
+        if (bus.options.braid_mode) {
             bus.to_http_body = (o) => JSON.stringify(o.val)
             bus.state = bus.braid_proxy()
         } else
@@ -219,16 +224,17 @@ function import_server (bus, options)
             cbus.fetch(key, cb = (o) => {
                 var body = bus.to_http_body(o)
 
-                // Return 404 if the value is undefined
-                if (!body) {
-                    console.log('no body! time to 404')
-                    res.statusCode = 404
-                    res.end()
-                }
+                // // Return 404 if the value is undefined
+                // if (!body) {
+                //     console.log('no body! time to 404')
+                //     res.statusCode = 404
+                //     res.end()
+                // }
 
                 // Or if we're braid, send via subscription
-                else if (braidify)
-                    res.sendVersion({body})
+                // else
+                if (braidify)
+                    res.sendVersion({body: body || 'null'})
 
                 // Or just return the current version
                 else
@@ -2387,11 +2393,14 @@ function import_server (bus, options)
     serve_clientjs: function serve_clientjs (path) {
         path = path || 'client.js'
         bus.http.get('/' + path, (req, res) => {
-            res.send(
+            var files =
                 ['extras/coffee.js', 'extras/sockjs.js', 'extras/react.js',
-                 'statebus.js', 'client.js']
-                    .map((f) => fs.readFileSync('node_modules/statebus/' + f))
-                    .join(';\n'))
+                 'statebus.js', 'client.js'].map((f) => fs.readFileSync('node_modules/statebus/' + f))
+            if (bus.options.braid_mode)
+                files.unshift(fs.readFileSync(
+                    'node_modules/braidify/braidify-client.js'
+                ))
+            res.send(files.join(';\n'))
         })
     },
 

@@ -62,7 +62,7 @@
         var has_prefix = new RegExp('^' + preprefix)
         var is_absolute = /^https?:\/\//
         var client_fetched_keys = new bus.Set()
-        if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
+        //if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
         function add_prefix (key) {
             return is_absolute.test(key) ? key : preprefix + key }
         function rem_prefix (key) {
@@ -73,7 +73,6 @@
             return bus.translate_keys(bus.clone(obj), rem_prefix) }
 
         bus(prefix).to_save   = function (obj, t) {
-            console.log('saving', prefix, obj)
             bus.save.fire(obj)
 
             // var x = {save: obj}
@@ -82,9 +81,10 @@
             // if (t.patch)   x.patch   = t.patch
             // if (t.patch)   x.save    = rem_prefix(x.save.key)
 
-            braid_fetch(url + obj.key,
+            braid_fetch(url + rem_prefix(obj.key),
                         {
                             method: 'put',
+                            'content-type': 'application/json',
                             body: JSON.stringify(obj.val)
                         })
         }
@@ -94,7 +94,8 @@
                 braid_fetch(url + rem_prefix(key),
                             {
                                 method: 'get',
-                                subscribe: true
+                                subscribe: true,
+                                headers: {accept: 'application/json'}
                             }
                            ).andThen( x => {
                                t.return({
@@ -439,7 +440,7 @@
         make_client_statebus_maker()
         window.bus = window.statebus()
         bus.label = 'bus'
-        if (clientjs_option('braid_mode_test'))
+        if (clientjs_option('braid_mode'))
             bus.state = bus.braid_proxy()
         else
             window.sb = bus.sb
@@ -450,9 +451,13 @@
         improve_react()
         window.ignore_flashbacks = false
         if (statebus_server !== 'none') {
-            bus.net_mount ('/*', statebus_server)
-            if (clientjs_option('braid_mode_test'))
-                braid_http_mount ('http/*', statebus_server)
+            if (clientjs_option('braid_mode')) {
+                console.log('We socket-free!')
+                braid_http_mount ('/*', statebus_server)
+            } else {
+                bus.net_mount ('/*', statebus_server)
+                console.log('We going websocket!')
+            }
         }
 
         if (window.statebus_backdoor) {
@@ -462,7 +467,7 @@
         bus.net_automount()
 
         // This /new/* code is deprecated
-        if (!clientjs_option('braid_mode_test')) {
+        if (!clientjs_option('braid_mode')) {
             bus('/new/*').to_save = function (o) {
                 if (o.key.split('/').length > 3) return
 

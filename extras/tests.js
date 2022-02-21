@@ -872,7 +872,7 @@ test(function proxies2 (done) {
 })
 
 test(function braid_proxies (done) {
-    var bus = require('../statebus').serve({braid_mode_test: true,
+    var bus = require('../statebus').serve({braid_mode: true,
                                             file_store: false})
     var state = bus.state
 

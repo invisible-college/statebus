@@ -1659,8 +1659,8 @@
         return result
     }
 
-    if ((nodejs && bus.options && bus.options.braid_mode_test)
-        || (!nodejs && window.Proxy && clientjs_option('braid_mode_test')))
+    if ((nodejs && bus.options && bus.options.braid_mode)
+        || (!nodejs && window.Proxy && clientjs_option('braid_mode')))
         state = braid_proxy()
 
 
