@@ -106,11 +106,6 @@ function import_server (bus, options)
                 bus.sync_files(x.state_path, x.fs_path)
         })
 
-        bus.express.use((req, res, next) => {
-            console.log('server.js:', req.method, req.url)
-            next()
-        })
-
         // Free the CORS for Braid requests!
         bus.express.use((req, res, next) => {
             // If this requests knows about Braid then we presume the
