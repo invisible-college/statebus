@@ -99,7 +99,7 @@
                             }
                            ).andThen( function (x) {
                                t.return({
-                                   key,
+                                   key: key,
                                    val: add_prefixes(JSON.parse(x.body))
                                })
                            })
