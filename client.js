@@ -97,7 +97,7 @@
                                 subscribe: true,
                                 headers: {accept: 'application/json'}
                             }
-                           ).andThen( x => {
+                           ).andThen( function (x) {
                                t.return({
                                    key,
                                    val: add_prefixes(JSON.parse(x.body))
