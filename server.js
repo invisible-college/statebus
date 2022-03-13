@@ -1,6 +1,5 @@
 var fs = require('fs'),
     util = require('util')
-var unique_sockjs_string = '_connect_to_statebus_'
 
 // Import braidify if it's available
 try {
@@ -22,6 +21,7 @@ function default_options (bus) { return {
             certificate: 'certs/certificate',
             certificate_bundle: 'certs/certificate-bundle'},
     connections: {include_users: true, edit_others: true},
+    websocket_path: '_connect_to_statebus_',
     __secure: false
 }}
 
@@ -386,7 +386,8 @@ function import_server (bus, options)
         this.http_server.on('request',  // Install express
                             function (request, response) {
                                 // But express should ignore all sockjs requests
-                                if (!request.url.startsWith('/'+unique_sockjs_string+'/'))
+                                if (!request.url.startsWith(
+                                    '/' + bus.options.websocket_path + '/'))
                                     express_app(request, response)
                             })
 
@@ -586,7 +587,7 @@ function import_server (bus, options)
             }
         })
 
-        s.installHandlers(httpserver, {prefix:'/' + unique_sockjs_string})
+        s.installHandlers(httpserver, {prefix:'/' + bus.options.websocket_path})
     },
 
     make_websocket: function make_websocket (url) {
@@ -594,7 +595,7 @@ function import_server (bus, options)
         url = url.replace(/^istate:\/\//, 'ws://')
         url = url.replace(/^statei:\/\//, 'ws://')
         WebSocket = require('websocket').w3cwebsocket
-        return new WebSocket(url+'/'+unique_sockjs_string+'/websocket')
+        return new WebSocket(url+'/'+bus.options.websocket_path+'/websocket')
     },
     client_creds: function client_creds (server_url) {
         // Right now the server just creates a different random id each time

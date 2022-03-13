@@ -1,5 +1,6 @@
 (function () {
-    var unique_sockjs_string = '_connect_to_statebus_'
+    var websocket_prefix = (clientjs_option('websocket_path')
+                            || '_connect_to_statebus_')
 
     window.dom = window.dom || new Proxy({}, {
         get: function (o, k) { return o[k] },
@@ -37,8 +38,8 @@
         //     url = link.href
         // }
         console.log('opening websocket to', url)
-        return new WebSocket(url + '/' + unique_sockjs_string + '/websocket')
-        // return new SockJS(url + '/' + unique_sockjs_string)
+        return new WebSocket(url + '/' + websocket_prefix + '/websocket')
+        // return new SockJS(url + '/' + websocket_prefix)
     }
     function client_creds (server_url) {
         var me = bus.fetch('ls/me')
