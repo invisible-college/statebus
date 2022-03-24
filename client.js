@@ -37,7 +37,7 @@
         //     link.href = url
         //     url = link.href
         // }
-        console.log('opening websocket to', url)
+
         return new WebSocket(url + '/' + websocket_prefix + '/websocket')
         // return new SockJS(url + '/' + websocket_prefix)
     }
@@ -453,11 +453,10 @@
         window.ignore_flashbacks = false
         if (statebus_server !== 'none') {
             if (clientjs_option('braid_mode')) {
-                console.log('We socket-free!')
+                console.log('Using Braid-HTTP!')
                 braid_http_mount ('/*', statebus_server)
             } else {
                 bus.net_mount ('/*', statebus_server)
-                console.log('We going websocket!')
             }
         }
 

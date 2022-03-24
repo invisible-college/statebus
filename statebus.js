@@ -10,10 +10,12 @@
     // Fetch, Save, Forget, Delete
 
     function fetch (key, callback) {
+        if (typeof key !== 'string'
+            && !(typeof key === 'object' && typeof key.key === 'string'))
+            throw ('Error: fetch(key) called with key = '
+                   + JSON.stringify(key))
         key = key.key || key    // You can pass in an object instead of key
                                 // We should probably disable this in future
-        if (typeof key !== 'string')
-            throw ('Error: fetch(key) called with a non-string key: '+key)
         bogus_check(key)
 
         var called_from_reactive_funk = !callback
