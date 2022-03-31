@@ -62,7 +62,7 @@
         var preprefix = prefix.slice(0,-1)
         var has_prefix = new RegExp('^' + preprefix)
         var is_absolute = /^https?:\/\//
-        var client_fetched_keys = new bus.Set()
+        var subscriptions = {}
         //if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
         function add_prefix (key) {
             return is_absolute.test(key) ? key : preprefix + key }
@@ -91,27 +91,85 @@
         }
 
         bus(prefix).to_fetch  = function (key, t) {
-            try {
-                braid_fetch(url + rem_prefix(key),
-                            {
-                                method: 'get',
-                                subscribe: true,
-                                headers: {accept: 'application/json'}
-                            }
-                           ).andThen( function (x) {
-                               t.return({
-                                   key: key,
-                                   val: add_prefixes(JSON.parse(x.body))
-                               })
-                           })
-            } catch (e) {
-                console.error('Braid-HTTP network error:', e)
+            // Subscription can be in states:
+            // - connecting
+            // - connected
+            // - reconnect
+            // - reconnecting
+            // - aborted
+
+            // If we have an outstanding fetch running, then let's tell it to
+            // re-activate!
+            if (subscriptions[key]) {
+                // We should only be here if an existing subscription was
+                // aborted, but hasn't cleared yet.
+                console.assert(subscriptions[key].status === 'aborted',
+                               'Refetching a subscription of status '
+                               + subscriptions[key].status)
+
+                console.trace('foo')
+
+                // Let's tell it to reconnect when it tries to clear!
+                subscriptions[key].status = 'reconnect'
             }
-            client_fetched_keys.add(key)
+
+            // Otherwise, create a new subscription
+            else
+                subscribe (key, t)
+
+            function subscribe (key, t) {
+                var aborter = new AbortController(),
+                    reconnect_attempts = 0
+
+                // Start the subscription!
+                braid_fetch(
+                    // URL
+                    url + rem_prefix(key),
+
+                    // Options
+                    {
+                        method: 'get',
+                        subscribe: true,
+                        headers: {accept: 'application/json'},
+                        signal: aborter.signal
+                    }
+                ).andThen( function (x) {
+                    // New update received!
+                    if (subscriptions[key].status === 'connecting') {
+                        console.log('%c[*] opened ' + key,
+                                    'color: blue')
+                        reconnect_attempts = 0
+                        subscriptions[key].status = 'connected'
+                    }
+
+                    // Return the update
+                    t.return({
+                        key: key,
+                        val: add_prefixes(JSON.parse(x.body))
+                    })
+                }).catch( function (e) {
+                    if (subscriptions[key].status === 'aborted') {
+                        // Then this fetch is over and done with!
+                        delete subscriptions[key]
+                        return
+                    }
+
+                    // Reconnect!
+                    setTimeout(function () { subscribe(key, t) },
+                               reconnect_attempts > 0 ? 5000 : 1500)
+                    subscriptions[key].status = 'reconnecting'
+                })
+
+                // Remember this subscription
+                subscriptions[key] = {
+                    aborter: aborter,
+                    status: 'connecting'
+                }
+            }
         }
         bus(prefix).to_forget = function (key) {
-            // send({forget: key}),
-            client_fetched_keys.delete(key)
+            subscriptions[key].status = 'aborted'
+            subscriptions[key].aborter.abort()
         }
     }
 
