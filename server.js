@@ -219,24 +219,25 @@ function import_server (bus, options)
             cbus.fetch(key, cb = (o) => {
                 var body = bus.to_http_body(o)
 
-                // // Return 404 if the value is undefined
-                // if (!body) {
-                //     console.log('no body! time to 404')
-                //     res.statusCode = 404
-                //     res.end()
-                // }
-
-                // Or if we're braid, send via subscription
-                // else
+                // If we're braiding, send via subscription
                 if (braidify)
+                    // Note: if body === undefined, we need to send the
+                    // equivalent of a 404.  This is missing in braid spec:
+                    // https://github.com/braid-org/braid-spec/issues/110
                     res.sendVersion({body: body || 'null'})
 
                 // Or just return the current version
-                else
-                    res.send(body)
+                else {
+                    if (body !== undefined)
+                        res.send(body)
+                    else {
+                        res.statusCode = 404
+                        res.end()
+                    }
+                }
 
-                // And shut down the connection if nothing's left to do
-                if (!braidify || !req.subscribe || !body)
+                // And shut down the connection if there's no subscription
+                if (!braidify || !req.subscribe)
                     end_it_all()
             })
         }
@@ -587,6 +588,7 @@ function import_server (bus, options)
             }
         })
 
+        // console.log('websocket listening on', '/' + bus.options.websocket_path)
         s.installHandlers(httpserver, {prefix:'/' + bus.options.websocket_path})
     },
 
@@ -595,7 +597,7 @@ function import_server (bus, options)
         url = url.replace(/^istate:\/\//, 'ws://')
         url = url.replace(/^statei:\/\//, 'ws://')
         WebSocket = require('websocket').w3cwebsocket
-        return new WebSocket(url+'/'+bus.options.websocket_path+'/websocket')
+        return new WebSocket(url + '/' + bus.options.websocket_path + '/websocket')
     },
     client_creds: function client_creds (server_url) {
         // Right now the server just creates a different random id each time
