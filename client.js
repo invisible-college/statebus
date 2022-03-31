@@ -63,6 +63,7 @@
         var has_prefix = new RegExp('^' + preprefix)
         var is_absolute = /^https?:\/\//
         var subscriptions = {}
+        var put_counter = 0
         //if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
         function add_prefix (key) {
             return is_absolute.test(key) ? key : preprefix + key }
@@ -73,21 +74,65 @@
         function rem_prefixes (obj) {
             return bus.translate_keys(bus.clone(obj), rem_prefix) }
 
+
+        var puts = new Map()
+        function enqueue_put (url, body) {
+            var id = put_counter++
+            puts.set(id, {url: url, body: body, id: id})
+            send_put(id)
+        }
+        function send_put (id) {
+            try {
+                puts.get(id).status = 'sending'
+                braid_fetch(
+                    puts.get(id).url,
+                    {
+                        method: 'put',
+                        headers: {
+                            'content-type': 'application/json',
+                            'put-order': id,
+                        },
+                        body: puts.get(id).body
+                    }
+                ).then(function (res) {
+                    if (res.status !== 200)
+                        console.error('Server gave error on PUT:',
+                                      e, 'for', puts.get(id).body)
+                    else
+                        console.log('Successful put!', puts.get(id).body)
+                    puts.delete(id)
+                }).catch(function (e) {
+                    console.error('Error on PUT, waiting...', puts.get(id).url)
+                    puts.get(id).status = 'waiting'
+                    // console.error('Error on PUT:', e, 'for', puts.get(id).body)
+                    // puts.delete(id)
+                })
+            } catch (e) {
+                console.error('Error on PUT, waiting...', puts.get(id).url)
+                puts.get(id).status = 'waiting'
+            }
+        }
+        function retry_put (id) {
+            setTimeout(function () {send_put(id)}, 1000)
+        }
+        function send_all_puts () {
+            for (var id of puts.keys())
+                if (puts.get(id).status === 'waiting') {
+                    console.log('Sending waiting put', id)
+                    send_put(id)
+                }
+        }
+
         bus(prefix).to_save   = function (obj, t) {
             bus.save.fire(obj)
 
+            enqueue_put(url + rem_prefix(obj.key),
+                        JSON.stringify(obj.val))
             // var x = {save: obj}
             // if (t.version) x.version = t.version
             // if (t.parents) x.parents = t.parents
             // if (t.patch)   x.patch   = t.patch
             // if (t.patch)   x.save    = rem_prefix(x.save.key)
-
-            braid_fetch(url + rem_prefix(obj.key),
-                        {
-                            method: 'put',
-                            'content-type': 'application/json',
-                            body: JSON.stringify(obj.val)
-                        })
         }
 
         bus(prefix).to_fetch  = function (key, t) {
@@ -140,6 +185,7 @@
                                     'color: blue')
                         reconnect_attempts = 0
                         subscriptions[key].status = 'connected'
+                        send_all_puts()
                     }
 
                     // Return the update
