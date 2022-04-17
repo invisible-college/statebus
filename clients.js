@@ -43,7 +43,7 @@
         // return new SockJS(url + '/' + websocket_prefix)
     }
     function client_creds (server_url) {
-        var me = bus.fetch('ls/me')
+        var me = bus.get('ls/me')
         bus.log('connect: me is', me)
         if (!me.client) {
             // Create a client id if we have none yet.
@@ -52,7 +52,7 @@
             me.client = c || (Math.random().toString(36).substring(2)
                               + Math.random().toString(36).substring(2)
                               + Math.random().toString(36).substring(2))
-            bus.save(me)
+            bus.set(me)
         }
 
         set_cookie('client', me.client)
@@ -119,8 +119,8 @@
                 }
         }
 
-        bus(prefix).to_save   = function (obj, t) {
-            bus.save.fire(obj)
+        bus(prefix).to_set   = function (obj, t) {
+            bus.set.fire(obj)
 
             var put = {
                 url: url + rem_prefix(obj.key),
@@ -134,7 +134,7 @@
             send_put(put_id)
         }
 
-        bus(prefix).to_fetch  = function (key, t) {
+        bus(prefix).to_get  = function (key, t) {
             // Subscription can be in states:
             // - connecting
             // - connected
@@ -142,13 +142,13 @@
             // - reconnecting
             // - aborted
 
-            // If we have an outstanding fetch running, then let's tell it to
+            // If we have an outstanding get running, then let's tell it to
             // re-activate!
             if (subscriptions[key]) {
                 // We should only be here if an existing subscription was
                 // aborted, but hasn't cleared yet.
                 console.assert(subscriptions[key].status === 'aborted',
-                               'Refetching a subscription of status '
+                               'Regetting a subscription of status '
                                + subscriptions[key].status)
 
                 console.trace('foo')
@@ -194,7 +194,7 @@
                     })
                 }).catch( function (e) {
                     if (subscriptions[key].status === 'aborted') {
-                        // Then this fetch is over and done with!
+                        // Then this get is over and done with!
                         delete subscriptions[key]
                         return
                     }
@@ -230,31 +230,31 @@
         var bus = this
         bus.log(this)
 
-        // Fetch returns the value immediately in a save
-        // Saves are queued up, to store values with a delay, in batch
-        var saves_are_pending = false
-        var pending_saves = {}
+        // Get returns the value immediately in a set
+        // Sets are queued up, to store values with a delay, in batch
+        var sets_are_pending = false
+        var pending_sets = {}
 
-        function save_the_pending_saves() {
-            bus.log('localstore: saving', pending_saves)
-            for (var k in pending_saves)
-                localStorage.setItem(k, JSON.stringify(pending_saves[k]))
-            saves_are_pending = false
+        function set_the_pending_sets() {
+            bus.log('localstore: saving', pending_sets)
+            for (var k in pending_sets)
+                localStorage.setItem(k, JSON.stringify(pending_sets[k]))
+            sets_are_pending = false
         }
 
-        bus(prefix).to_fetch = function (key) {
+        bus(prefix).to_get = function (key) {
             var result = localStorage.getItem(key)
             return result ? JSON.parse(result) : {key: key}
         }
-        bus(prefix).to_save = function (obj) {
+        bus(prefix).to_set = function (obj) {
             // Do I need to make this recurse into the object?
-            bus.log('localStore: on_save:', obj.key)
-            pending_saves[obj.key] = obj
-            if (!saves_are_pending) {
-                setTimeout(save_the_pending_saves, 50)
-                saves_are_pending = true
+            bus.log('localStore: on_set:', obj.key)
+            pending_sets[obj.key] = obj
+            if (!sets_are_pending) {
+                setTimeout(set_the_pending_sets, 50)
+                sets_are_pending = true
             }
-            bus.save.fire(obj)
+            bus.set.fire(obj)
             return obj
         }
         bus(prefix).to_delete = function (key) { localStorage.removeItem(key) }
@@ -287,16 +287,16 @@
         data = (data && JSON.parse(data)) || {key : key}
         // Then I would need to:
         //  - Change the key prefix
-        //  - Save this into the cache
+        //  - Set this into the cache
 
-        bus(prefix).to_save = function (obj) {
+        bus(prefix).to_set = function (obj) {
             window.history.replaceState(
                 '',
                 '',
                 document.location.origin
                     + document.location.pathname
                     + escape('?'+key+'='+JSON.stringify(obj)))
-            bus.save.fire(obj)
+            bus.set.fire(obj)
         }
     }
 
@@ -327,7 +327,7 @@
             function add_shortcut (obj, shortcut_name, to_key) {
                 delete obj[shortcut_name]
                 Object.defineProperty(obj, shortcut_name, {
-                    get: function () { return bus.fetch(to_key) },
+                    get: function () { return bus.get(to_key) },
                     configurable: true })
             }
             add_shortcut(this, 'local', this.key)
@@ -348,7 +348,7 @@
                             && typeof this.props[k] === 'object'
                             && this.props[k].key)
                             
-                            bus.fetch(this.props[k].key)
+                            bus.get(this.props[k].key)
                     
                     // Call the renderer!
                     return orig_render.apply(this, arguments)
@@ -535,14 +535,14 @@
 
         // This /new/* code is deprecated
         if (!clientjs_option('braid_mode')) {
-            bus('/new/*').to_save = function (o) {
+            bus('/new/*').to_set = function (o) {
                 if (o.key.split('/').length > 3) return
 
                 var old_key = o.key
                 o.key = old_key + '/' + Math.random().toString(36).substring(2,12)
                 statebus.cache[o.key] = o
                 delete statebus.cache[old_key]
-                bus.save(o)
+                bus.set(o)
             }
         }
 
@@ -554,9 +554,8 @@
 
         if (clientjs_option('globals')) {
             // Setup globals
-            var globals = ['fetch', 'save', 'state']
+            var globals = ['get', 'set', 'state']
 
-            window.og_fetch = window.fetch
             for (var i=0; i<globals.length; i++) {
                 console.log('globalizing', globals[i], 'as',
                             eval('bus.' + globals[i]))
@@ -683,7 +682,7 @@
             for (var i=0; i<arguments.length; i++) {
                 args.push(arguments[i])
                 if (arguments[i].state)
-                    args[i].src = 'data:;base64,' + bus.fetch(args[i].state)._
+                    args[i].src = 'data:;base64,' + bus.get(args[i].state)._
             }
             return og_img.apply(this, args)
         }

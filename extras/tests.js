@@ -117,7 +117,7 @@ test(function applying_patches (done) {
 
 test(function prune (done) {
     var boose = require('../statebus')()
-    boose.save({key: 'nark', _: 333666})
+    boose.set({key: 'nark', _: 333666})
     var a = {key: 'funny',
              b: {key: 'farty', booger: 3}}
     assert(!boose.prune(a).b.booger)
@@ -129,22 +129,22 @@ test(function prune (done) {
 
 test(function auto_vars (done) {
     var n = require('../statebus')()
-    n('r/*').to_fetch = function (rest, o) {return {rest: rest, o: o}}
-    log(n.fetch('r/3'))
-    assert(n.fetch('r/3').rest === '3')
-    assert(n.fetch('r/3').o === undefined)
+    n('r/*').to_get = function (rest, o) {return {rest: rest, o: o}}
+    log(n.get('r/3'))
+    assert(n.get('r/3').rest === '3')
+    assert(n.get('r/3').o === undefined)
 
-    n('v/*').to_fetch = function (vars, star) {return {vars: vars, rest: star}}
-    log(n.fetch('v/[3,9 4]').rest)
-    log(n.fetch('v/[3,9 4]').rest.match(/$Bad/))
-    assert(n.fetch('v/[3,9 4]').rest === '[3,9 4]')
+    n('v/*').to_get = function (vars, star) {return {vars: vars, rest: star}}
+    log(n.get('v/[3,9 4]').rest)
+    log(n.get('v/[3,9 4]').rest.match(/$Bad/))
+    assert(n.get('v/[3,9 4]').rest === '[3,9 4]')
 
-    log(n.fetch('v/[3,9 4]').vars)
-    log(n.fetch('v/[3,9 4]').vars.match(/^Bad/))
-    assert(n.fetch('v/[3,9 4]').vars.match(/^Bad/))
-    assert(Array.isArray(n.fetch('v/[3,4]').vars))
+    log(n.get('v/[3,9 4]').vars)
+    log(n.get('v/[3,9 4]').vars.match(/^Bad/))
+    assert(n.get('v/[3,9 4]').vars.match(/^Bad/))
+    assert(Array.isArray(n.get('v/[3,4]').vars))
 
-    n('a/*').to_save = function (t, k, obj) {
+    n('a/*').to_set = function (t, k, obj) {
         log('k:', k, 't:', t, 'o:', obj)
         assert(k === 'a/foo')
         assert(typeof obj === 'object')
@@ -154,7 +154,7 @@ test(function auto_vars (done) {
         t.done()
     }
     for (var i=0; i<4; i++)
-        n.save({key: 'a/foo', i:i})
+        n.set({key: 'a/foo', i:i})
 
     log('Forgetting things now')
     n('v/*').to_forget = function (vars, star) {log('(from auto_vars) forgot v/' + star)}
@@ -192,7 +192,7 @@ test(function serve_options (done) {
         certs: {private_key: certs+'/pk', certificate: certs+'/cert'},
     })
 
-    b.save({key: 'foo', body: 'is this on disk?'})
+    b.set({key: 'foo', body: 'is this on disk?'})
     setTimeout(() => done(), 60)
 })
 
@@ -201,47 +201,47 @@ test(function transactions (done) {
     bus.honk = 'statelog'
     bus.label = 'tranny'
 
-    // Test to_fetch handlers with t.done()
-    bus('foo1').to_fetch = function (t) {
-        log('to_fetching foo1')
+    // Test to_get handlers with t.done()
+    bus('foo1').to_get = function (t) {
+        log('to_geting foo1')
         setTimeout(()=>{
             log('returning something for foo1')
             t.done({something: 'yeah'})
         }, 0)
     }
-    var foo1 = bus.fetch('foo1')
+    var foo1 = bus.get('foo1')
     assert(!foo1.something)
     setTimeout(() => { log('test foo1'); assert(foo1.something === 'yeah') }, 10)
 
     // And return a value directly
-    bus('foo2').to_fetch = (t) => { return {something: 'yeah'} }
-    var foo2 = bus.fetch('foo2')
+    bus('foo2').to_get = (t) => { return {something: 'yeah'} }
+    var foo2 = bus.get('foo2')
     setTimeout(() => { log('test foo2'); assert(foo2.something === 'yeah') }, 10)
 
 
     // Set up some rocks
     log('Set up some rocks')
-    bus.save({key: 'rock1', a:1})
-    bus.save({key: 'rock2', a:1})
-    bus.save({key: 'softrock1', a:1})
-    bus.save({key: 'softrock2', a:1})
+    bus.set({key: 'rock1', a:1})
+    bus.set({key: 'rock2', a:1})
+    bus.set({key: 'softrock1', a:1})
+    bus.set({key: 'softrock2', a:1})
 
-    // Test to_save handlers with t.done(o), t.abort, 'done', 'abort'
-    bus('rock1').to_save = (t) => {setTimeout(()=>{ t.abort() }, 0)}
-    bus('rock2').to_save = ( ) => {return 'abort'}
-    bus('softrock1').to_save = (t) => {setTimeout(()=>{ t.done() }, 0)}
-    bus('softrock2').to_save = ( ) => {return 'done'}
+    // Test to_set handlers with t.done(o), t.abort, 'done', 'abort'
+    bus('rock1').to_set = (t) => {setTimeout(()=>{ t.abort() }, 0)}
+    bus('rock2').to_set = ( ) => {return 'abort'}
+    bus('softrock1').to_set = (t) => {setTimeout(()=>{ t.done() }, 0)}
+    bus('softrock2').to_set = ( ) => {return 'done'}
     
     //bus.honk = true
     setTimeout(() => {
-        log('Save some changes')
-        bus.save({key: 'rock1', a:2})
-        bus.save({key: 'rock2', a:2})
-        bus.save({key: 'softrock1', a:2})
-        bus.save({key: 'softrock2', a:2})
+        log('Set some changes')
+        bus.set({key: 'rock1', a:2})
+        bus.set({key: 'rock2', a:2})
+        bus.set({key: 'softrock1', a:2})
+        bus.set({key: 'softrock2', a:2})
 
         setTimeout(() => {
-            log('Check if the saves worked...')
+            log('Check if the sets worked...')
             assert(bus.cache.rock1.a == 1)
             assert(bus.cache.rock2.a == 1)
             assert(bus.cache.softrock1.a == 2)
@@ -332,14 +332,14 @@ test(function translate_fields (done) {
 })
 
 test(function basics (done) {
-    bus('basic wait').to_fetch = function () {
-        setTimeout(function () {bus.save.fire({key:'basic wait', a:1})},
+    bus('basic wait').to_get = function () {
+        setTimeout(function () {bus.set.fire({key:'basic wait', a:1})},
                    30)
     }
 
     var count = 0
     bus(function () {
-        var v = bus.fetch('basic wait')
+        var v = bus.get('basic wait')
         log('On round', count, 'we see', v)
         if (count == 0)
             assert(!v.a)
@@ -355,10 +355,10 @@ test(function basics (done) {
 // Multi-handlers
 test(function multiple_handlers1 (done) {
     var cuss = require('../statebus')()
-    cuss('foo').to_fetch = () => {log('do nothing 1')}
-    cuss('foo').to_fetch = () => {log('do nothing 2')}
-    cuss('foo').to_fetch = () => (log('doing something'),{b: 3})
-    cuss.fetch('foo', (o) => {
+    cuss('foo').to_get = () => {log('do nothing 1')}
+    cuss('foo').to_get = () => {log('do nothing 2')}
+    cuss('foo').to_get = () => (log('doing something'),{b: 3})
+    cuss.get('foo', (o) => {
         log('Multi-handle got', o)
         cuss.forget()
         setTimeout(()=>{done()})
@@ -367,44 +367,44 @@ test(function multiple_handlers1 (done) {
 
 test(function multiple_handlers2 (done) {
     var cuss = require('../statebus')()
-    cuss('foo').to_save = (o) => {log('do nothing 1')}
-    cuss('foo').to_save = (o) => {log('do nothing 2')}
-    cuss('foo').to_save = (o) => {log('doin something'); cuss.save.fire(o)}
-    //cuss('foo').to_save = (o) => {log('doin abortion'); cuss.save.abort(o)}
-    cuss.save({key: 'foo', b: 55})
+    cuss('foo').to_set = (o) => {log('do nothing 1')}
+    cuss('foo').to_set = (o) => {log('do nothing 2')}
+    cuss('foo').to_set = (o) => {log('doin something'); cuss.set.fire(o)}
+    //cuss('foo').to_set = (o) => {log('doin abortion'); cuss.set.abort(o)}
+    cuss.set({key: 'foo', b: 55})
     log('over and out')
     setTimeout(()=>{done()})
 })
 
 // Callbacks are reactive
-test(function fetch_with_callback (done) {
+test(function get_with_callback (done) {
     var count = 0
 
     function bbs() {
-        return bus.bindings('bar', 'on_save').map(
+        return bus.bindings('bar', 'on_set').map(
             function (f){return bus.funk_name(f)})
     }
     function cb (o) {
         count++
-        // log(bbs().length + ' bindings in cb before fetch')
-        var bar = bus.fetch('bar')
+        // log(bbs().length + ' bindings in cb before get')
+        var bar = bus.get('bar')
         log('cb called', count, 'times', 'bar is', bar, 'foo is', o)
-        // log(bbs().length + ' bindings in cb after fetch')
+        // log(bbs().length + ' bindings in cb after get')
     }
 
     // log(bbs().length+ ' bindings to start')
 
-    // Fetch a foo
-    bus.fetch('foo', cb)                             // Call 1
+    // Get a foo
+    bus.get('foo', cb)                             // Call 1
 
     // Fire a foo
     setTimeout(function () {
         assert(count === 1, '1!=' + count)
-        // log(bbs().length + ' bindings after first fetch')
+        // log(bbs().length + ' bindings after first get')
 
         log('firing a new foo')
         // log(bbs().length + ' bindings')
-        bus.save.fire({key: 'foo', count:count})       // Call 2
+        bus.set.fire({key: 'foo', count:count})       // Call 2
     }, 30)
 
     // Fire a bar, which the callback depends on
@@ -413,9 +413,9 @@ test(function fetch_with_callback (done) {
         // log(bbs().length+ ' bindings')
         assert(count === 2, '2!=' + count)
         bus.honk = true
-        bus.save.fire({key: 'bar', count:count})       // Call 3
+        bus.set.fire({key: 'bar', count:count})       // Call 3
         log('fired the new bar')
-        //log(bus.bindings('bar', 'on_save'))
+        //log(bus.bindings('bar', 'on_set'))
     }, 50)
 
     // Done
@@ -427,57 +427,57 @@ test(function fetch_with_callback (done) {
     }, 100)
 })
 
-test(function fetch_once (done) {
+test(function get_once (done) {
     var calls = 0
-    bus.fetch('fetch_once', function cb (o) {
+    bus.get('get_once', function cb (o) {
         calls++
-        log('Fetch_once called', calls)
-        assert(calls < 2, 'Fetch-once called twice')
-        bus.forget('fetch_once', cb)
+        log('Get_once called', calls)
+        assert(calls < 2, 'Get-once called twice')
+        bus.forget('get_once', cb)
     })
-    bus.save.fire({key: 'fetch_once', _: 0})
-    setTimeout(()=> { bus.save.fire({key: 'fetch_once', _: 1}) }, 10)
-    setTimeout(()=> { bus.save.fire({key: 'fetch_once', _: 2}) }, 20)
+    bus.set.fire({key: 'get_once', _: 0})
+    setTimeout(()=> { bus.set.fire({key: 'get_once', _: 1}) }, 10)
+    setTimeout(()=> { bus.set.fire({key: 'get_once', _: 2}) }, 20)
     setTimeout(()=> { done() }, 30 )
 })
 
 test(function once (done) {
-    bus('takeawhile').to_fetch = (t) => {
+    bus('takeawhile').to_get = (t) => {
         setTimeout(_=> t.return({_: 3}), 150)
     }
     bus.once(_=> {
-        var x = bus.fetch('takeawhile')
-        var y = bus.fetch('changing')
+        var x = bus.get('takeawhile')
+        var y = bus.get('changing')
         log('running the once func! loading is', bus.loading())
         assert(!bus.cache.certified)
-        bus.save({key: 'whendone', certified: true})
+        bus.set({key: 'whendone', certified: true})
     })
 
-    delay(50, _=> assert(!bus.fetch('whendone').certified))
-    delay(10, _=> bus.save({key: 'changing', _: 1}))
-    delay(10, _=> bus.save({key: 'changing', _: 2}))
-    delay(150, _=> assert(bus.fetch('whendone').certified))
-    delay(10, _=> bus.save({key: 'changing', _: 3}))
-    delay(10, _=> bus.save({key: 'changing', _: 4}))
+    delay(50, _=> assert(!bus.get('whendone').certified))
+    delay(10, _=> bus.set({key: 'changing', _: 1}))
+    delay(10, _=> bus.set({key: 'changing', _: 2}))
+    delay(150, _=> assert(bus.get('whendone').certified))
+    delay(10, _=> bus.set({key: 'changing', _: 3}))
+    delay(10, _=> bus.set({key: 'changing', _: 4}))
     delay(30, _=> done())
 })
 
-// If there's an on_fetch handler, the callback doesn't return
+// If there's an on_get handler, the callback doesn't return
 // until the handler fires a value
-test(function fetch_remote (done) {
+test(function get_remote (done) {
     var count = 0
 
     // The moon responds in 30ms
-    bus('moon').to_fetch =
-        function (k) { setTimeout(function () {bus.save.fire({key:k})},30) }
+    bus('moon').to_get =
+        function (k) { setTimeout(function () {bus.set.fire({key:k})},30) }
     function cb (o) {
         count++
-        var moon = bus.fetch('hey over there')
+        var moon = bus.get('hey over there')
         log('cb called', count, 'times')
     }
 
-    // Fetch a moon
-    bus.fetch('moon', cb)       // Doesn't call back yet
+    // Get a moon
+    bus.get('moon', cb)       // Doesn't call back yet
     assert(count === 0, '0!=' + count)
 
     // There should be a moonshot by now
@@ -500,17 +500,17 @@ test(function duplicate_fires (done) {
         log('cb called', count, 'times with', calls)
     }
 
-    // Fetch a foo
-    bus.fetch('foo', cb)                   // Call 1
+    // Get a foo
+    bus.get('foo', cb)                   // Call 1
     assert(count === 1, '1!=' + count)
 
     // Fire a foo
     setTimeout(function () {
         log('Firing a few new foos')
-        bus.save.fire({key: 'foo', n:0})     // Skipped
-        bus.save.fire({key: 'foo', n:1})     // Skipped
-        bus.save.fire({key: 'foo', n:2})     // Skipped
-        bus.save.fire({key: 'foo', n:3})     // Call 2
+        bus.set.fire({key: 'foo', n:0})     // Skipped
+        bus.set.fire({key: 'foo', n:1})     // Skipped
+        bus.set.fire({key: 'foo', n:2})     // Skipped
+        bus.set.fire({key: 'foo', n:3})     // Call 2
         log("ok, now let's see what happens.")
     }, 30)
 
@@ -529,23 +529,23 @@ test(function duplicate_fires (done) {
 test(function identity (done) {
     var key = 'kooder'
     var count = 0
-    function fire () { bus.save.fire({key: 'kooder', count: count}) }
-    bus(key).to_fetch = function () { setTimeout(fire, 10) }
+    function fire () { bus.set.fire({key: 'kooder', count: count}) }
+    bus(key).to_get = function () { setTimeout(fire, 10) }
     function cb() {
         count++
         log('cb called', count, 'times')
-        bus.save.fire(bus.fetch('new'))
+        bus.set.fire(bus.get('new'))
     }
-    bus.fetch(key, cb)
+    bus.get(key, cb)
 
     // Done
     setTimeout(function () {
         // Calls:
         //  1. Initial call
-        //  2. First return from pending fetch
+        //  2. First return from pending get
         assert(count === 1, 'cb called '+count+'!=1 times')
         bus.forget(key, cb)
-        bus(key).to_fetch.delete(fire)
+        bus(key).to_get.delete(fire)
         done()
     }, 40)
 })
@@ -555,8 +555,8 @@ test(function identity (done) {
 test(function forgetting (done) {
     var key = 'kooder'
     var count = 0
-    function fire () { log('firing!'); bus.save.fire({key: key, count: count}) }
-    bus(key).to_fetch = function () { setTimeout(fire, 10) }
+    function fire () { log('firing!'); bus.set.fire({key: key, count: count}) }
+    bus(key).to_get = function () { setTimeout(fire, 10) }
 
     function cb (o) {
         count++
@@ -570,34 +570,34 @@ test(function forgetting (done) {
         }
     }
 
-    bus.fetch(key, cb)
+    bus.get(key, cb)
     setTimeout(fire, 70)
     setTimeout(fire, 80)
 
     // Done
     setTimeout(function () {
         assert(count === 2, "Count should be 2 but is", count)
-        bus(key).to_fetch.delete(fire)
+        bus(key).to_get.delete(fire)
         done()
     }, 100)
 })
 
-// Can we return an object that fetches another?
-test(function nested_fetch (done) {
-    function outer () { return {inner: bus.fetch('inner') } }
-    bus('outer').to_fetch = outer
-    log('fetching the outer wrapper')
-    var obj = bus.fetch('outer')
-    log('Ok, we fetched:', obj)
+// Can we return an object that getes another?
+test(function nested_get (done) {
+    function outer () { return {inner: bus.get('inner') } }
+    bus('outer').to_get = outer
+    log('geting the outer wrapper')
+    var obj = bus.get('outer')
+    log('Ok, we geted:', obj)
     assert(obj.inner.key === 'inner')
-    bus.save({key: 'inner', c: 1})
+    bus.set({key: 'inner', c: 1})
     assert(obj.inner.c === 1)
 
-    log('vvv Grey line follows (cause outer fetched inner) vvv')
+    log('vvv Grey line follows (cause outer geted inner) vvv')
 
     // Done
     setTimeout(function () {
-        bus('outer').to_fetch.delete(outer)
+        bus('outer').to_get.delete(outer)
         done()
     }, 10)
 })
@@ -605,41 +605,41 @@ test(function nested_fetch (done) {
 // Russian dolls
 test(function russian_doll_nesting (done) {
     var nothing = 3
-    function big () { return {middle: bus.fetch('middle') } }
-    function middle () { return {small: bus.fetch('small') } }
+    function big () { return {middle: bus.get('middle') } }
+    function middle () { return {small: bus.get('small') } }
     function small () { return {nothing: nothing} }
-    bus('big').to_fetch = big
-    bus('middle').to_fetch = middle
-    bus('small').to_fetch = small
+    bus('big').to_get = big
+    bus('middle').to_get = middle
+    bus('small').to_get = small
 
-    log('fetching')
-    var obj = bus.fetch('big')
+    log('geting')
+    var obj = bus.get('big')
     log('we got', obj)
 
     setTimeout(function () {
-        bus.fetch('big', function (o) {
+        bus.get('big', function (o) {
             nothing = 5
             log('About to update small')
-            bus.save.fire({key: 'small', something: nothing})
+            bus.set.fire({key: 'small', something: nothing})
             log('We did it.')
         })}, 10)
 
     setTimeout(function () {
-        bus.fetch('big', function ruskie (o) {
+        bus.get('big', function ruskie (o) {
             nothing = 50
-            var small = bus.fetch('small')
+            var small = bus.get('small')
             log()
             log('Second try.  Small starts as', small)
-            bus.save.fire({key: 'small', something: nothing})
-            log('Now it is', bus.fetch('small'))
+            bus.set.fire({key: 'small', something: nothing})
+            log('Now it is', bus.get('small'))
         })}, 15)
 
 
     // Done
     setTimeout(function () {
-        bus('big').to_fetch.delete(big)
-        bus('middle').to_fetch.delete(middle)
-        bus('small').to_fetch.delete(small)
+        bus('big').to_get.delete(big)
+        bus('middle').to_get.delete(middle)
+        bus('small').to_get.delete(small)
         done()
     }, 50)
 })
@@ -647,12 +647,12 @@ test(function russian_doll_nesting (done) {
 test(function some_handlers_suicide (done) {
     // These handlers stop reacting after they successfully complete:
     // 
-    //   .on_save
-    //   .to_save
+    //   .on_set
+    //   .to_set
     //   .to_forget
     //   .to_delete
     //
-    // Ok, that's everyting except for a .to_fetch handler, which
+    // Ok, that's everyting except for a .to_get handler, which
     // runs until its key has been forget()ed.
 
     // XXX todo
@@ -806,9 +806,9 @@ test(function proxies (done) {
 
       - Setting nested items
       - Escaping their fields
-      - Calling fetch on them
+      - Calling get on them
       - Converting state[..] to keyed objects internally
-      - has() potentially doing a fetch, or loading()
+      - has() potentially doing a get, or loading()
       - set() returning a proxy object
       - console output
       - node AND chrome
@@ -838,53 +838,53 @@ test(function proxies (done) {
         state.foo.a    // triggers re-render too
     })
 
-    // Getting a linked item should do a fetch
+    // Getting a linked item should do a get
     bus(() => {
         state.bar
     })
 
-    // Getting a normal property should do a fetch
+    // Getting a normal property should do a get
 })
 
 test(function only_one (done) {
-    bus('only_one/*').to_fetch = function (k) {
+    bus('only_one/*').to_get = function (k) {
         var id = k[k.length-1]
-        return {selected: bus.fetch('selector').choice == id}
+        return {selected: bus.get('selector').choice == id}
     }
 
-    assert(!bus.fetch('only_one/1').selected)
-    assert(!bus.fetch('only_one/2').selected)
-    assert(!bus.fetch('only_one/3').selected)
+    assert(!bus.get('only_one/1').selected)
+    assert(!bus.get('only_one/2').selected)
+    assert(!bus.get('only_one/3').selected)
 
-    bus.save({key: 'selector', choice: 1})
+    bus.set({key: 'selector', choice: 1})
 
     setTimeout(function () {
-        assert( bus.fetch('only_one/1').selected)
-        assert(!bus.fetch('only_one/2').selected)
-        assert(!bus.fetch('only_one/3').selected)
+        assert( bus.get('only_one/1').selected)
+        assert(!bus.get('only_one/2').selected)
+        assert(!bus.get('only_one/3').selected)
 
-        bus.save({key: 'selector', choice: 2})
+        bus.set({key: 'selector', choice: 2})
     }, 10)
 
     setTimeout(function () {
-        assert(!bus.fetch('only_one/1').selected)
-        assert( bus.fetch('only_one/2').selected)
-        assert(!bus.fetch('only_one/3').selected)
+        assert(!bus.get('only_one/1').selected)
+        assert( bus.get('only_one/2').selected)
+        assert(!bus.get('only_one/3').selected)
 
-        bus.save({key: 'selector', choice: 3})
+        bus.set({key: 'selector', choice: 3})
     }, 20)
 
     setTimeout(function () {
-        assert(!bus.fetch('only_one/1').selected)
-        assert(!bus.fetch('only_one/2').selected)
-        assert( bus.fetch('only_one/3').selected)
+        assert(!bus.get('only_one/1').selected)
+        assert(!bus.get('only_one/2').selected)
+        assert( bus.get('only_one/3').selected)
         done()
     }, 30)
 })
 
-test(function save_can_trigger_tofetch (done) {
+test(function set_can_trigger_toget (done) {
     // bus.honk = true
-    bus('save_trigger_tofetch').to_fetch =
+    bus('set_trigger_toget').to_get =
         function (k, old) {
             old.yes = Math.random()
             return old
@@ -893,23 +893,23 @@ test(function save_can_trigger_tofetch (done) {
     var obj
     var triggered = 0
     bus(() => {
-        log('Aight! Fetching save_trigger_fetch')
-        obj = bus.fetch('save_trigger_tofetch')
+        log('Aight! Getting set_trigger_get')
+        obj = bus.get('set_trigger_toget')
         if (bus.loading()) return
         triggered++
         log('Triggered', triggered, 'times', obj)
 
-        // XXX todo: because of a bug in how to_fetch is handled, this triggers 4 times instead of 3
+        // XXX todo: because of a bug in how to_get is handled, this triggers 4 times instead of 3
         assert(triggered <= 4)
         log('GGGGGGGGGGGG')
     })
 
-    delay(30, () => { log('savin 1!'); obj.a = 1; bus.save(obj) })
-    delay(30, () => { log('savin 2!'); obj.a = 2; bus.save(obj) })
+    delay(30, () => { log('savin 1!'); obj.a = 1; bus.set(obj) })
+    delay(30, () => { log('savin 2!'); obj.a = 2; bus.set(obj) })
     delay(30, done)
 })
 
-test(function rollback_savefire (done) {
+test(function rollback_setfire (done) {
     var count = 0
     var error = false
     var phase = 0
@@ -917,23 +917,23 @@ test(function rollback_savefire (done) {
     function wait () { setTimeout(function () {
         assert(phase++ === 1)
         log('Firing wait')
-        bus.save.fire({key: 'wait', count: count})
+        bus.set.fire({key: 'wait', count: count})
     }, 50) }
-    bus('wait').to_fetch = wait
+    bus('wait').to_get = wait
 
     // Initialize
-    bus.save.fire({key: 'undo me', state: 'start'})
+    bus.set.fire({key: 'undo me', state: 'start'})
     
     // Now start the reactive function
     bus(function () {
         log('Reaction', ++count, 'starting with state',
-            bus.fetch('undo me').state, 'and loading =', bus.loading())
+            bus.get('undo me').state, 'and loading =', bus.loading())
 
-        // Fetch something that we have to wait for
-        var wait = bus.fetch('wait')
+        // Get something that we have to wait for
+        var wait = bus.get('wait')
 
-        // Save some middling state
-        bus.save.fire({key: 'undo me', state: 'progressing'})
+        // Set some middling state
+        bus.set.fire({key: 'undo me', state: 'progressing'})
 
         if (count === 1 && !bus.loading()) {
             log('### Error! We should be loading!')
@@ -964,20 +964,20 @@ test(function rollback_savefire (done) {
                60)
 
     setTimeout(function () {
-        bus('wait').to_fetch.delete(wait)
+        bus('wait').to_get.delete(wait)
         assert(phase === 3)
         done()
     }, 80)
 })
 
 test(function rollback_del (done) {
-    bus('wait forever').to_fetch = function () {} // shooting blanks
-    bus.save.fire({key: 'kill me', alive: true})
+    bus('wait forever').to_get = function () {} // shooting blanks
+    bus.set.fire({key: 'kill me', alive: true})
 
     // First do a del that will roll back
     bus(function () {
         log('Doing a rollback on', bus.cache['kill me'])
-        bus.fetch('wait forever')  // Never finishes loading
+        bus.get('wait forever')  // Never finishes loading
         bus.del('kill me')         // Will roll back
     })
     assert(bus.cache['kill me'].alive === true)
@@ -992,46 +992,46 @@ test(function rollback_del (done) {
     done()
 })
 
-test(function rollback_save (done) {
-    var saves = []
+test(function rollback_set (done) {
+    var sets = []
     var all_done = false
-    bus('candy').to_save = function (o) {saves.push(o); bus.save.fire(o)}
-    bus.save.fire({key: 'candy', flavor: 'lemon'})
+    bus('candy').to_set = function (o) {sets.push(o); bus.set.fire(o)}
+    bus.set.fire({key: 'candy', flavor: 'lemon'})
 
     log('Trying some rollbacks starting with', bus.cache['candy'])
 
-    // First do a save that will roll back
+    // First do a set that will roll back
     bus(function () { if (all_done) return;
                       log('Doing a rollback on bananafied candy')
-                      bus.fetch('wait forever')                  // Never finishes loading
-                      bus.save({key:'candy', flavor: 'banana'})  // Will roll back
+                      bus.get('wait forever')                  // Never finishes loading
+                      bus.set({key:'candy', flavor: 'banana'})  // Will roll back
                       log('...and the candy is', bus.cache['candy'])
                       //forget('candy')
                     })
     assert(bus.cache['candy'].flavor === 'lemon')
-    assert(saves.length === 0)
+    assert(sets.length === 0)
 
-    // Try rolling back another style of save
+    // Try rolling back another style of set
     bus(function () { if (all_done) return
                       log("Now we'll First we licoricize the", bus.cache['candy'])
-                      bus.fetch('wait forever')                  // Never finishes loading
-                      var candy = bus.fetch('candy')
+                      bus.get('wait forever')                  // Never finishes loading
+                      var candy = bus.get('candy')
                       candy.flavor = 'licorice'
                       log('...the candy has become', bus.cache['candy'])
-                      bus.save(candy)                            // Will roll back
+                      bus.set(candy)                            // Will roll back
                       log('...and now it\'s rolled back to', bus.cache['candy'])
                       bus.forget('candy')
                     })
     assert(bus.cache['candy'].flavor === 'lemon')
-    assert(saves.length === 0)
+    assert(sets.length === 0)
 
-    // Now a save that goes through
+    // Now a set that goes through
     bus(function () {
-        log('Doing a real save on', bus.cache['candy'])
-        bus.save({key:'candy', flavor: 'orangina'})  // Will go through
+        log('Doing a real set on', bus.cache['candy'])
+        bus.set({key:'candy', flavor: 'orangina'})  // Will go through
     })
     assert(bus.cache['candy'].flavor = 'orangina')
-    assert(saves.length === 1, 'Saves.length 1 != '+saves.length)
+    assert(sets.length === 1, 'Sets.length 1 != '+sets.length)
 
     log('Now candy is', bus.cache['candy'])
     all_done = true
@@ -1040,11 +1040,11 @@ test(function rollback_save (done) {
 
 test(function rollback_abort (done) {
     var bus = require('../statebus')()
-    bus('foo').to_save = (o, t) => {t.abort()}
+    bus('foo').to_set = (o, t) => {t.abort()}
     bus(()=> {
-        var o = bus.fetch('foo')
+        var o = bus.get('foo')
         o.bar = 3
-        bus.save(o)
+        bus.set(o)
     })
     setTimeout(() => {
         assert(!bus.cache.foo.bar)
@@ -1054,11 +1054,11 @@ test(function rollback_abort (done) {
 
 test(function loading_quirk (done) {
     // Make sure a function that called loading() gets re-run even
-    // if the return from a fetch didn't actually change state
+    // if the return from a get didn't actually change state
 
-    // First define a delayed save.fire
-    bus('wait a sec').to_fetch = function (k) {
-        setTimeout(function () { bus.save.fire({key: k}) }, 50)
+    // First define a delayed set.fire
+    bus('wait a sec').to_get = function (k) {
+        setTimeout(function () { bus.set.fire({key: k}) }, 50)
     }
 
     // Now run the test
@@ -1067,7 +1067,7 @@ test(function loading_quirk (done) {
     bus(function () {
         num_calls++
         log('called', num_calls, 'times')
-        bus.fetch('wait a sec')
+        bus.get('wait a sec')
         loaded = !bus.loading()
     })
 
@@ -1096,15 +1096,15 @@ test(function default_route (done) {
     var b1 = require('../statebus')()
     var b2 = require('../statebus')()
     b1.shadows(b2)
-    b2.save({key: 'foo', bar: 3})
-    console.assert(b1.fetch('foo').bar)
-    log(b1.fetch('foo'))
-    log(b2.fetch('foo'))
+    b2.set({key: 'foo', bar: 3})
+    console.assert(b1.get('foo').bar)
+    log(b1.get('foo'))
+    log(b2.get('foo'))
     b1.delete('foo')
-    log(b1.fetch('foo'))
-    log(b2.fetch('foo'))
-    console.assert(!b1.fetch('foo').bar)
-    console.assert(!b2.fetch('foo').bar)
+    log(b1.get('foo'))
+    log(b2.get('foo'))
+    console.assert(!b1.get('foo').bar)
+    console.assert(!b2.get('foo').bar)
     done()
 })
 
@@ -1114,13 +1114,13 @@ function setup_servers () {
     s = require('../statebus').serve({port, file_store: false})
     s.label = 's'
     log('Saving /far on server')
-    s.save({key: 'far', away:'is this'})
+    s.set({key: 'far', away:'is this'})
 
     c = require('../statebus')()
     c.label = 'c'
     c.ws_mount('/*', 'statei://localhost:' + port)
 
-    s.save({key: 'users',
+    s.set({key: 'users',
             all: [ {  key: 'user/1',
                       name: 'mike',
                       email: 'toomim@gmail.com',
@@ -1150,11 +1150,11 @@ test(function setup_server (done) {
     // c.honk = true
 
     setTimeout(function () {
-        log('Fetching /far on client')
+        log('Getting /far on client')
         var count = 0
-        c.fetch('/far', function (o) {
+        c.get('/far', function (o) {
             log('cb !!!!!!!!! --- ^_^')
-            c.fetch('/far')
+            c.get('/far')
             if (o.away === 'is this') {
                 log('We got '+o.key+' from the server!')
 
@@ -1179,7 +1179,7 @@ test(function login (done) {
 
     //c.honk = true
     c(function () {
-        var u = c.fetch('/current_user')
+        var u = c.get('/current_user')
         log('Current user changed!', c.label, JSON.stringify(u))
         if (u.logged_in) {
             log('Yay! We are logged in as', u.user.name)
@@ -1191,11 +1191,11 @@ test(function login (done) {
 
     delay(200, () => {
         // c.honk = user0.honk = true
-        var u = c.fetch('/current_user')
+        var u = c.get('/current_user')
         u.login_as = {name: 'mike', pass: 'yeah'}
         log('Logging in')
         //s.honk = true
-        c.save(u)
+        c.set(u)
         log('Let\'s see if that login worked!!')
     })
 })
@@ -1204,10 +1204,10 @@ test(function wrong_password (done) {
     var {s, c} = setup_servers()
     // s.honk = true; c.honk = true
 
-    var u = c.fetch('/current_user')
+    var u = c.get('/current_user')
     //assert(u.logged_in && u.user.name == 'mike')
     u.login_as = {name: 'j', pass: 'nah'}
-    c.save(u)
+    c.set(u)
     delay(500, () => {
         assert(!u.login_as, 'Aborted login needs to abort')
         log('Good, the login failed.')
@@ -1223,16 +1223,16 @@ test(function create_account (done) {
 
     delay(500, () => {
         log('Logging in')
-        cu = c.fetch('/current_user')
+        cu = c.get('/current_user')
         cu.login_as = {name: 'mike', pass: 'yeah'}
-        c.save(cu)
+        c.set(cu)
     })
 
     // Log out
     delay(500, () => {
-        assert(c.fetch('/current_user').logged_in)
+        assert(c.get('/current_user').logged_in)
         log('Logging out')
-        cu.logout = true; c.save(cu)
+        cu.logout = true; c.set(cu)
     })
 
     // Create bob and log in as bob
@@ -1240,12 +1240,12 @@ test(function create_account (done) {
         log('Creating bob')
         assert(!cu.logged_in, '3 logged in')
         cu.create_account = {name: 'bob', email: 'b@o.b', pass: 'boob'}
-        c.save(cu)
+        c.set(cu)
 
         log('Logging in as bob')
         delete cu.create_account
         cu.login_as = {name: 'bob', pass: 'boob'}
-        c.save(cu)
+        c.set(cu)
     })
 
     // Log out
@@ -1258,7 +1258,7 @@ test(function create_account (done) {
                'Bad user', cu)
 
         log('Now let\'s log out!')
-        cu.logout = true; c.save(cu)
+        cu.logout = true; c.set(cu)
     })
 
     // Log back in as boob
@@ -1266,7 +1266,7 @@ test(function create_account (done) {
         log('Logging back in as boob')
         assert(!cu.logged_in, 'Still logged in, as ' + cu.key)
         cu.login_as = {name: 'bob', pass:'boob'}
-        c.save(cu)
+        c.set(cu)
     })
     
     delay(600, () => {
@@ -1294,9 +1294,9 @@ function connections_helper (done, port, options) {
     c2.ws_mount('/*', 'statei://localhost:' + port)
 
     // Load the basic connections
-    c1.c = c1.fetch('/connection')
-    c2.c = c2.fetch('/connection')
-    c1.all = c1.fetch('/connections')
+    c1.c = c1.get('/connection')
+    c2.c = c2.get('/connection')
+    c1.all = c1.get('/connections')
 
     delay(50, _=> {
         // Test
@@ -1307,10 +1307,10 @@ function connections_helper (done, port, options) {
         assert(c2.c.id)
 
         // Load the connections inside
-        c1.c1 = c1.fetch('/connection/' + c1.c.id)
-        c1.c2 = c1.fetch('/connection/' + c2.c.id)
-        c2.c1 = c2.fetch('/connection/' + c1.c.id)
-        c2.c2 = c2.fetch('/connection/' + c2.c.id)
+        c1.c1 = c1.get('/connection/' + c1.c.id)
+        c1.c2 = c1.get('/connection/' + c2.c.id)
+        c2.c1 = c2.get('/connection/' + c1.c.id)
+        c2.c2 = c2.get('/connection/' + c2.c.id)
     })
 
     delay(50, _=> {
@@ -1324,8 +1324,8 @@ function connections_helper (done, port, options) {
         assert(c2.c2.id === c2.c.id)
 
         // Modify a connection
-        c1.c.foo = 'bar'; c1.save(c1.c)
-        c2.c2.fuzz = 'buzz'; c2.save(c2.c2)
+        c1.c.foo = 'bar'; c1.set(c1.c)
+        c2.c2.fuzz = 'buzz'; c2.set(c2.c2)
     })
 
     delay(50, _=> {
@@ -1339,8 +1339,8 @@ function connections_helper (done, port, options) {
         assert(c1.c2.fuzz === 'buzz')
 
         // Modify someone else's connection
-        c1.c2.fuzz = 'fart'; c1.save(c1.c2)
-        c2.c1.free = 'willy'; c2.save(c2.c1)
+        c1.c2.fuzz = 'fart'; c1.set(c1.c2)
+        c2.c1.free = 'willy'; c2.set(c2.c1)
     })
 
     delay(50, _=> {
@@ -1372,9 +1372,9 @@ test(function connections_2 (done) {
 })
 
 test(function flashbacks (done) {
-    // We have an echo canceler.  If you save state, it shouldn't send the
+    // We have an echo canceler.  If you set state, it shouldn't send the
     // same state back to you, but it should send it to everyone else.  But if
-    // the state is changed in a to_save handler, it *should* send you
+    // the state is changed in a to_set handler, it *should* send you
     // changes.
 
     var port = 3873
@@ -1383,7 +1383,7 @@ test(function flashbacks (done) {
     var s = require('../statebus').serve({port: port, file_store: false})
     s.label = 's'
 
-    s('x').to_save = (o, t) => {
+    s('x').to_set = (o, t) => {
         log('Saving x with', o)
         o.x++        // Change the value of o.x a little
         t.done(o)
@@ -1398,13 +1398,13 @@ test(function flashbacks (done) {
     c2.label = 'c2'
     c2.ws_mount('*', 'statei://localhost:' + port)
     
-    c1.x = c1.fetch('x')
-    c2.x = c2.fetch('x')
+    c1.x = c1.get('x')
+    c2.x = c2.get('x')
 
     // Change stuff
     delay(50, _=> {
         c1.x.x = 1
-        c1.save(c1.x)
+        c1.set(c1.x)
     })
 
     // Test stuff
@@ -1422,25 +1422,25 @@ test(function common_time (done) {
     b.honk = 3
 
     // Define a `front' that proxies for `back'
-    b('front').to_fetch = () => {
-        var copy = b.clone(b.fetch('back'))
+    b('front').to_get = () => {
+        var copy = b.clone(b.get('back'))
         copy.key = 'front'
         return copy
     }
-    b('front').to_save = (o, t) => {
+    b('front').to_set = (o, t) => {
         var copy = b.clone(o)
         copy.key = 'back'
 
         if (copy.special)
             copy.alert = true
 
-        b.save.sync(copy)
+        b.set.sync(copy)
     }
 
     // Register a handler to see how things change
     var i = 0
     b(() => {
-        var front = b.fetch('front')
+        var front = b.get('front')
         log('Looks like front is currently', front, b.versions.front, '!')
 
         // Test it!
@@ -1454,11 +1454,11 @@ test(function common_time (done) {
     })
 
     // Now make changes through front
-    delay(50, _=> b.save({key: 'front', val: 'bar1'}))
-    delay(50, _=> b.save({key: 'front', val: 'bar2'}, {version: 'x2'}))
-    delay(50, _=> b.save({key: 'front', val: 'bar2'}, {version: 'x2.2'}))
-    delay(50, _=> b.save({key: 'front', val: 'bar3'}, {version: 'x3'}))
-    delay(50, _=> b.save({key: 'front'}, {version: '_'}))
+    delay(50, _=> b.set({key: 'front', val: 'bar1'}))
+    delay(50, _=> b.set({key: 'front', val: 'bar2'}, {version: 'x2'}))
+    delay(50, _=> b.set({key: 'front', val: 'bar2'}, {version: 'x2.2'}))
+    delay(50, _=> b.set({key: 'front', val: 'bar3'}, {version: 'x3'}))
+    delay(50, _=> b.set({key: 'front'}, {version: '_'}))
 
     delay(0, _=> log('Now trying with a client.'))
 
@@ -1475,21 +1475,21 @@ test(function common_time (done) {
     }
 
     // Make a couple changes.  These should go through.
-    delay(50, _=> b.fetch('front', client))
-    delay(50, _=> b.save({key: 'front', val: 'foo1'}, {version: 'y1'}))
+    delay(50, _=> b.get('front', client))
+    delay(50, _=> b.set({key: 'front', val: 'foo1'}, {version: 'y1'}))
 
     // Now make some changes that the client has already seen
     delay(50, _=> {
         client.has_seen(b, 'front', 'y2')
-        b.save({key: 'front', val: 'foo2'}, {version: 'y2'})
+        b.set({key: 'front', val: 'foo2'}, {version: 'y2'})
     })
     delay(50, _=> {
         client.has_seen(b, 'front', 'y3')
-        b.save({key: 'front', val: 'foo3', special: true}, {version: 'y3'})
+        b.set({key: 'front', val: 'foo3', special: true}, {version: 'y3'})
     })
 
     // And one it hasn't seen again
-    delay(50, _=> b.save({key: 'front', val: 'foo4'}, {version: 'y4'}))
+    delay(50, _=> b.set({key: 'front', val: 'foo4'}, {version: 'y4'}))
 
     // And we're done!
     delay(50, done)
@@ -1509,7 +1509,7 @@ if (false) {
              function () {
                  log('Logging in as mike')
                  //s.honk=true
-                 u.login_as = {name: 'mike', pass: 'yeah'}; c.save(u)
+                 u.login_as = {name: 'mike', pass: 'yeah'}; c.set(u)
              }],
 
             // Phase 1
@@ -1533,7 +1533,7 @@ if (false) {
                      tmp1 = true
                      log('Firing the actual j login')
                      //s.userbus.honk = true
-                     u.login_as = {name: 'j', pass: 'yeah'}; c.save(u)
+                     u.login_as = {name: 'j', pass: 'yeah'}; c.set(u)
                      log('We just logged in as j. now user is:', u.user.name)
                  }, 10)
              }],
@@ -1556,23 +1556,23 @@ if (false) {
              function () { log("That's all, Doc."); setTimeout(function () {done()}) }]
         ]}
 
-        c('/current_user').on_save = function (o) {
+        c('/current_user').on_set = function (o) {
             //if (o.user && o.user.name === 'j') {
             // log(s.userbus.deps('/current_user'))
             // log(s.userbus.deps('/user/2'))
             //}
         }
-        c('/user/*').on_save = function (o) {
+        c('/user/*').on_set = function (o) {
             //log('-> Got new', o.key, o.email ? 'with email' : '')
         }
-        c('/current_user').on_save = function (o) {
+        c('/current_user').on_set = function (o) {
             //log('-> Got new /current_user')
         }
         c(function loop () {
-            u = c.fetch('/current_user')
-            user1 = c.fetch('/user/1')
-            user2 = c.fetch('/user/2')
-            user3 = c.fetch('/user/3')
+            u = c.get('/current_user')
+            user1 = c.get('/user/1')
+            user2 = c.get('/user/2')
+            user3 = c.get('/user/3')
             var st = states()
 
             if (phase===1)
@@ -1605,15 +1605,15 @@ if (false) {
         c.ws_mount('/*', 'statei://localhost:3949')
 
         // Make stuff as user A
-        var cu = c.fetch('/current_user')
-        c.save({key: '/current_user', create_account: {name: 'a', pass: 'a'}})
-        c.save({key: '/current_user', login_as: {name: 'a', pass: 'a'}})
-        var a_closet = c.fetch('/user/a/foo')
-        var a_private = c.fetch('/user/a/private/foo')
+        var cu = c.get('/current_user')
+        c.set({key: '/current_user', create_account: {name: 'a', pass: 'a'}})
+        c.set({key: '/current_user', login_as: {name: 'a', pass: 'a'}})
+        var a_closet = c.get('/user/a/foo')
+        var a_private = c.get('/user/a/private/foo')
 
         delay(400, () => {
-            c.save({key: '/user/a/foo', _: 3})
-            c.save({key: '/user/a/private/foo', _: 4})
+            c.set({key: '/user/a/foo', _: 3})
+            c.set({key: '/user/a/private/foo', _: 4})
         })
 
         // User A can see it
@@ -1625,8 +1625,8 @@ if (false) {
             assert(a_private._ === 4, 'private not right')
 
             // Set up User B
-            c.save({key: '/current_user', create_account: {name: 'b', pass: 'b'}})
-            c.save({key: '/current_user', login_as: {name: 'b', pass: 'b'}})
+            c.set({key: '/current_user', create_account: {name: 'b', pass: 'b'}})
+            c.set({key: '/current_user', login_as: {name: 'b', pass: 'b'}})
         })
 
         // User B can't see private stuff
@@ -1637,7 +1637,7 @@ if (false) {
             assert(a_private._ !== 4, 'damn can still see private')
 
             // User B tries editing the first closet
-            a_closet._ = 5; c.save(a_closet)
+            a_closet._ = 5; c.set(a_closet)
         })
 
         // User B could not edit that
@@ -1653,21 +1653,21 @@ if (false) {
         // Not fully implemented yet
 
         /*
-          Let's save within an on-save handler.  Which will trigger
-          first... the dirty(), or the new save()?  Hm, do we really
+          Let's set within an on-set handler.  Which will trigger
+          first... the dirty(), or the new set()?  Hm, do we really
           care?
         */
 
         var user = 3
-        bus('user').to_fetch =
+        bus('user').to_get =
             function (k) {
                 return {user: user}
             }
 
-        bus('user').to_save =
+        bus('user').to_set =
             function (o) {
                 if (o.funny)
-                    bus.save({key: 'user', user: 'funny'})
+                    bus.set({key: 'user', user: 'funny'})
 
                 user = o.user
                 bus.dirty('user')
