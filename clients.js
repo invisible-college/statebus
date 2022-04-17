@@ -421,9 +421,8 @@
 
             return React.createElement(react_class, props, children)
         }
-        // Give it the same prototype as the original class so that it
-        // passes React.isValidClass() inspection
-        result.prototype = react_class.prototype
+        Object.defineProperty(result, 'name',
+                              {value: component.displayName, writable: false})
         return result
     }
 
@@ -521,7 +520,9 @@
 
         improve_react()
         statebus.ignore_flashbacks = false
-        bus.http_mount = http_mount
+        bus.libs = {}
+        bus.libs.http_mount = http_mount
+        bus.libs.react_class = create_react_class
         // if (statebus_server !== 'none') {
         //     if (clientjs_option('braid_mode')) {
         //         console.log('Using Braid-HTTP!')

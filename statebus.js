@@ -647,6 +647,7 @@
             case 'star':
             case 'rest':
                 handler.args['rest'] = i; break
+            case 'cb':
             case 't':
             case 'transaction':
                 handler.args['t'] = i; break
