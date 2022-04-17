@@ -159,12 +159,11 @@ function import_server (bus, options)
             console.log(req.method, req.url, req.headers.subscribe
                         ? 'Subscribe: ' + req.headers.subscribe : '')
 
-        // If this requests knows about Braid then we presume the
-        // programmer knows that any client might make this cross-origin
-        // request.
+        // If this requests knows about Braid then we presume the programmer
+        // knows that any client might make this cross-origin request.
         if (req.headers.version || req.headers.parents || req.headers.subscribe
             || req.method === 'OPTIONS')
-            free_the_cors(req, res, () => null)
+            free_the_cors(req, res)
 
         if (req.method === 'GET') {
 
@@ -184,7 +183,7 @@ function import_server (bus, options)
                 res.statusCode = 200
 
             // Do the get
-            cbus.honk = 'statelog'
+            // cbus.honk = 'statelog'
             var key = req.path.substr(1)
             cbus.get(key, cb = (o) => {
                 var body = to_http_body(o)
@@ -2445,7 +2444,7 @@ function free_the_cors (req, res, next) {
         res.writeHead(200)
         res.end()
     } else
-        next()
+        next && next()
 }
 
 

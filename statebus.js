@@ -805,8 +805,7 @@
             // Is there a time I am supposed to return bus.cache[arg]?  It used to say:
             // arg.key ? arg : bus.cache[arg]
 
-            return func.use_linked_json ? arg.val : arg
-
+            return arg.key ? (func.use_linked_json ? arg.val : arg) : undefined
         }
         function vars_arg () {
             var r = rest_arg()
@@ -834,6 +833,8 @@
             if (method !== 'to_forget')
                 t.done = function (o) {
                     var key = method === 'to_set' ? arg.key : arg
+                    if (func.use_linked_json)
+                        o = {key, val: o}
                     bus.log('We are DONE()ing', method, key, o||arg)
 
                     // We use a simple (and crappy?) heuristic to know if the

@@ -129,10 +129,11 @@ test(function prune (done) {
 
 test(function auto_vars (done) {
     var n = require('../statebus')()
-    n('r/*').to_get = function (rest, o) {return {rest: rest, o: o}}
+    n('r/*').to_get = function (rest, o) {return {rest, o}}
     log(n.get('r/3'))
     assert(n.get('r/3').rest === '3')
-    assert(n.get('r/3').o === undefined)
+    assert(n.get('r/3').o === undefined,
+           'o is not undefined: ' + JSON.stringify(n.get('r/3')))
 
     n('v/*').to_get = function (vars, star) {return {vars: vars, rest: star}}
     log(n.get('v/[3,9 4]').rest)
