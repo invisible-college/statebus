@@ -3,7 +3,7 @@
     if (typeof module != 'undefined') module.exports = definition()
     else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
     else this[name] = definition()
-}('statebus', function() {statelog_indent = 0; var busses = {}, executing_funk, global_funk, funks = {}, clean_timer, symbols, nodejs = typeof window === 'undefined'; function make_bus (options) {
+}('statebus', function() {statelog_indent = 0; var busses = {}, bus_count = 0, executing_funk, global_funk, funks = {}, clean_timer, symbols, nodejs = typeof window === 'undefined'; function make_bus (options) {
     
 
     // ****************
@@ -249,19 +249,19 @@
     }
 
     // Now create the statebus object
-    function bus (arg) {
+    function bus (arg1, arg2) {
         // Called with a function to react to
-        if (typeof arg === 'function') {
-            var f = reactive(arg)
+        if (typeof arg1 === 'function') {
+            var f = reactive(arg1)
             f()
             return f
         }
 
         // Called with a key to produce a subspace
-        else return subspace(arg)
+        else return subspace(arg1, arg2)
     }
-    var id = 'bus ' + Math.random().toString(36).substring(7)
-    bus.toString = function () { return bus.label || id }
+    var id = 'bus-' + Math.random().toString(36).substring(7)
+    bus.toString = function () { return bus.label || 'bus'+this_bus_num || id }
     bus.delete_bus = function () {
         // // Forget all wildcard handlers
         // for (var i=0; i<wildcard_handlers.length; i++) {
@@ -567,7 +567,7 @@
                     }
                     autodetect_args(f)
                     f = run_handler(f, 'on_set', cache[keys[i]], {dont_run: true,
-                                                                   binding: keys[i]})
+                                                                  binding: keys[i]})
                 }
                 result.push({funk_key: funk_key(f),
                              at_version: versions[keys[i]]})
@@ -587,28 +587,43 @@
 
     // ****************
     // Connections
-    function subspace (key) {
-        var result = {}
-        for (var method in {to_get:null, to_set:null, on_set:null, on_set_sync:null,
-                            on_delete:null, to_delete:null, to_forget:null})
-            (function (method) {
-                Object.defineProperty(result, method, {
-                    set: function (func) {
-                        autodetect_args(func)
-                        func.defined = func.defined || []
-                        func.defined.push(
-                            {as:'handler', bus:bus, method:method, key:key})
-                        bind(key, method, func, 'allow_wildcards')
-                    },
-                    get: function () {
-                        var result = bindings(key, method)
-                        for (var i=0; i<result.length; i++) result[i] = result[i].func
-                        result.delete = function (func) { unbind (key, method, func, 'allow_wildcards') }
-                        return result
-                    }
-                })
-            })(method)
-        return result
+    function subspace (key, params) {
+        var methods = {to_get:null, to_set:null, on_set:null, on_set_sync:null,
+                       on_delete:null, to_delete:null, to_forget:null}
+
+        if (params) {
+            for (var method in params) {
+                console.assert(method in methods)
+                var func = params[method]
+                autodetect_args(func)
+                func.defined = func.defined || []
+                func.defined.push({bus, method, key, as: 'handler'})
+                func.use_linked_json = true
+                bind(key, method, func, 'allow_wildcards')
+            }
+        }
+        else {
+            var result = {}
+            for (var method in methods)
+                (function (method) {
+                    Object.defineProperty(result, method, {
+                        set: function (func) {
+                            autodetect_args(func)
+                            func.defined = func.defined || []
+                            func.defined.push(
+                                {as:'handler', bus:bus, method:method, key:key})
+                            bind(key, method, func, 'allow_wildcards')
+                        },
+                        get: function () {
+                            var result = bindings(key, method)
+                            for (var i=0; i<result.length; i++) result[i] = result[i].func
+                            result.delete = function (func) { unbind (key, method, func, 'allow_wildcards') }
+                            return result
+                        }
+                    })
+                })(method)
+            return result
+        }
     }
 
     function autodetect_args (handler) {
@@ -785,6 +800,14 @@
         // re-run until they are done re-running.
         function key_arg () { return ((typeof arg.key) == 'string') ? arg.key : arg }
         function rest_arg () { return (key_arg()).substr(binding.length-1) }
+        function val_arg () {
+            console.assert(method === 'to_set' || method === 'on_set' || method === 'on_set_sync')
+            // Is there a time I am supposed to return bus.cache[arg]?  It used to say:
+            // arg.key ? arg : bus.cache[arg]
+
+            return func.use_linked_json ? arg.val : arg
+
+        }
         function vars_arg () {
             var r = rest_arg()
             try {
@@ -794,7 +817,6 @@
             }
         }
         var f = reactive(function () {
-
             // Initialize transaction
             t = clone(t || {})
 
@@ -852,7 +874,7 @@
             // Now to call the handler, let's line up the function's special
             // named arguemnts like key, o, t, rest, vars, etc.
             var args = []
-            args[0] = arg
+            args[0] = (method in {to_set:1, on_set:1, on_set_sync:1}) ? val_arg() : arg
             args[1] = t
             for (var k in (func.args||{})) {
                 switch (k) {
@@ -866,7 +888,7 @@
                 case 't':
                     args[func.args[k]] = t; break
                 case 'obj':
-                    args[func.args[k]] = arg.key ? arg : bus.cache[arg]; break
+                    args[func.args[k]] = val_arg(); break
                 case 'old':
                     var key = key_arg()
                     args[func.args[k]] = bus.cache[key] || (bus.cache[key] = {key:key})
@@ -890,14 +912,24 @@
             if (result === 'abort') t.abort()
 
             // For get
-            if (method === 'to_get' && result instanceof Object
-                && !f.loading()     // Experimental.
-               ) {
-                result.key = arg
-                var new_t = clone(t || {})
-                new_t.to_get = true
-                set.fire(result, new_t)
-                return result
+            if (func.use_linked_json) {
+                if (method === 'to_get' && result !== undefined && !f.loading()) {
+                    var obj = {key: arg, val: result}
+                    var new_t = clone(t || {})
+                    new_t.to_get = true
+                    set.fire(obj, new_t)
+                    return result
+                }
+            } else {
+                if (method === 'to_get' && result instanceof Object
+                    && !f.loading()     // Experimental.
+                   ) {
+                    result.key = arg
+                    var new_t = clone(t || {})
+                    new_t.to_get = true
+                    set.fire(result, new_t)
+                    return result
+                }
             }
 
             // Set, forget and delete handlers stop re-running once they've
@@ -1125,7 +1157,8 @@
         var red = '', normal = '', grey = '',
             green = '', brown = ''
     function add_diff_msg (message, obj) {
-        var diff = sorta_diff(backup_cache[obj.key], obj)
+        var diff = sorta_diff(backup_cache[obj.key] && backup_cache[obj.key].val,
+                              obj && obj.val)
         if (diff) {
             var end_col = message.length + 2 + statelog_indent * 3
             for (var i=0; i<40-end_col; i++) message += ' '
@@ -2070,6 +2103,9 @@
     }
 
     busses[bus.id] = bus
+    var this_bus_num = bus_count++
+
+    bus.libs = {}
 
     if (nodejs)
         require('./servers').import_server(bus, options)

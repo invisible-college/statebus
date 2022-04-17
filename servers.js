@@ -71,7 +71,6 @@ function import_server (bus, options)
         bus.express = express()
         bus.http = express.Router()
         bus.install_express(bus.express)
-        bus.initialize_http()
 
         // use gzip compression if available
         try { bus.http.use(require('compression')())
@@ -100,24 +99,11 @@ function import_server (bus, options)
                 bus.sync_files(x.state_path, x.fs_path)
         })
 
-        // Free the CORS for Braid requests!
-        bus.express.use((req, res, next) => {
-            // If this requests knows about Braid then we presume the
-            // programmer knows that any client might make this cross-origin
-            // request.
-            if (req.version || req.parents || req.subscribe
-                || req.headers.subscribe
-                || req.method === 'OPTIONS')
-                free_the_cors(req, res, next)
-            else
-                next()
-        })
-
         // User will put his routes in here
         bus.express.use(bus.http)
 
         // Connect bus to the HTTP server
-        bus.express.use(bus.http_handlers)
+        bus.express.use(bus.handle_http)
 
         // Serve Client Coffee
         bus.serve_client_coffee()
@@ -167,17 +153,19 @@ function import_server (bus, options)
         }
     },
 
-    initialize_http: function () {
-        // Set up default linked json converters
-        bus.to_http_body = (o) => JSON.stringify(o.val)
-        bus.from_http_body = (key, body) => ({
-            key,
-            val: JSON.parse(body)
-        })
-    },
-
     // Connect HTTP GET and PUT to our Get and Set
-    http_handlers: function (req, res, next) {
+    handle_http: function (req, res, next) {
+        if (bus.honk)
+            console.log(req.method, req.url, req.headers.subscribe
+                        ? 'Subscribe: ' + req.headers.subscribe : '')
+
+        // If this requests knows about Braid then we presume the
+        // programmer knows that any client might make this cross-origin
+        // request.
+        if (req.headers.version || req.headers.parents || req.headers.subscribe
+            || req.method === 'OPTIONS')
+            free_the_cors(req, res, () => null)
+
         if (req.method === 'GET') {
 
             // Make a temporary client bus
@@ -190,17 +178,16 @@ function import_server (bus, options)
             }
 
             braidify(req, res)
-            if (req.subscribe) {
+            if (req.subscribe)
                 res.startSubscription({ onClose: end_it_all })
-                console.log('yay subscription!')
-            } else
+            else
                 res.statusCode = 200
 
             // Do the get
             cbus.honk = 'statelog'
             var key = req.path.substr(1)
             cbus.get(key, cb = (o) => {
-                var body = bus.to_http_body(o)
+                var body = to_http_body(o)
 
                 // If we're braiding, send via subscription
 
@@ -216,8 +203,6 @@ function import_server (bus, options)
         }
 
         else if (req.method === 'PUT') {
-            console.log('Got a put with body', req.body)
-
             // Make a temporary client bus
             var cbus = bus.bus_for_http_client(req, res)
 
@@ -239,9 +224,8 @@ function import_server (bus, options)
                 req.on('data', chunk => {body += chunk.toString()})
                 req.on('end', () => {
                     try {
-                        console.log('gonna parse', body)
                         var path = req.url.substr(1)
-                        var obj = bus.from_http_body(path, body)
+                        var obj = from_http_body(path, body)
                     } catch (e) {
                         console.error('Error: PUT body was not valid json', e)
                         res.statusCode = 500
@@ -1155,19 +1139,19 @@ function import_server (bus, options)
 
         // Time ticker
         var timeouts = {}
-        bus('time*').to_get =
-            function (key, rest, t) {
+        bus('time*', {
+            to_get: (key, rest, t) => {
                 if (key === 'time') rest = '/1000'
                 timeout = parseInt(rest.substr(1))
-                function f () { bus.set.fire({key: key, time: Date.now()}) }
+                function f () { bus.set.fire({key: key, val: Date.now()}) }
                 timeouts[key] = setInterval(f, timeout)
                 f()
-            }
-        bus('time*').to_forget =
-            function (key, rest) {
+            },
+            to_forget: (key, rest) => {
                 if (key === 'time') key = 'time/1000'
                 clearTimeout(timeouts[key])
             }
+        })
     },
 
     smtp (opts) {
@@ -2437,6 +2421,9 @@ function import_server (bus, options)
     for (var m in extra_methods)
         bus[m] = extra_methods[m]
 
+    bus.libs.time = extra_methods.serve_time
+    bus.libs.http_in = extra_methods.handle_http
+
     bus.options = default_options(bus)
     set_options(bus, options)
 
@@ -2448,8 +2435,6 @@ function import_server (bus, options)
 
 // Disables CORS in HTTP servers
 function free_the_cors (req, res, next) {
-    console.log('free the cors!', req.method, req.url)
-
     var free_the_cors = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "OPTIONS, HEAD, GET, PUT, UNSUBSCRIBE",
@@ -2499,6 +2484,11 @@ function delay (time, f) {
 }
 delay.init = _=> delay_so_far = 0
 var delay_so_far = 0
+
+
+// Set up default linked json converters
+var to_http_body = (o) => JSON.stringify(o.val)
+var from_http_body = (key, body) => ({ key, val: JSON.parse(body) })
 
 
 // Now export everything
