@@ -2,6 +2,7 @@
     var websocket_prefix = (clientjs_option('websocket_path')
                             || '_connect_to_statebus_')
 
+    // Todo: remove this global
     window.dom = window.dom || new Proxy({}, {
         get: function (o, k) { return o[k] },
         set: function (o, k, v) {
@@ -58,13 +59,13 @@
         return {clientid: me.client}
     }
 
-    function braid_http_mount (prefix, url) {
+    function http_mount (prefix, url) {
         var preprefix = prefix.slice(0,-1)
         var has_prefix = new RegExp('^' + preprefix)
         var is_absolute = /^https?:\/\//
         var subscriptions = {}
         var put_counter = 0
-        //if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
+
         function add_prefix (key) {
             return is_absolute.test(key) ? key : preprefix + key }
         function rem_prefix (key) {
@@ -73,7 +74,6 @@
             return bus.translate_keys(bus.clone(obj), add_prefix) }
         function rem_prefixes (obj) {
             return bus.translate_keys(bus.clone(obj), rem_prefix) }
-
 
         var puts = new Map()
         function enqueue_put (url, body) {
@@ -98,14 +98,10 @@
                     if (res.status !== 200)
                         console.error('Server gave error on PUT:',
                                       e, 'for', puts.get(id).body)
-                    else
-                        console.log('Successful put!', puts.get(id).body)
                     puts.delete(id)
                 }).catch(function (e) {
                     console.error('Error on PUT, waiting...', puts.get(id).url)
                     puts.get(id).status = 'waiting'
-                    // console.error('Error on PUT:', e, 'for', puts.get(id).body)
-                    // puts.delete(id)
                 })
             } catch (e) {
                 console.error('Error on PUT, waiting...', puts.get(id).url)
@@ -126,13 +122,16 @@
         bus(prefix).to_save   = function (obj, t) {
             bus.save.fire(obj)
 
-            enqueue_put(url + rem_prefix(obj.key),
-                        JSON.stringify(obj.val))
-            // var x = {save: obj}
-            // if (t.version) x.version = t.version
-            // if (t.parents) x.parents = t.parents
-            // if (t.patch)   x.patch   = t.patch
-            // if (t.patch)   x.save    = rem_prefix(x.save.key)
+            var put = {
+                url: url + rem_prefix(obj.key),
+                body: JSON.stringify(obj.val)
+            }
+            if (t.version) put.version = t.version
+            if (t.parents) put.parents = t.parents
+            if (t.patch)   put.patch   = t.patch
+            var put_id = put_counter++
+            puts.set(put_id, put)
+            send_put(put_id)
         }
 
         bus(prefix).to_fetch  = function (key, t) {
@@ -301,29 +300,6 @@
         }
     }
 
-    function live_reload_from (prefix) {
-        if (!window.live_reload_initialized) {
-            var first_time = true
-            this(function () {
-                var re = new RegExp(".*/" + prefix + "/(.*)")
-                var file = window.location.href.match(re)[1]
-                var code = bus.fetch('/code/invisible.college/' + file).code
-                if (!code) return
-                if (first_time) {first_time = false; return}
-                var old_scroll_position = window.pageYOffset
-                document.body.innerHTML = code
-                var i = 0
-                var d = 100
-                var interval = setInterval(function () {
-                    if (i > 500) clearInterval(interval)
-                    i += d
-                    window.scrollTo(0, old_scroll_position)
-                }, d)
-            })
-            window.live_reload_initialized = true
-        }
-    }
-
 
     // ****************
     // Wrapper for React Components
@@ -334,7 +310,7 @@
     var components = {}                  // Indexed by 'component/0', 'component/1', etc.
     var components_count = 0
     var dirty_components = {}
-    function React_View(component) {
+    function create_react_class(component) {
         function wrap(name, new_func) {
             var old_func = component[name]
             component[name] = function wrapper () { return new_func.bind(this)(old_func) }
@@ -443,17 +419,13 @@
             props['data-key'] = props.key
             props['data-widget'] = component.displayName
 
-            return (React.version >= '0.12.'
-                    ? React.createElement(react_class, props, children)
-                    : react_class(props, children))
+            return React.createElement(react_class, props, children)
         }
         // Give it the same prototype as the original class so that it
         // passes React.isValidClass() inspection
         result.prototype = react_class.prototype
         return result
     }
-    window.React_View = React_View
-    if (window.statebus) window.statebus.create_react_class = window.statebus.createReactClass = React_View
 
     // *****************
     // Re-rendering react components
@@ -488,7 +460,7 @@
 
     function make_client_statebus_maker () {
         var extra_stuff = ['localstorage_client make_websocket client_creds',
-                           'url_store components live_reload_from'].join(' ').split(' ')
+                           'url_store components'].join(' ').split(' ')
         if (window.statebus) {
             var orig_statebus = statebus
             window.statebus = function make_client_bus () {
@@ -509,17 +481,17 @@
             if (statebus_dir) statebus_dir = statebus_dir[1] + '/'
             else statebus_dir = ''
 
-            var js_urls = {
-                react: statebus_dir + 'extras/react.js',
-                sockjs: statebus_dir + 'extras/sockjs.js',
-                coffee: statebus_dir + 'extras/coffee.js',
-                statebus: statebus_dir + 'statebus.js'
-            }
-            if (statebus_dir == 'https://stateb.us/')
-                js_urls.statebus = statebus_dir + 'statebus4.js'
+            // var js_urls = {
+            //     react: statebus_dir + 'extras/react.js',
+            //     sockjs: statebus_dir + 'extras/sockjs.js',
+            //     coffee: statebus_dir + 'extras/coffee.js',
+            //     statebus: statebus_dir + 'statebus.js'
+            // }
+            // if (statebus_dir == 'https://stateb.us/')
+            //     js_urls.statebus = statebus_dir + 'statebus4.js'
 
-            for (var name in js_urls)
-                document.write('<script src="' + js_urls[name] + '" charset="utf-8"></script>')
+            // for (var name in js_urls)
+            //     document.write('<script src="' + js_urls[name] + '" charset="utf-8"></script>')
 
             document.addEventListener('DOMContentLoaded', scripts_ready, false)
         }
@@ -530,44 +502,35 @@
     function clientjs_option (option_name) {
         // This function must be copy/paste synchronized with statebus.js.  Be
         // sure to clone all edits there.
-        var script_elem = (
-            document.querySelector('script[src*="/client"][src$=".js"]') ||
-            document.querySelector('script[src^="client"][src$=".js"]'))
+        var script_elem = document.querySelector('script[src$="statebus/client.js"]')
         return script_elem && script_elem.getAttribute(option_name)
     }
     var loaded_from_file_url = window.location.href.match(/^file:\/\//)
-    window.statebus_server = window.statebus_server || clientjs_option('server') ||
-        (loaded_from_file_url ? 'https://stateb.us:3006' : '/')
-    window.statebus_backdoor = window.statebus_backdoor || clientjs_option('backdoor')
+
+    // Todo: remove this global
+    window.statebus_server = clientjs_option('server')
     var react_render
     function scripts_ready () {
-        react_render = React.version >= '0.14.' ? ReactDOM.render : React.render
+        react_render = ReactDOM.render
         make_client_statebus_maker()
         window.bus = window.statebus()
         bus.label = 'bus'
-        if (clientjs_option('braid_mode'))
-            bus.state = bus.braid_proxy()
-        else
-            window.sb = bus.sb
-        statebus.widget = React_View
-        statebus.create_react_class = React_View
-        statebus.createReactClass = React_View
+
+        statebus.create_react_class = create_react_class
+        statebus.createReactClass = create_react_class
 
         improve_react()
-        window.ignore_flashbacks = false
-        if (statebus_server !== 'none') {
-            if (clientjs_option('braid_mode')) {
-                console.log('Using Braid-HTTP!')
-                braid_http_mount ('/*', statebus_server)
-            } else {
-                bus.net_mount ('/*', statebus_server)
-            }
-        }
+        statebus.ignore_flashbacks = false
+        bus.http_mount = http_mount
+        // if (statebus_server !== 'none') {
+        //     if (clientjs_option('braid_mode')) {
+        //         console.log('Using Braid-HTTP!')
+        //         http_mount ('/*', statebus_server)
+        //     } else {
+        //         bus.ws_mount ('/*', statebus_server)
+        //     }
+        // }
 
-        if (window.statebus_backdoor) {
-            window.master = statebus()
-            master.net_mount('*', statebus_backdoor)
-        }
         bus.net_automount()
 
         // This /new/* code is deprecated
@@ -588,6 +551,18 @@
         statebus.compile_coffee = compile_coffee
         statebus.load_client_code = load_client_code
         statebus.load_widgets = load_widgets
+
+        if (clientjs_option('globals')) {
+            // Setup globals
+            var globals = ['fetch', 'save', 'state']
+
+            window.og_fetch = window.fetch
+            for (var i=0; i<globals.length; i++) {
+                console.log('globalizing', globals[i], 'as',
+                            eval('bus.' + globals[i]))
+                window[globals[i]] = eval('bus.' + globals[i])
+            }
+        }
 
         document.addEventListener('DOMContentLoaded', function () {
             if (window.statebus_ready)
@@ -708,7 +683,7 @@
             for (var i=0; i<arguments.length; i++) {
                 args.push(arguments[i])
                 if (arguments[i].state)
-                    args[i].src = 'data:;base64,' + fetch(args[i].state)._
+                    args[i].src = 'data:;base64,' + bus.fetch(args[i].state)._
             }
             return og_img.apply(this, args)
         }
@@ -745,7 +720,7 @@
     function make_component(name, func) {
         // Define the component
 
-        window[name] = users_widgets[name] = window.React_View({
+        window[name] = users_widgets[name] = statebus.create_react_class({
             displayName: name,
             render: function () {
                 var args = []

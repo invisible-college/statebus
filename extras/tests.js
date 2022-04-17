@@ -750,130 +750,9 @@ test(function readfile (done) {
     delay(200, () => {done()})
 })
 
+
 test(function proxies (done) {
-    var bus = require('../statebus')()
-    db = bus.sb
-    db.foo.a = 3
-    assert(db.foo.a == 3)
-    db.foo.a = [1,3,5, 'hello']
-    db.foo.a.push({key: 'bar', 4:4})
-
-    // Todo: make sure that push() and splice() etc. trigger updates to
-    // state properly.  They should trigger save() when they modify the
-    // array, and not when they don't.
-
-    log('Now foo is', db.foo)
-    log('And bar is', db.bar)
-
-    db.f = 3
-    assert(bus.validate(bus.cache['f'], {key: 'f', _: 3}),
-           bus.cache['f'], 'should be', {key: 'f', _: 3})
-    assert(db.f === 3)
-
-    db.g = [1,2,4,5]
-    assert(bus.cache['g']._.length = 4)
-
-    done()
-})
-
-test(function proxies2 (done) {
-    var bus = require('../statebus')()
-    var state = bus.state
-
-    assert(state.array === undefined)
-    assert(state.bar === undefined)
-
-    state.array = []
-    log('array:', state.array)
-    assert(state.array.length === 0)
-    state.array[0] = 1
-    log('array:', state.array)
-    assert(state.array.length === 1)
-    state.bar = {}
-    log('bar:', state.bar)
-    state.bar = {a: 1}
-    log('bar:', state.bar)
-    assert(state.bar.a === 1)
-    state.bar.a = state.array
-    log('bar:', state.bar)
-    state.array[1] = 2
-    log('array:', state.array)
-    log('bar:', state.bar)
-    assert(state.bar.a[1] === 2,
-           "Array ref didn't link.\n\t"
-           + JSON.stringify(bus.cache.bar) + '\n\t'
-           + JSON.stringify(bus.cache.array))
-
-    state.undefining = undefined
-    assert(state.undefining === undefined)
-    state.undefining = {a: undefined}
-    log('state.undefining =', state.undefining)
-    // assert(state.undefining.a === undefined)
-    // TODO: fix https://github.com/invisible-college/statebus/issues/34
-    state.undefining = {}
-    assert(!('a' in state.undefining))
-    state.undefining.a = undefined
-    assert('a' in state.undefining)
-    assert(state.undefining.a === undefined)
-
-    state.b = {a: undefined}
-    assert('a' in state.b)
-    assert(state.b.a === undefined)
-    delete state.b.a
-    // TODO: https://github.com/invisible-college/statebus/issues/34
-    assert(!('a' in state.b))
-    assert(state.b.a === undefined)
-
-    return done()
-
-    /*
-      Things I want to test:
-
-      - Setting nested items
-      - Escaping their fields
-      - Calling fetch on them
-      - Converting state[..] to keyed objects internally
-      - has() potentially doing a fetch, or loading()
-      - set() returning a proxy object
-      - console output
-      - node AND chrome
-      - having nice colors and distinctions and shit
-    */
-
-    state.foo = 3
-    // This should set into _
-    console.assert(bus.validate(bus.cache.foo,
-                                {key: 'foo', _: 3}))
-
-
-    state.foo = {a: 5}
-    // This should set directly on it
-    console.assert(bus.validate(bus.cache.foo,
-                                {key: 'foo', a: 5}))
-    state.foo.b = 6
-    console.assert(bus.validate(bus.cache.foo,
-                                {key: 'foo', b: 6}))
-
-    state.bar = [3]
-    state.foo = {a: 3, bar: state.bar}
-
-    bus(() => {
-        state.foo      // foo triggers re-render
-        state.foo.bar  // bar triggers re-render
-        state.foo.a    // triggers re-render too
-    })
-
-    // Getting a linked item should do a fetch
-    bus(() => {
-        state.bar
-    })
-
-    // Getting a normal property should do a fetch
-})
-
-test(function braid_proxies (done) {
-    var bus = require('../statebus').serve({braid_mode: true,
-                                            file_store: false})
+    var bus = require('../statebus').serve({file_store: false})
     var state = bus.state
 
     assert(state.array === undefined)
@@ -1239,7 +1118,7 @@ function setup_servers () {
 
     c = require('../statebus')()
     c.label = 'c'
-    c.net_mount('/*', 'statei://localhost:' + port)
+    c.ws_mount('/*', 'statei://localhost:' + port)
 
     s.save({key: 'users',
             all: [ {  key: 'user/1',
@@ -1304,7 +1183,7 @@ test(function login (done) {
         log('Current user changed!', c.label, JSON.stringify(u))
         if (u.logged_in) {
             log('Yay! We are logged in as', u.user.name)
-            forget()
+            c.forget()
             setTimeout(function () {done()}, 200)
         } else
             log("Ok... we aren't logged in yet.  We be patient.")
@@ -1408,11 +1287,11 @@ function connections_helper (done, port, options) {
     // Connect two clients
     var c1 = require('../statebus')()
     c1.label = 'c1'
-    c1.ws_client('/*', 'statei://localhost:' + port)
+    c1.ws_mount('/*', 'statei://localhost:' + port)
 
     var c2 = require('../statebus')()
     c2.label = 'c2'
-    c2.ws_client('/*', 'statei://localhost:' + port)
+    c2.ws_mount('/*', 'statei://localhost:' + port)
 
     // Load the basic connections
     c1.c = c1.fetch('/connection')
@@ -1513,11 +1392,11 @@ test(function flashbacks (done) {
     // Connect two clients
     var c1 = require('../statebus')()
     c1.label = 'c1'
-    c1.ws_client('*', 'statei://localhost:' + port)
+    c1.ws_mount('*', 'statei://localhost:' + port)
 
     var c2 = require('../statebus')()
     c2.label = 'c2'
-    c2.ws_client('*', 'statei://localhost:' + port)
+    c2.ws_mount('*', 'statei://localhost:' + port)
     
     c1.x = c1.fetch('x')
     c2.x = c2.fetch('x')
@@ -1723,7 +1602,7 @@ if (false) {
 
         var c = require('../statebus')()
         c.label = 'c'
-        c.ws_client('/*', 'statei://localhost:3949')
+        c.ws_mount('/*', 'statei://localhost:3949')
 
         // Make stuff as user A
         var cu = c.fetch('/current_user')

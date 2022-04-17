@@ -1,13 +1,7 @@
 var fs = require('fs'),
     util = require('util')
 
-// Import braidify if it's available
-try {
-    var braidify = require('braidify').http_server
-    console.log('Found braidify library. Braid-HTTP enabled!')
-} catch (e) {
-    var braidify = undefined
-}
+var braidify = require('braidify').http_server
 
 
 function default_options (bus) { return {
@@ -77,7 +71,7 @@ function import_server (bus, options)
         bus.express = express()
         bus.http = express.Router()
         bus.install_express(bus.express)
-        bus.initialize_braid_http()
+        bus.initialize_http()
 
         // use gzip compression if available
         try { bus.http.use(require('compression')())
@@ -173,20 +167,9 @@ function import_server (bus, options)
         }
     },
 
-    initialize_braid_http: function () {
+    initialize_http: function () {
         // Set up default linked json converters
-        if (bus.options.braid_mode) {
-            bus.to_http_body = (o) => JSON.stringify(o.val)
-            bus.state = bus.braid_proxy()
-        } else
-            bus.to_http_body = (o) => {
-                var unwrap = (Object.keys(o).length === 2
-                              && '_' in o
-                              && typeof o._ === 'string')
-                // To do: translate pointers as keys
-                return unwrap ? o._ : JSON.stringify(o)
-            }
-
+        bus.to_http_body = (o) => JSON.stringify(o.val)
         bus.from_http_body = (key, body) => ({
             key,
             val: JSON.parse(body)
@@ -206,7 +189,7 @@ function import_server (bus, options)
                 res.end()
             }
 
-            braidify && braidify(req, res)
+            braidify(req, res)
             if (req.subscribe) {
                 res.startSubscription({ onClose: end_it_all })
                 console.log('yay subscription!')
@@ -220,24 +203,14 @@ function import_server (bus, options)
                 var body = bus.to_http_body(o)
 
                 // If we're braiding, send via subscription
-                if (braidify)
-                    // Note: if body === undefined, we need to send the
-                    // equivalent of a 404.  This is missing in braid spec:
-                    // https://github.com/braid-org/braid-spec/issues/110
-                    res.sendVersion({body: body || 'null'})
 
-                // Or just return the current version
-                else {
-                    if (body !== undefined)
-                        res.send(body)
-                    else {
-                        res.statusCode = 404
-                        res.end()
-                    }
-                }
+                // Note: if body === undefined, we need to send the
+                // equivalent of a 404.  This is missing in braid spec:
+                // https://github.com/braid-org/braid-spec/issues/110
+                res.sendVersion({body: body || 'null'})
 
                 // And shut down the connection if there's no subscription
-                if (!braidify || !req.subscribe)
+                if (!req.subscribe)
                     end_it_all()
             })
         }
@@ -346,7 +319,7 @@ function import_server (bus, options)
                         bus.port = next_port_attempt
                         return result
                     } catch (e) {
-                        if (next_port_attempt < 3006) next_port_attempt = 3006
+                        if (next_port_attempt < 3007) next_port_attempt = 3007
                         else next_port_attempt++
                     }
             }
@@ -606,14 +579,6 @@ function import_server (bus, options)
                            + Math.random().toString(36).substring(2)
                            + Math.random().toString(36).substring(2))}
     },
-
-    // Deprecated
-    ws_client: function (prefix, url, account) {
-        console.error('ws_client() is deprecated; use net_mount() instead')
-        bus.net_mount(prefix, url, account) },
-    // Deprecated
-    universal_ws_client: function () {
-        console.error('calling universal_ws_client is deprecated and no longer necessary') },
 
     file_store: (function () {
         // Make a database
@@ -2394,10 +2359,9 @@ function import_server (bus, options)
             var files =
                 ['extras/coffee.js', 'extras/sockjs.js', 'extras/react.js',
                  'statebus.js', 'client.js'].map((f) => fs.readFileSync('node_modules/statebus/' + f))
-            if (bus.options.braid_mode)
-                files.unshift(fs.readFileSync(
-                    'node_modules/braidify/braidify-client.js'
-                ))
+            files.unshift(fs.readFileSync(
+                'node_modules/braidify/braidify-client.js'
+            ))
             res.send(files.join(';\n'))
         })
     },
@@ -2545,7 +2509,7 @@ module.exports.import_module = function (statebus) {
 
     statebus.serve = function serve (options) {
         var bus = statebus()
-        require('./server').run_server(bus, options)
+        require('./servers').run_server(bus, options)
         return bus
     }
 
