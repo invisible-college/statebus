@@ -263,6 +263,7 @@
         // Hm... this update stuff doesn't seem to work on file:/// urls in chrome
         function update (event) {
             bus.log('Got a localstorage update', event)
+            bus.dirty(event.key)
             //this.get(event.key.substr('statebus '.length))
         }
         if (window.addEventListener) window.addEventListener("storage", update, false)
@@ -304,6 +305,15 @@
     // ****************
     // Wrapper for React Components
 
+    function react_version () {
+        if (!window.React) return undefined;
+        return Number(window.React.version.split('.')[0])
+    }
+
+    // Newer React requires createReactClass as a separate libary
+    if (window.React && !React.createClass && window.createReactClass)
+        React.createClass = createReactClass
+
     // XXX Currently assumes there's a statebus named "bus" in global
     // XXX scope.
 
@@ -317,7 +327,8 @@
         }
         
         // Register the component's basic info
-        wrap('componentWillMount', function new_cwm (orig_func) {
+        wrap((react_version() >= 16 ? 'UNSAFE_' : '') + 'componentWillMount',
+             function new_cwm (orig_func) {
             // if (component.displayName === undefined)
             //     throw 'Component needs a displayName'
             //this.name = component.displayName.toLowerCase().replace(' ', '_')
@@ -518,7 +529,7 @@
         statebus.create_react_class = create_react_class
         statebus.createReactClass = create_react_class
 
-        improve_react()
+        // improve_react()
         statebus.ignore_flashbacks = false
         bus.libs = {}
         bus.libs.http_out = http_mount
