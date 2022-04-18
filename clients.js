@@ -318,9 +318,9 @@
         
         // Register the component's basic info
         wrap('componentWillMount', function new_cwm (orig_func) {
-            if (component.displayName === undefined)
-                throw 'Component needs a displayName'
-            this.name = component.displayName.toLowerCase().replace(' ', '_')
+            // if (component.displayName === undefined)
+            //     throw 'Component needs a displayName'
+            //this.name = component.displayName.toLowerCase().replace(' ', '_')
             this.key = 'component/' + components_count++
             components[this.key] = this
 
@@ -521,7 +521,7 @@
         improve_react()
         statebus.ignore_flashbacks = false
         bus.libs = {}
-        bus.libs.http_mount = http_mount
+        bus.libs.http_out = http_mount
         bus.libs.react_class = create_react_class
         // if (statebus_server !== 'none') {
         //     if (clientjs_option('braid_mode')) {
