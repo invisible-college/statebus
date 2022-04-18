@@ -8,6 +8,13 @@
   },
   "author": "Michael Toomim",
   "repository": "invisible-college/statebus",
+  "files": [
+    "statebus.js",
+    "clients.js",
+    "servers.js",
+    "extras/tests.js",
+    "extras/tcp-bind.js"
+  ],
   "dependencies": {
     "bcrypt-nodejs": "0.0.3",
     "braidify": "^0.1.23",
