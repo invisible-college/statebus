@@ -534,6 +534,7 @@
         bus.libs = {}
         bus.libs.http_out = http_mount
         bus.libs.react_class = create_react_class
+        bus.libs.input = make_better_input_17()
         // if (statebus_server !== 'none') {
         //     if (clientjs_option('braid_mode')) {
         //         console.log('Using Braid-HTTP!')
@@ -725,6 +726,32 @@
         func.args = s.slice(s.indexOf('(')+1, s.indexOf(')')).match(params) || []
     }
 
+
+    // This one is for react v17+
+    function make_better_input_17 () {
+        return createReactClass({
+            getInitialState: function() {
+                return {value: this.props.value}
+            },
+            UNSAVE_componentWillReceiveProps: function(new_props) {
+                this.setState({value: new_props.value})
+            },
+            onChange: function(e) {
+                this.props.onChange && this.props.onChange(e)
+                if (this.props.value)
+                    this.setState({value: e.target.value})
+            },
+            render: function() {
+                var new_props = {}
+                for (var k in this.props)
+                    if (this.props.hasOwnProperty(k))
+                        new_props[k] = this.props[k]
+                if (this.state.value) new_props.value = this.state.value
+                new_props.onChange = this.onChange
+                return React.createElement('input', new_props)
+            }
+        })
+    }
 
     // Load the components
     var users_widgets = {}
