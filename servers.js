@@ -103,7 +103,7 @@ function import_server (bus, options)
         bus.express.use(bus.http)
 
         // Connect bus to the HTTP server
-        bus.express.use(bus.handle_http)
+        bus.express.use(bus.http_in)
 
         // Serve Client Coffee
         bus.serve_client_coffee()
@@ -154,7 +154,7 @@ function import_server (bus, options)
     },
 
     // Connect HTTP GET and PUT to our Get and Set
-    handle_http: function (req, res, next) {
+    http_in: function (req, res, next) {
         if (bus.honk)
             console.log(req.method, req.url, req.headers.subscribe
                         ? 'Subscribe: ' + req.headers.subscribe : '')
@@ -594,7 +594,7 @@ function import_server (bus, options)
             function save_db() {
                 if (!db_is_ok) return
 
-                console.time('saved db')
+                // console.time('saved db')
 
                 fs.writeFile(filename+'.tmp', JSON.stringify(db, null, 1), function(err) {
                     if (err) {
@@ -606,7 +606,7 @@ function import_server (bus, options)
                                 console.error('Crap !! DB IS DYING !!!!', err)
                                 db_is_ok = false
                             } else {
-                                console.timeEnd('saved db')
+                                // console.timeEnd('saved db')
                                 pending_save = null
                             }
                         })
@@ -1131,7 +1131,7 @@ function import_server (bus, options)
                   JSON.stringify(details)])
     },
 
-    serve_time () {
+    time () {
         if (bus('time*').to_get.length > 0)
             // Then it's already installed
             return
@@ -2417,11 +2417,10 @@ function import_server (bus, options)
     }
 }
     // Add methods to bus object
-    for (var m in extra_methods)
+    for (var m in extra_methods) {
         bus[m] = extra_methods[m]
-
-    bus.libs.time = extra_methods.serve_time
-    bus.libs.http_in = extra_methods.handle_http
+        bus.libs[m] = extra_methods[m]
+    }
 
     bus.options = default_options(bus)
     set_options(bus, options)

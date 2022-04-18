@@ -224,13 +224,6 @@
     function localstorage_client (prefix) {
         try { localStorage } catch (e) { return }
 
-        // This doesn't yet trigger updates across multiple browser windows.
-        // We can do that by adding a list of dirty keys and 
-
-        var bus = this
-        bus.log(this)
-
-        // Get returns the value immediately in a set
         // Sets are queued up, to store values with a delay, in batch
         var sets_are_pending = false
         var pending_sets = {}
@@ -522,7 +515,7 @@
     var react_render
     function scripts_ready () {
         react_render = ReactDOM.render
-        make_client_statebus_maker()
+        // make_client_statebus_maker()
         window.bus = window.statebus()
         bus.label = 'bus'
 
@@ -535,6 +528,8 @@
         bus.libs.http_out = http_mount
         bus.libs.react_class = create_react_class
         bus.libs.input = make_better_input_17()
+        bus.libs.localstorage = localstorage_client
+
         // if (statebus_server !== 'none') {
         //     if (clientjs_option('braid_mode')) {
         //         console.log('Using Braid-HTTP!')

@@ -4,7 +4,7 @@
     else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
     else this[name] = definition()
 }('statebus', function() {statelog_indent = 0; var busses = {}, bus_count = 0, executing_funk, global_funk, funks = {}, clean_timer, symbols, nodejs = typeof window === 'undefined'; function make_bus (options) {
-    
+
 
     // ****************
     // Get, Set, Forget, Delete
