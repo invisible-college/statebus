@@ -182,6 +182,9 @@ function import_server (bus, options)
             else
                 res.statusCode = 200
 
+            // We only return JSON
+            res.setHeader('Content-Type', 'application/json')
+
             // Do the get
             // cbus.honk = 'statelog'
             var key = req.path.substr(1)
