@@ -2070,7 +2070,7 @@
         if (!(key in bogus_keys))
             return
 
-        var msg = "Sorry, statebus.js currently prohibits use of the key \""+key+"\", and in fact all of these keys: " + Object.keys(bogus_keys).join(', ') + ".  This is because Javascript is kinda lame, and even empty objects like \"{}\" have the \""+key+"\" field defined on them.  Try typing this in your Javascript console: \"({}).constructor\" -- it returns a function instead of undefined!  We could work around it by meticulously replacing every \"obj[key]\" with \"obj.hasOwnProperty(key) && obj[key]\" in the statebus code, but that will make the source more difficult to understand.  So please contact us if this use-case is important for you, and we'll consider doing it.  We're hoping that, for now, our users don't need to use these keys."
+        var msg = "Sorry, statebus.js currently prohibits use of the key \""+key+"\", and in fact all of these keys: " + Object.keys(bogus_keys).join(', ') + ".  This is because Javascript is kinda lame, and even empty objects like \"{}\" have the \""+key+"\" field defined on them.  Try typing this in your Javascript console: \"({}).constructor\" -- it returns a function instead of undefined!  Mike needs to work around it by replacing every \"obj[key]\" with \"obj.hasOwnProperty(key) && obj[key]\" in the statebus code, or switching to a Map() object.  Please contact him and let him know where this is impacting you, so he can bump the priority on it."
         console.error(msg)
         throw 'Invalid key'
     }
