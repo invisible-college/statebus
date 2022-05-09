@@ -112,11 +112,12 @@
             setTimeout(function () {send_put(id)}, 1000)
         }
         function send_all_puts () {
-            for (var id of puts.keys())
+            puts.keys().forEach(function (id) {
                 if (puts.get(id).status === 'waiting') {
                     console.log('Sending waiting put', id)
                     send_put(id)
                 }
+            })
         }
 
         bus(prefix).to_set   = function (obj, t) {
