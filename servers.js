@@ -1644,19 +1644,30 @@ function import_server (bus, options)
     serves_auth: function serves_auth (conn, master) {
         var client = this // to keep me straight while programming
 
-        function logout (key) {
+        function logout (user_key) {
             var clients = master.get('logged_in_clients')
-            for (var k in clients)
-                if (k !== 'key')
-                    if (Object.keys(clients[k]).length === 0) {
-                        client.log('Found a deleted user. Removing.', k, clients[k])
-                        delete clients[k]
-                        master.set(clients)
-                    } else if (clients[k].key === key) {
-                        client.log('Logging out!', k, clients[k])
-                        delete clients[k]
-                        master.set(clients)
-                    }
+            clients.val = clients.val || {}
+
+            for (var k in clients.val) {
+                // We used to encounter stray deleted accounts that hadn't
+                // gotten properly garbage collected, and I added some code
+                // here to remove them.
+                //
+                // However, it was a bit kludgy, and I'm rewriting the code
+                // now, and not sure if this problem still occurs.  Will watch
+                // and see.  Meanwhile, I'm commenting the code out.
+                //
+                // if (Object.keys(clients.val[k]).length === 0) {
+                //     client.log('Found a deleted user. Removing.', k, clients.val[k])
+                //     delete clients.val[k]
+                //     master.set(clients)
+                // }
+                if (clients.val[k].link === user_key) {
+                    client.log('Logging out!', k, clients.val[k])
+                    delete clients.val[k]
+                    master.set(clients)
+                }
+            }
         }
 
         // Initialize master
@@ -1789,8 +1800,8 @@ function import_server (bus, options)
         client('current_user').to_get = function (k) {
             client.log('* getting: current_user')
             if (!conn.client) return
-            var u = master.get('logged_in_clients')[conn.client]
-            u = u && user_obj(u.key, true)
+            var u = (master.get('logged_in_clients').val || {})[conn.client]
+            u = u && user_obj(u.link, true)
             return {user: u || null, logged_in: !!u}
         }
 
@@ -1811,8 +1822,13 @@ function import_server (bus, options)
 
                 if (conn.id) {
                     var connections = master.get('connections')
-                    connections[conn.id].user = master.get('logged_in_clients')[conn.client]
-                    master.set(connections)
+                    var logged_in_user =
+                        (master.get('logged_in_clients').val || {})[conn.client]
+
+                    if (logged_in_user) {
+                        connections[conn.id].user = master.get(user.link)
+                        master.set(connections)
+                    }
                 }
             }
             else {
@@ -1848,7 +1864,8 @@ function import_server (bus, options)
                             var clients     = master.get('logged_in_clients')
                             var connections = master.get('connections')
 
-                            clients[conn.client]      = u
+                            clients.val = clients.val || {}
+                            clients.val[conn.client]  = {link: u.key}
                             connections[conn.id].user = u
 
                             master.set(clients)
@@ -1872,7 +1889,8 @@ function import_server (bus, options)
                     var clients = master.get('logged_in_clients')
                     var connections = master.get('connections')
 
-                    delete clients[conn.client]
+                    clients.val = clients.val || {}
+                    delete clients.val[conn.client]
                     connections[conn.id].user = null
 
                     master.set(clients)
