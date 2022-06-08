@@ -1661,9 +1661,12 @@ function import_server (bus, options)
 
         // Initialize master
         if (!master.auth_initialized) {
+
+            // A hash for fast lookup of a user's password
             master('users/passwords').to_get = function (k) {
+                // We compute it from the 'users' state
                 master.log('users/passwords.to_get: Computing!')
-                var result = {key: 'users/passwords'}
+                var result = {key: 'users/passwords', val: {}}
                 var users = master.get('users')
                 users.val = users.val || []
                 for (var i=0; i<users.val.length; i++) {
@@ -1674,11 +1677,11 @@ function import_server (bus, options)
                     }
                     var login = (u.login || u.name).toLowerCase()
                     console.assert(login, 'Missing login for user', u)
-                    if (result.hasOwnProperty(login)) {
+                    if (result.val.hasOwnProperty(login)) {
                         console.error("upass: this user's name is bogus, dude.", u.key)
                         continue
                     }
-                    result[login] = {user: u.key, pass: u.pass}
+                    result.val[login] = {user: u.key, pass: u.pass}
                 }
                 return result
             }
@@ -1720,9 +1723,9 @@ function import_server (bus, options)
 
         // Authentication functions
         function authenticate (login, pass) {
-            var userpass = master.get('users/passwords')[login.toLowerCase()]
+            var userpass = master.get('users/passwords').val[login.toLowerCase()]
             master.log('authenticate: we see', {
-                passwords: master.get('users/passwords'),
+                passwords: master.get('users/passwords').val,
                 hash_to_match: userpass && userpass.pass,
                 password_guess: pass
             })
@@ -1746,7 +1749,7 @@ function import_server (bus, options)
                 throw 'invalid name, login, pass, or email'
 
             var passes = master.get('users/passwords')
-            if (passes.hasOwnProperty(login))
+            if (passes.val.hasOwnProperty(login))
                 throw 'there is already a user with that login or name'
 
             // Hash password
@@ -1777,7 +1780,7 @@ function import_server (bus, options)
             var users = master.get('users')
             users.val = users.val || []
             users.val.push({link: new_account.key})
-            passes[login] = {user: new_account.key, pass: new_account.pass}
+            passes.val[login] = {user: new_account.key, pass: new_account.pass}
             master.set(users)
             master.set(passes)
         }
