@@ -1122,23 +1122,24 @@ function setup_servers () {
     c.ws_mount('/*', 'statei://localhost:' + port)
 
     s.set({key: 'users',
-            all: [ {  key: 'user/1',
-                      name: 'mike',
-                      email: 'toomim@gmail.com',
-                      admin: true,
-                      pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y' }
-
-                   ,{ key: 'user/2',
-                      name: 'j',
-                      email: 'jtoomim@gmail.com',
-                      admin: true,
-                      pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y' }
-
-                   ,{ key: 'user/3',
-                      name: 'boo',
-                      email: 'boo@gmail.com',
-                      admin: false,
-                      pass: '$2a$10$4UTjzf5OOGdkrCEsT.hO/.csKqf7u8mZ23ZT6stamBAWNV7u5WJuu' } ] })
+            val: [ {link: 'user/1'},
+                   {link: 'user/2'},
+                   {link: 'user/3'} ] })
+    s.set({ key: 'user/1',
+            name: 'mike',
+            email: 'toomim@gmail.com',
+            admin: true,
+            pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y' })
+    s.set({ key: 'user/2',
+            name: 'j',
+            email: 'jtoomim@gmail.com',
+            admin: true,
+            pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y' })
+    s.set({ key: 'user/3',
+            name: 'boo',
+            email: 'boo@gmail.com',
+            admin: false,
+            pass: '$2a$10$4UTjzf5OOGdkrCEsT.hO/.csKqf7u8mZ23ZT6stamBAWNV7u5WJuu' })
 
     return {s, c}
 }

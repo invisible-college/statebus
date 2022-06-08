@@ -1415,7 +1415,7 @@ function import_server (bus, options)
         }
 
         client('friends').to_get = t => {
-            return {_: (master.get('users').all||[])
+            return {_: (master.get('users').val||[])
                     .map(u=>client.get('email/' + user_addy(u)))
                     .concat([client.get('email/public')])
             }
@@ -1665,9 +1665,9 @@ function import_server (bus, options)
                 master.log('users/passwords.to_get: Computing!')
                 var result = {key: 'users/passwords'}
                 var users = master.get('users')
-                users.all = users.all || []
-                for (var i=0; i<users.all.length; i++) {
-                    var u = master.get(users.all[i])
+                users.val = users.val || []
+                for (var i=0; i<users.val.length; i++) {
+                    var u = master.get(users.val[i].link)
                     if (!(u.login || u.name)) {
                         console.error('upass: this user has bogus name/login', u.key, u.name, u.login)
                         continue
@@ -1689,7 +1689,7 @@ function import_server (bus, options)
                 master.log('Deleteinggg!!!', key)
                 // Remove from users.all
                 var users = master.get('users')
-                users.all = users.all.filter(u => u.key && u.key !== key)
+                users.val = users.val.filter(u => u.link && u.link !== key)
                 master.set(users)
 
                 // Log out
@@ -1775,8 +1775,8 @@ function import_server (bus, options)
             master.set(new_account)
 
             var users = master.get('users')
-            users.all = users.all || []
-            users.all.push(new_account)
+            users.val = users.val || []
+            users.val.push({link: new_account.key})
             passes[login] = {user: new_account.key, pass: new_account.pass}
             master.set(users)
             master.set(passes)
