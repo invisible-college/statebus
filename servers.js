@@ -358,7 +358,7 @@ function import_server (bus, options)
         // var client_busses = {}  // XXX work in progress
         var log = master.log
         if (client_bus_func) {
-            master.set({key: 'connections'}) // Clean out old sessions
+            master.set({key: 'connections', val: {}}) // Clean out old sessions
             var connections = master.get('connections')
         }
         var s = require('sockjs').createServer({
@@ -376,8 +376,8 @@ function import_server (bus, options)
                 //  - When disconnecting, decrement the number, and if it gets
                 //    to zero, delete the client bus.
 
-                connections[conn.id] = {client: conn.id, // client is deprecated
-                                        id: conn.id}
+                connections.val[conn.id] = {client: conn.id, // client is deprecated
+                                            id: conn.id}
                 master.set(connections)
 
                 var client = require('./statebus')()
@@ -489,7 +489,7 @@ function import_server (bus, options)
                 for (var key in our_gets_in)
                     client.forget(key, sockjs_pubber)
                 if (client_bus_func) {
-                    delete connections[conn.id]; master.set(connections)
+                    delete connections.val[conn.id]; master.set(connections)
                     master.delete('connection/' + conn.id)
                     client.delete_bus()
                 }
@@ -537,12 +537,12 @@ function import_server (bus, options)
                 client('connections').to_set = function noop (t) {t.abort()}
                 client('connections').to_get = function () {
                     var result = []
-                    var conns = master.get('connections')
+                    var conns = master.get('connections').val
                     for (var connid in conns)
                         if (connid !== 'key')
                             result.push(client.get('connection/' + connid))
                     
-                    return {all: result}
+                    return {val: result}
                 }
             }
         })
@@ -1713,15 +1713,14 @@ function import_server (bus, options)
                 // Remove connection
                 master.log('Removing connections for', key)
                 var conns = master.get('connections')
-                for (var k in conns) {
+                for (var k in conns.val) {
                     console.log('Trying key', k)
-                    if (k !== 'key')
-                        if (conns[k].user && !conns[k].user.key) {
-                            console.log('Cleaning keyless user', conss[k].user)
-                            delete conns[k].user
-                            master.set(conns)
-                            continue
-                        }
+                    if (conns.val[k].user && !conns.val[k].user.key) {
+                        console.log('Cleaning keyless user', conss.val[k].user)
+                        delete conns.val[k].user
+                        master.set(conns)
+                        continue
+                    }
                 }
 
                 master.log('Dirtying users/passwords for', key)
@@ -1826,7 +1825,7 @@ function import_server (bus, options)
                         (master.get('logged_in_clients').val || {})[conn.client]
 
                     if (logged_in_user) {
-                        connections[conn.id].user = master.get(user.link)
+                        connections.val[conn.id].user = {link: user.link}
                         master.set(connections)
                     }
                 }
@@ -1866,7 +1865,7 @@ function import_server (bus, options)
 
                             clients.val = clients.val || {}
                             clients.val[conn.client]  = {link: u.key}
-                            connections[conn.id].user = u
+                            connections.val[conn.id].user = {link: u.key}
 
                             master.set(clients)
                             master.set(connections)
@@ -1891,7 +1890,7 @@ function import_server (bus, options)
 
                     clients.val = clients.val || {}
                     delete clients.val[conn.client]
-                    connections[conn.id].user = null
+                    connections.val[conn.id].user = null
 
                     master.set(clients)
                     master.set(connections)
