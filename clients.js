@@ -66,14 +66,18 @@
         var subscriptions = {}
         var put_counter = 0
 
-        function add_prefix (key) {
-            return is_absolute.test(key) ? key : preprefix + key }
-        function rem_prefix (key) {
-            return has_prefix.test(key) ? key.substr(preprefix.length) : key }
+        function add_prefix (url) {
+            return is_absolute.test(url) ? url : preprefix + url }
+        function rem_prefix (url) {
+            return has_prefix.test(url) ? url.substr(preprefix.length) : url }
         function add_prefixes (obj) {
-            return bus.translate_keys(bus.clone(obj), add_prefix) }
+            var keyed = bus.translate_keys(bus.clone(obj), add_prefix)
+            return bus.translate_links(bus.clone(keyed), add_prefix)
+        }
         function rem_prefixes (obj) {
-            return bus.translate_keys(bus.clone(obj), rem_prefix) }
+            var keyed = bus.translate_keys(bus.clone(obj), rem_prefix)
+            return bus.translate_links(bus.clone(keyed), rem_prefix)
+        }
 
         var puts = new Map()
         function enqueue_put (url, body) {

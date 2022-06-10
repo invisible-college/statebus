@@ -14,8 +14,8 @@
             && !(typeof key === 'object' && typeof key.key === 'string'))
             throw ('Error: get(key) called with key = '
                    + JSON.stringify(key))
-        key = key.key || key    // You can pass in an object instead of key
-                                // We should probably disable this in future
+        key = key.key || key  // You can pass in an object instead of key
+                              // We should probably disable this in future
         bogus_check(key)
 
         var called_from_reactive_funk = !callback
@@ -1409,9 +1409,13 @@
         function rem_prefix (key) {
             return has_prefix.test(key) ? key.substr(preprefix.length) : key }
         function add_prefixes (obj) {
-            return bus.translate_keys(bus.clone(obj), add_prefix) }
+            var keyed = bus.translate_keys(bus.clone(obj), add_prefix)
+            return bus.translate_links(bus.clone(keyed), add_prefix)
+        }
         function rem_prefixes (obj) {
-            return bus.translate_keys(bus.clone(obj), rem_prefix) }
+            var keyed = bus.translate_keys(bus.clone(obj), rem_prefix)
+            return bus.translate_links(bus.clone(keyed), rem_prefix)
+        }
 
         bus(prefix).to_set   = function (obj, t) {
             bus.set.fire(obj)
@@ -1592,6 +1596,30 @@
     }
     function unescape_keys (k) {
         return k.replace(/(_$)/, '')
+    }
+
+    // ************************************************
+    // Translating the URLs under links of state
+    function translate_links (obj, f) {
+        // Recurse through each element in arrays
+        if (Array.isArray(obj))
+            for (var i=0; i < obj.length; i++)
+                translate_links(obj[i], f)
+
+        // Recurse through each property on objects
+        else if (typeof obj === 'object')
+            for (var k in obj) {
+                if (k === 'link')
+                    if (typeof obj[k] == 'string')
+                        obj[k] = f(obj[k])
+                    else if (Array.isArray(obj[k]))
+                        for (var i=0; i < obj[k].length; i++) {
+                            if (typeof obj[k][i] === 'string')
+                                obj[k][i] = f(obj[k][i])
+                        }
+                translate_links(obj[k], f)
+            }
+        return obj
     }
 
 
@@ -2091,7 +2119,7 @@
                'funk_key funk_name funks key_id key_name id',
                'pending_gets gets_in gets_out loading_keys loading once',
                'global_funk busses rerunnable_funks',
-               'escape_keys unescape_keys translate_keys apply_patch',
+               'escape_keys unescape_keys translate_keys translate_links apply_patch',
                'keyed_2_proxied proxied_2_keyed translate_fields',
                'ws_mount net_automount message_method',
                'parse Set One_To_Many clone extend deep_map deep_equals prune validate sorta_diff log deps symbols'

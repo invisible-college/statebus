@@ -1125,21 +1125,24 @@ function setup_servers () {
             val: [ {link: 'user/1'},
                    {link: 'user/2'},
                    {link: 'user/3'} ] })
-    s.set({ key: 'user/1',
-            name: 'mike',
-            email: 'toomim@gmail.com',
-            admin: true,
-            pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y' })
-    s.set({ key: 'user/2',
-            name: 'j',
-            email: 'jtoomim@gmail.com',
-            admin: true,
-            pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y' })
-    s.set({ key: 'user/3',
-            name: 'boo',
-            email: 'boo@gmail.com',
-            admin: false,
-            pass: '$2a$10$4UTjzf5OOGdkrCEsT.hO/.csKqf7u8mZ23ZT6stamBAWNV7u5WJuu' })
+    s.set({ key: 'user/1', val: {
+        name: 'mike',
+        email: 'toomim@gmail.com',
+        admin: true,
+        pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y'
+    }})
+    s.set({ key: 'user/2', val: {
+        name: 'j',
+        email: 'jtoomim@gmail.com',
+        admin: true,
+        pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y'
+    }})
+    s.set({ key: 'user/3', val: {
+        name: 'boo',
+        email: 'boo@gmail.com',
+        admin: false,
+        pass: '$2a$10$4UTjzf5OOGdkrCEsT.hO/.csKqf7u8mZ23ZT6stamBAWNV7u5WJuu'
+    }})
 
     return {s, c}
 }
@@ -1184,9 +1187,14 @@ test(function login (done) {
         var u = c.get('/current_user')
         log('Current user changed!', c.label, JSON.stringify(u))
         if (u.val.logged_in) {
-            log('Yay! We are logged in as', u.val.user)
-            c.forget()
-            setTimeout(function () {done()}, 200)
+            var user = c.get(u.val.user.link)
+            log('Yay! We are logged in as', u.val.user,
+                'which is loaded as', user)
+            if (user.val) {
+                assert(user.val.name === 'mike')
+                c.forget()
+                setTimeout(function () {done()}, 200)
+            }
         } else
             log("Ok... we aren't logged in yet.  We be patient.")
     })
@@ -1252,7 +1260,7 @@ test(function create_account (done) {
     // Log out
     delay(600, () => {
         assert(cu.val.logged_in)
-        assert(cu.val.user.link === 'user/bob')
+        assert(cu.val.user.link === '/user/bob')
 
         log('Now let\'s log out!')
         cu.val.logout = true; c.set(cu)
@@ -1268,7 +1276,7 @@ test(function create_account (done) {
     
     delay(600, () => {
         assert(cu.val.logged_in)
-        assert(cu.val.user.link === 'user/bob')
+        assert(cu.val.user.link === '/user/bob')
         done()
     })
 })

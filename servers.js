@@ -1636,7 +1636,6 @@ function import_server (bus, options)
 
     serves_auth: function serves_auth (conn, master) {
         var client = this // to keep me straight while programming
-        console.log('server conn is', conn)
         function logout (user_key) {
             var clients = master.get('logged_in_clients')
             clients.val = clients.val || {}
@@ -1675,17 +1674,17 @@ function import_server (bus, options)
                 users.val = users.val || []
                 for (var i=0; i<users.val.length; i++) {
                     var u = master.get(users.val[i].link)
-                    if (!(u.login || u.name)) {
-                        console.error('upass: this user has bogus name/login', u.key, u.name, u.login)
+                    if (!(u.val.login || u.val.name)) {
+                        console.error('upass: this user has bogus name/login', u.key, u.val.name, u.val.login)
                         continue
                     }
-                    var login = (u.login || u.name).toLowerCase()
+                    var login = (u.val.login || u.val.name).toLowerCase()
                     console.assert(login, 'Missing login for user', u)
                     if (result.val.hasOwnProperty(login)) {
                         console.error("upass: this user's name is bogus, dude.", u.key)
                         continue
                     }
-                    result.val[login] = {user: u.key, pass: u.pass}
+                    result.val[login] = {user: u.key, pass: u.val.pass}
                 }
                 return result
             }
@@ -1772,18 +1771,23 @@ function import_server (bus, options)
                 key = 'user/' + Math.random().toString(36).substring(7,13)
 
             // Make account object
-            var new_account = {key: key,
-                               name: params.name,
-                               login: params.login,
-                               pass: params.pass,
-                               email: params.email }
-            for (var k in new_account) if (!new_account[k]) delete new_account[k]
+            var new_account = {
+                key: key, val: {
+                    name: params.name,
+                    login: params.login,
+                    pass: params.pass,
+                    email: params.email
+                }
+            }
+            for (var k in new_account.val)    // Clean out falsy fields
+                if (!new_account.val[k])
+                    delete new_account.val[k]
             master.set(new_account)
 
             var users = master.get('users')
             users.val = users.val || []
             users.val.push({link: new_account.key})
-            passes.val[login] = {user: new_account.key, pass: new_account.pass}
+            passes.val[login] = {user: new_account.key, pass: new_account.val.pass}
             master.set(users)
             master.set(passes)
         }
@@ -1806,6 +1810,7 @@ function import_server (bus, options)
                 return
             }
             function error (msg) {
+                console.error(msg)
                 client.set.abort(o)
                 var c = client.get('current_user')
                 c.val.error = msg
@@ -1910,7 +1915,6 @@ function import_server (bus, options)
             var c = client.get('current_user')
             var user_key = o.key.match(/^user\/([^\/]+)/)
             user_key = user_key && ('user/' + user_key[1])
-            var user = client.fetch(user_key)
 
             // Only the current user can touch himself.
             if (!c.val.logged_in || c.val.user.link !== user_key) {
@@ -1934,9 +1938,14 @@ function import_server (bus, options)
             console.assert(o.key.match(/^user\/[^\/]+$/))
 
             // Validate types
-            if (!client.validate(o, {key: 'string', '?login': 'string', '?name': 'string',
-                                     '?pass': 'string', '?email': 'string', /*'?pic': 'string',*/
-                                     '*':'*'})) {
+            if (!client.validate(o, {key: 'string',
+                                     val: {
+                                         '?login': 'string',
+                                         '?name': 'string',
+                                         '?pass': 'string',
+                                         '?email': 'string',
+                                         /*'?pic': 'string',*/
+                                         '*':'*'}})) {
                 client.log('This user change fails validation.')
                 client.set.abort(o)
                 return
@@ -1958,7 +1967,7 @@ function import_server (bus, options)
             var userpass = master.get('users/passwords')
 
             // Validate that the login/name is not changed to something clobberish
-            var old_login = u.login || u.name
+            var old_login = u.val.login || u.val.name
             if (old_login.toLowerCase() !== login.toLowerCase()
                 && userpass.hasOwnProperty(login)) {
                 client.log('The login', login, 'is already taken. Aborting.')
@@ -1972,12 +1981,12 @@ function import_server (bus, options)
             }
 
             // Now we can update login and name
-            u.login = o.login
-            u.name = o.name
+            u.val.login = o.val.login
+            u.val.name = o.val.name
 
             // Hash password
-            o.pass = o.pass && require('bcrypt-nodejs').hashSync(o.pass)
-            u.pass = o.pass || u.pass
+            o.val.pass = o.val.pass && require('bcrypt-nodejs').hashSync(o.val.pass)
+            u.val.pass = o.val.pass || u.val.pass
 
             // // Users can have pictures (remove this soon)
             // // Bug: if user changes name, this picture's url doesn't change.
@@ -1996,24 +2005,24 @@ function import_server (bus, options)
 
             // For anything else, go ahead and add it to the user object
             var protected = {key:1, name:1, /*pic:1,*/ pass:1}
-            for (var k in o)
+            for (var k in o.val)
                 if (!protected.hasOwnProperty(k))
-                    u[k] = o[k]
-            for (var k in u)
+                    u.val[k] = o.val[k]
+            for (var k in u.val)
                 if (!protected.hasOwnProperty(k) && !o.hasOwnProperty(k))
-                    delete u[k]
+                    delete u.val[k]
 
             master.set(u)
         }
         client('user/*').to_get = function user_getter (k) {
             var c = client.get('current_user')
-            client.log('* getting:', k, 'as', c.user)
+            client.log('* getting:', k, 'as', c.val.user)
 
             // Users have closet space at /user/<name>/*
             if (k.match(closet_space_key)) {
                 var obj_user = k.match(closet_space_key)[1]
                 if (k.match(private_closet_space_key)
-                    && (!c.user || obj_user !== c.user.key)) {
+                    && (!c.val.user || obj_user !== c.val.user.link)) {
                     client.log('hiding private closet data')
                     return {}
                 }
@@ -2029,9 +2038,10 @@ function import_server (bus, options)
             var o = master.clone(master.get(k))
             if (k.match(/^user\/([^\/]+)\/private\/(.*)$/))
                 return logged_in ? o : {key: k}
-            
-            delete o.pass
-            if (!logged_in) {delete o.email; delete o.login}
+
+            o.val = o.val || {}
+            delete o.val.pass
+            if (!logged_in) {delete o.val.email; delete o.val.login}
             return o
         }
 
