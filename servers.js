@@ -255,7 +255,7 @@ function import_server (bus, options)
         // Log in as the client
         cbus.serves_auth({remoteAddress: req.connection.remoteAddress}, bus)
         bus.options.client(cbus)
-        cbus.set({key: 'current_user', client: req.client})
+        cbus.set({key: 'current_user', val: {client: req.client}})
         return cbus
     },
 
@@ -557,13 +557,6 @@ function import_server (bus, options)
         url = url.replace(/^statei:\/\//, 'ws://')
         WebSocket = require('websocket').w3cwebsocket
         return new WebSocket(url + '/' + bus.options.websocket_path + '/websocket')
-    },
-    client_creds: function client_creds (server_url) {
-        // Right now the server just creates a different random id each time
-        // it connects.
-        return {clientid: (Math.random().toString(36).substring(2)
-                           + Math.random().toString(36).substring(2)
-                           + Math.random().toString(36).substring(2))}
     },
 
     file_store: (function () {
@@ -1310,19 +1303,20 @@ function import_server (bus, options)
         }
 
         function user_addy (u) {
+            console.error('fix this! not ported to v7 links')
             return u.name + '@' + opts.domain
         }
         function current_addy () {
             var c = client.get('current_user')
-            return c.logged_in ? user_addy(c.user) : 'public'
+            console.error('fix this! not ported to v7 links')
+            return c.val.logged_in ? user_addy(c.val.user) : 'public'
         }
         function is_author (post) {
             var from = post._.from
-            var c = client.get('current_user')
             return from.includes(current_addy())
         }
         function can_see (post) {
-            var c = client.get('current_user')
+            console.error('fix this! not ported to v7')
             var allowed = post._.to.concat(post._.cc).concat(post._.from)
             return allowed.includes(current_addy()) || allowed.includes('public')
         }
@@ -1337,7 +1331,6 @@ function import_server (bus, options)
         // Define state on client
         client('posts*').to_get = (k, rest) => {
             var args = bus.parse(rest.substr(1))
-            var c = client.get('current_user')
             args.for = current_addy()
             var e = master.get('posts_for/' + JSON.stringify(args))
             return {_: master.clone(e._).map(x=>client.get(x.key))}
@@ -1643,7 +1636,7 @@ function import_server (bus, options)
 
     serves_auth: function serves_auth (conn, master) {
         var client = this // to keep me straight while programming
-
+        console.log('server conn is', conn)
         function logout (user_key) {
             var clients = master.get('logged_in_clients')
             clients.val = clients.val || {}
@@ -1746,7 +1739,7 @@ function import_server (bus, options)
 
             // console.log('comparing passwords', pass, userpass.pass)
             if (require('bcrypt-nodejs').compareSync(pass, userpass.pass))
-                return master.get(userpass.user)
+                return userpass.user
         }
         function create_account (params) {
             if (typeof (params.login || params.name) !== 'string')
@@ -1797,26 +1790,33 @@ function import_server (bus, options)
 
         // Current User
         client('current_user').to_get = function (k) {
-            client.log('* getting: current_user')
-            if (!conn.client) return
+            if (!conn.client)
+                return {val: {error: 'no client'}}
+
             var u = (master.get('logged_in_clients').val || {})[conn.client]
-            u = u && user_obj(u.link, true)
-            return {user: u || null, logged_in: !!u}
+            var result = {val: {user: u || null, logged_in: !!u}}
+            return result
         }
 
         client('current_user').to_set = function (o, t) {
+            var val = o.val
+            if (typeof val !== 'object') {
+                console.error('current_user: set to something not an object:', val)
+                t.abort()
+                return
+            }
             function error (msg) {
                 client.set.abort(o)
                 var c = client.get('current_user')
-                c.error = msg
+                c.val.error = msg
                 client.set.fire(c)
             }
 
             client.log('* saving: current_user!')
-            if (o.client && !conn.client) {
+            if (val.client && !conn.client) {
                 // Set the client
-                conn.client = o.client
-                client.client_id = o.client
+                conn.client = val.client
+                client.client_id = val.client
                 client.client_ip = conn.remoteAddress
 
                 if (conn.id) {
@@ -1831,13 +1831,13 @@ function import_server (bus, options)
                 }
             }
             else {
-                if (o.create_account) {
+                if (val.create_account) {
                     client.log('current_user: creating account')
                     try {
-                        create_account(o.create_account)
+                        create_account(val.create_account)
                         client.log('Success creating account!')
                         var cu = client.get('current_user')
-                        cu.create_account = null
+                        cu.val.create_account = null
                         client.set.fire(cu)
                     } catch (e) {
                         error('Cannot create that account because ' + e)
@@ -1845,17 +1845,17 @@ function import_server (bus, options)
                     }
                 }
 
-                if (o.login_as && conn.id) {
+                if (val.login_as && conn.id) {
                     // Then client is trying to log in
                     client.log('current_user: trying to log in')
-                    var creds = o.login_as
+                    var creds = val.login_as
                     var login = creds.login || creds.name
                     if (login && creds.pass) {
                         // With a username and password
-                        var u = authenticate(login, creds.pass)
+                        var user_key = authenticate(login, creds.pass)
 
-                        client.log('auth said:', u)
-                        if (u) {
+                        client.log('auth said:', user_key)
+                        if (user_key) {
                             // Success!
                             // Associate this user with this session
                             // user.log('Logging the user in!', u)
@@ -1864,8 +1864,8 @@ function import_server (bus, options)
                             var connections = master.get('connections')
 
                             clients.val = clients.val || {}
-                            clients.val[conn.client]  = {link: u.key}
-                            connections.val[conn.id].user = {link: u.key}
+                            clients.val[conn.client]  = {link: user_key}
+                            connections.val[conn.id].user = {link: user_key}
 
                             master.set(clients)
                             master.set(connections)
@@ -1883,7 +1883,7 @@ function import_server (bus, options)
                     }
                 }
 
-                else if (o.logout && conn.id) {
+                else if (val.logout && conn.id) {
                     client.log('current_user: logging out')
                     var clients = master.get('logged_in_clients')
                     var connections = master.get('connections')
@@ -1910,12 +1910,15 @@ function import_server (bus, options)
             var c = client.get('current_user')
             var user_key = o.key.match(/^user\/([^\/]+)/)
             user_key = user_key && ('user/' + user_key[1])
+            var user = client.fetch(user_key)
 
-            // Only the current user can touch themself.
-            if (!c.logged_in || c.user.key !== user_key) {
-                client.log('Only the current user can touch themself.',
-                           {logged_in: c.logged_in, as: c.user && c.user.key,
-                            touching: user_key})
+            // Only the current user can touch himself.
+            if (!c.val.logged_in || c.val.user.link !== user_key) {
+                client.log('Only the current user can touch himself.', {
+                    logged_in: c.val.logged_in,
+                    as: c.val.user && c.val.user.link,
+                    touching: user_key
+                })
                 client.set.abort(o)
                 return
             }
@@ -2019,7 +2022,7 @@ function import_server (bus, options)
             }
 
             // Otherwise return the actual user
-            return user_obj(k, c.logged_in && c.user.key === k)
+            return user_obj(k, c.val.logged_in && c.val.user.link === k)
         }
         client('user/*').to_delete = function () {}
         function user_obj (k, logged_in) {
@@ -2047,14 +2050,14 @@ function import_server (bus, options)
         var was_logged_in = undefined
 
         function client_prefix (current_user) {
-            return 'client/' + (current_user.logged_in
-                                 ? current_user.user.key.substr('user/'.length)
+            return 'client/' + (current_user.val.logged_in
+                                 ? current_user.val.user.link.substr('user/'.length)
                                  : client.client_id) + '/'
         }
 
-        function copy_client_to_user(client, user) {
+        function copy_client_to_user(client, user_key) {
             var old_prefix = 'client/' + client.client_id
-            var new_prefix = 'client/' + user.key.substr('user/'.length)
+            var new_prefix = 'client/' + user_key.substr('user/'.length)
 
             var keys = client.master.get('persisted_keys/' + client.client_id)
             if (!keys.val) return
@@ -2100,10 +2103,10 @@ function import_server (bus, options)
         client(_=>{
             var c = client.get('current_user')
             if (client.loading()) return
-            if (was_logged_in == false && c.logged_in)
+            if (was_logged_in == false && c.val.logged_in)
                 // User just logged in!  Let's copy his stuff over
-                copy_client_to_user(client, c.user)
-            was_logged_in = c.logged_in
+                copy_client_to_user(client, c.val.user.link)
+            was_logged_in = c.val.logged_in
         })
 
         client(prefix_to_sync).to_get = function (key) {
@@ -2161,7 +2164,7 @@ function import_server (bus, options)
         }
 
         function client_persisted_keys () {
-            if (client.get('current_user').logged_in) return
+            if (client.get('current_user').val.logged_in) return
             var result = client.master.get('persisted_keys/' + client.client_id)
             if (result && !result.val) result.val = {}
             return result

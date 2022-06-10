@@ -1446,9 +1446,9 @@
                     var i = []
                     function intro (o) {i.push(JSON.stringify({set: o}))}
                     if (creds.clientid)
-                        intro({key: 'current_user', client: creds.clientid})
+                        intro({key: 'current_user', val: {client: creds.clientid}})
                     if (creds.name && creds.pass)
-                        intro({key: 'current_user', login_as: {name: creds.name, pass: creds.pass}})
+                        intro({key: 'current_user', val: {login_as: {name: creds.name, pass: creds.pass}}})
                     // Todo: make this kinda thing work:
                     if (creds.private_key && creds.public_key) {
                         // Send public_key... start waiting for a
@@ -1538,6 +1538,14 @@
 
         // Note: this return value is probably not necessary anymore.
         return {send: send, sock: sock, close: function () {done = true; sock.close()}}
+    }
+
+    bus.client_creds = function client_creds (server_url) {
+        // This default implementation just creates a different random id each time
+        // we connect.  Override this if you want a client ID that persists.
+        return {clientid: (Math.random().toString(36).substring(2)
+                           + Math.random().toString(36).substring(2)
+                           + Math.random().toString(36).substring(2))}
     }
 
     function net_automount () {

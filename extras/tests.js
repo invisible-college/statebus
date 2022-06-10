@@ -1183,8 +1183,8 @@ test(function login (done) {
     c(function () {
         var u = c.get('/current_user')
         log('Current user changed!', c.label, JSON.stringify(u))
-        if (u.logged_in) {
-            log('Yay! We are logged in as', u.user.name)
+        if (u.val.logged_in) {
+            log('Yay! We are logged in as', u.val.user)
             c.forget()
             setTimeout(function () {done()}, 200)
         } else
@@ -1192,9 +1192,8 @@ test(function login (done) {
     })
 
     delay(200, () => {
-        // c.honk = user0.honk = true
         var u = c.get('/current_user')
-        u.login_as = {name: 'mike', pass: 'yeah'}
+        u.val = {login_as: {name: 'mike', pass: 'yeah'}}
         log('Logging in')
         //s.honk = true
         c.set(u)
@@ -1208,10 +1207,10 @@ test(function wrong_password (done) {
 
     var u = c.get('/current_user')
     //assert(u.logged_in && u.user.name == 'mike')
-    u.login_as = {name: 'j', pass: 'nah'}
+    u.val = {login_as: {name: 'j', pass: 'nah'}}
     c.set(u)
     delay(500, () => {
-        assert(!u.login_as, 'Aborted login needs to abort')
+        assert(!u.val.login_as, 'Aborted login needs to abort')
         log('Good, the login failed.')
         done()
     })
@@ -1226,54 +1225,50 @@ test(function create_account (done) {
     delay(500, () => {
         log('Logging in')
         cu = c.get('/current_user')
-        cu.login_as = {name: 'mike', pass: 'yeah'}
+        cu.val = {login_as: {name: 'mike', pass: 'yeah'}}
         c.set(cu)
     })
 
     // Log out
     delay(500, () => {
-        assert(c.get('/current_user').logged_in)
+        assert(c.get('/current_user').val.logged_in)
         log('Logging out')
-        cu.logout = true; c.set(cu)
+        cu.val.logout = true; c.set(cu)
     })
 
     // Create bob and log in as bob
     delay(400, () => {
         log('Creating bob')
-        assert(!cu.logged_in, '3 logged in')
-        cu.create_account = {name: 'bob', email: 'b@o.b', pass: 'boob'}
+        assert(!cu.val.logged_in, '3 logged in')
+        cu.val.create_account = {name: 'bob', email: 'b@o.b', pass: 'boob'}
         c.set(cu)
 
         log('Logging in as bob')
-        delete cu.create_account
-        cu.login_as = {name: 'bob', pass: 'boob'}
+        delete cu.val.create_account
+        cu.val.login_as = {name: 'bob', pass: 'boob'}
         c.set(cu)
     })
 
     // Log out
     delay(600, () => {
-        assert(cu.logged_in)
-        assert(cu.user.name === 'bob'
-               && cu.user.email === 'b@o.b'
-               && cu.user.pass === undefined
-               && cu.user.key.match(/\/user\/.*/),
-               'Bad user', cu)
+        assert(cu.val.logged_in)
+        assert(cu.val.user.link === 'user/bob')
 
         log('Now let\'s log out!')
-        cu.logout = true; c.set(cu)
+        cu.val.logout = true; c.set(cu)
     })
 
     // Log back in as boob
     delay(600, () => {
         log('Logging back in as boob')
-        assert(!cu.logged_in, 'Still logged in, as ' + cu.key)
-        cu.login_as = {name: 'bob', pass:'boob'}
+        assert(!cu.val.logged_in, 'Still logged in, as ' + cu.key)
+        cu.val.login_as = {name: 'bob', pass:'boob'}
         c.set(cu)
     })
     
     delay(600, () => {
-        assert(cu.logged_in)
-        assert(cu.user.name === 'bob')
+        assert(cu.val.logged_in)
+        assert(cu.val.user.link === 'user/bob')
         done()
     })
 })
@@ -1608,8 +1603,8 @@ if (false) {
 
         // Make stuff as user A
         var cu = c.get('/current_user')
-        c.set({key: '/current_user', create_account: {name: 'a', pass: 'a'}})
-        c.set({key: '/current_user', login_as: {name: 'a', pass: 'a'}})
+        c.set({key: '/current_user', val: {create_account: {name: 'a', pass: 'a'}}})
+        c.set({key: '/current_user', val: {login_as: {name: 'a', pass: 'a'}}})
         var a_closet = c.get('/user/a/foo')
         var a_private = c.get('/user/a/private/foo')
 
@@ -1621,14 +1616,14 @@ if (false) {
         // User A can see it
         delay(450, ()=> {
             log('1. Now curr user is', cu)
-            assert(cu.logged_in == true, 'not logged in')
+            assert(cu.val.logged_in == true, 'not logged in')
             log('closet is', a_closet)
             assert(a_closet._ === 3, 'closet not right')
             assert(a_private._ === 4, 'private not right')
 
             // Set up User B
-            c.set({key: '/current_user', create_account: {name: 'b', pass: 'b'}})
-            c.set({key: '/current_user', login_as: {name: 'b', pass: 'b'}})
+            c.set({key: '/current_user', val: {create_account: {name: 'b', pass: 'b'}}})
+            c.set({key: '/current_user', val: {login_as: {name: 'b', pass: 'b'}}})
         })
 
         // User B can't see private stuff
