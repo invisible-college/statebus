@@ -1258,8 +1258,8 @@
                 return o
 
             // We recursively descend through {key: ...} links
-            if (typeof o === 'object' && 'key' in o) {
-                var new_base = bus.get(o.key)
+            if (typeof o === 'object' && 'link' in o) {
+                var new_base = bus.get(o.link)
                 return item_proxy(new_base, new_base.val)
             }
 
