@@ -43,19 +43,21 @@
         // return new SockJS(url + '/' + websocket_prefix)
     }
     function client_creds (server_url) {
+        // This function is only used for websocket connections.
+        // http connections set the cookie on the server.
         var me = bus.get('ls/me')
         bus.log('connect: me is', me)
         if (!me.client) {
             // Create a client id if we have none yet.
             // Either from a cookie set by server, or a new one from scratch.
-            var c = get_cookie('client')
+            var c = get_cookie('peer')
             me.client = c || (Math.random().toString(36).substring(2)
                               + Math.random().toString(36).substring(2)
                               + Math.random().toString(36).substring(2))
             bus.set(me)
         }
 
-        set_cookie('client', me.client)
+        set_cookie('peer', me.client)
         return {clientid: me.client}
     }
 
@@ -116,8 +118,8 @@
             setTimeout(function () {send_put(id)}, 1000)
         }
         function send_all_puts () {
-            puts.keys().forEach(function (id) {
-                if (puts.get(id).status === 'waiting') {
+            puts.forEach(function (value, id) {
+                if (value.status === 'waiting') {
                     console.log('Sending waiting put', id)
                     send_put(id)
                 }
@@ -220,6 +222,25 @@
         bus(prefix).to_forget = function (key) {
             subscriptions[key].status = 'aborted'
             subscriptions[key].aborter.abort()
+        }
+    }
+
+    function http_automount () {
+        function get_domain (key) { // Returns e.g. "state://foo.com"
+            var m = key.match(/^https?\:\/\/(([^:\/?#]*)(?:\:([0-9]+))?)/)
+            return m && m[0]
+        }
+
+        var old_route = bus.route
+        var connections = {}
+        bus.route = function (key, method, arg, t) {
+            var d = get_domain(key)
+            if (d && !connections[d]) {
+                http_mount(d + '/*', d + '/')
+                connections[d] = true
+            }
+
+            return old_route(key, method, arg, t)
         }
     }
 
@@ -481,30 +502,8 @@
         }
     }
 
-    function load_scripts() {
-        // console.info('Loading scripts! if', !!!window.statebus)
-        if (!window.statebus) {
-            var statebus_dir = clientjs_option('src')
-            if (statebus_dir) statebus_dir = statebus_dir.match(/(.*)[\/\\]/)
-            if (statebus_dir) statebus_dir = statebus_dir[1] + '/'
-            else statebus_dir = ''
-
-            // var js_urls = {
-            //     react: statebus_dir + 'extras/react.js',
-            //     sockjs: statebus_dir + 'extras/sockjs.js',
-            //     coffee: statebus_dir + 'extras/coffee.js',
-            //     statebus: statebus_dir + 'statebus.js'
-            // }
-            // if (statebus_dir == 'https://stateb.us/')
-            //     js_urls.statebus = statebus_dir + 'statebus4.js'
-
-            // for (var name in js_urls)
-            //     document.write('<script src="' + js_urls[name] + '" charset="utf-8"></script>')
-
-            document.addEventListener('DOMContentLoaded', scripts_ready, false)
-        }
-        else
-            scripts_ready()
+    function load_scripts () {
+        scripts_ready()
     }
 
     function clientjs_option (option_name) {
@@ -524,11 +523,8 @@
         window.bus = window.statebus()
         bus.label = 'bus'
 
-        statebus.create_react_class = create_react_class
-        statebus.createReactClass = create_react_class
-
         // improve_react()
-        statebus.ignore_flashbacks = false
+        // statebus.ignore_flashbacks = false
         bus.libs = {}
         bus.libs.http_out = http_mount
         bus.libs.react_class = create_react_class
@@ -544,26 +540,14 @@
         //     }
         // }
 
-        bus.net_automount()
-
-        // This /new/* code is deprecated
-        if (!clientjs_option('braid_mode')) {
-            bus('/new/*').to_set = function (o) {
-                if (o.key.split('/').length > 3) return
-
-                var old_key = o.key
-                o.key = old_key + '/' + Math.random().toString(36).substring(2,12)
-                statebus.cache[o.key] = o
-                delete statebus.cache[old_key]
-                bus.set(o)
-            }
-        }
+        // bus.net_automount()
+        http_automount()
 
         load_coffee()
 
         statebus.compile_coffee = compile_coffee
         statebus.load_client_code = load_client_code
-        statebus.load_widgets = load_widgets
+        // statebus.load_widgets = load_widgets
 
         if (clientjs_option('globals')) {
             // Setup globals
@@ -582,7 +566,7 @@
                     statebus_ready[i]()
         }, false)
 
-        document.addEventListener('DOMContentLoaded', load_widgets, false)
+        // document.addEventListener('DOMContentLoaded', load_widgets, false)
         
         // if (dom.Body || dom.body || dom.BODY)
         //     react_render((window.Body || window.body || window.BODY)(), document.body)
@@ -758,7 +742,7 @@
     function make_component(name, func) {
         // Define the component
 
-        window[name] = users_widgets[name] = statebus.create_react_class({
+        window[name] = users_widgets[name] = statebus.libs.react_class({
             displayName: name,
             render: function () {
                 var args = []
@@ -808,103 +792,6 @@
         })
     }
 
-    function make_syncarea () {
-        // a textarea that syncs with other textareas via diffsync
-        // options:
-        //     textarea_style : hashmap of styles to add to the textarea
-        //     cursor_style : hashmap of styles to add to each peer's cursor
-        //     autosize : true --> resizes the textarea vertically to fit the text inside it
-        //     ws_url : websocket url for the diffsync server,
-        //              e.g. 'wss://invisible.college:' + diffsync.port
-        //     channel : 'diffsync_channel' --> diffsync channel to connect to
-        window['SYNCAREA'] = users_widgets['SYNCAREA'] = React.createClass({
-            getInitialState : function () {
-                return { cursor_positions : {} }
-            },
-            on_text_changed : function () {
-                if (this.props.autosize) {
-                    var t = this.textarea_ref
-                    t.style.height = null
-                    while (t.rows > 1 && t.scrollHeight < t.offsetHeight) t.rows--
-                    while (t.scrollHeight > t.offsetHeight) t.rows++
-                }
-            },
-            componentDidMount : function () {
-                var self = this
-                self.on_ranges = function (ranges) {
-                    self.ranges = ranges
-                    var cursor_positions = {}
-                    Object.keys(ranges).forEach(function (k) {
-                        var r = ranges[k]
-                        var xy = getCaretCoordinates(self.textarea_ref, r[0])
-                        var x = self.textarea_ref.offsetLeft - self.textarea_ref.scrollLeft + xy.left + 'px'
-                        var y = self.textarea_ref.offsetTop - self.textarea_ref.scrollTop + xy.top + 'px'
-                        cursor_positions[k] = [x, y]
-                    })
-                    self.setState({ cursor_positions : cursor_positions })
-                }
-
-                this.ds = diffsync.create_client({
-                    ws_url : this.props.ws_url,
-                    channel : this.props.channel,
-                    get_text : function () {
-                        return self.textarea_ref.value
-                    },
-                    get_range : function () {
-                        var t = self.textarea_ref
-                        return [t.selectionStart, t.selectionEnd]
-                    },
-                    on_text : function (s, range) {
-                        self.textarea_ref.value = s
-                        self.textarea_ref.setSelectionRange(range[0], range[1])
-                        self.on_text_changed()
-                    },
-                    on_ranges : this.on_ranges
-                })
-            },
-            render : function () {
-                var self = this
-                var cursors = []
-                Object.keys(this.state.cursor_positions).forEach(function (k) {
-                    var p = self.state.cursor_positions[k]
-                    var style = {
-                        position : 'absolute',
-                        left : p[0],
-                        top : p[1]
-                    }
-                    Object.keys(self.props.cursor_style).forEach(function (k) {
-                        style[k] = self.props.cursor_style[k]
-                    })
-                    cursors.push(React.createElement('div', {
-                        key : k,
-                        style : style
-                    }))
-                })
-                return React.createElement('div', {
-                    style : {
-                        clipPath : 'inset(0px 0px 0px 0px)'
-                    },
-                }, React.createElement('textarea', {
-                    ref : function (t) { self.textarea_ref = t },
-                    style : this.props.textarea_style,
-                    onChange : function (e) {
-                        self.ds.on_change()
-                        self.on_text_changed()
-                    },
-                    onMouseDown : function () {
-                        setTimeout(function () { self.ds.on_change() }, 0)
-                    },
-                    onKeyDown : function () {
-                        setTimeout(function () { self.ds.on_change() }, 0)
-                    },
-                    onScroll : function () {
-                        self.on_ranges(self.ranges)
-                    }
-                }), cursors)
-            }
-        })
-    }
-
     function compile_coffee (coffee, filename) {
         var compiled
         try {
@@ -935,10 +822,12 @@
         return compiled
     }
     function load_client_code (code) {
-        var dom = {}, ui = {}
-        if (code) eval(code)
-        else { dom = window.dom; ui = window.ui }
-        for (var k in ui) dom[k] = dom[k] || ui[k]
+        // What is this function for?
+        var dom = {}
+        if (code)
+            eval(code)
+        else
+            dom = window.dom
         for (var widget_name in dom)
             window.dom[widget_name] = dom[widget_name]
     }
@@ -950,6 +839,11 @@
             if (scripts[i].getAttribute('type')
                 in {'statebus':1, 'coffeedom':1,'statebus-js':1,
                     'coffee':1, 'coffeescript':1}) {
+
+                if (!window.CoffeeScript) {
+                    console.error('Cannot load <script type="coffee"> because coffeescript library isn\'t present')
+                    return
+                }
                 // Compile coffeescript to javascript
                 var compiled = scripts[i].text
                 if (scripts[i].getAttribute('type') !== 'statebus-js')
@@ -981,15 +875,15 @@
         return widge(props, children)
     }
 
-    window.users_widgets = users_widgets
-    function load_widgets () {
-        for (var w in users_widgets) {
-            var nodes = document.getElementsByTagName(w)
-            for (var i=0; i<nodes.length; i++)
-                if (!nodes[i].seen)
-                    react_render(dom_to_widget(nodes[i]), nodes[i])
-        }
-    }
+    // window.users_widgets = users_widgets
+    // function load_widgets () {
+    //     for (var w in users_widgets) {
+    //         var nodes = document.getElementsByTagName(w)
+    //         for (var i=0; i<nodes.length; i++)
+    //             if (!nodes[i].seen)
+    //                 react_render(dom_to_widget(nodes[i]), nodes[i])
+    //     }
+    // }
 
     load_scripts()
 })()

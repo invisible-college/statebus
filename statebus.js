@@ -413,6 +413,7 @@
 
                 // Delete the cache entry...?
                 // delete cache[key]
+                // delete backup_cache[key]
                 delete gets_out[key]
                 delete to_be_forgotten[key]
             }, 200)
@@ -503,7 +504,6 @@
             var funk    = funks[k],
                 version = dirty_funks[k]
 
-            // console.log(funks[dirty_funks[i]].proxies_for)
             var p = funk.proxies_for
             if (p && p.priority) {
                 log('Clean-early:', funk_name(funk))
@@ -525,7 +525,7 @@
                 funk.react()
             }
         }
-        // log('We just cleaned up', dirty_funks.length, 'funks!')
+        // console.log('We just cleaned up', dirty_funks.length, 'funks!')
     }
 
     // Let's change this function to go through each key and grab the latest
@@ -537,7 +537,7 @@
         var result = []
         var keys = changed_keys.values()
 
-        //log(bus+' Cleaning up!', keys, 'keys, and', getters.length, 'getters')
+        // console.log(bus+' Finding rerunnable funcs for', keys, 'keys, and', Object.keys(dirty_getters).length, 'dirty_getters')
         for (var i=0; i<keys.length; i++) {          // Collect all keys
             // if (to_be_forgotten[keys[i]])
             //     // Ignore changes to keys that have been forgotten, but not
@@ -549,7 +549,7 @@
                 if (f.react) {
                     // Skip if it's already up to date
                     var v = f.getted_keys[JSON.stringify([this.id, keys[i]])]
-                    //log('re-run:', keys[i], f.statebus_id, f.getted_keys)
+                    // console.log('re-run:', keys[i], f.statebus_id, f.getted_keys)
                     if (v && v.indexOf(versions[keys[i]]) !== -1) {
                         log('skipping', funk_name(f), 'already at version', versions[keys[i]], 'proof:', v)
                         continue
@@ -580,7 +580,7 @@
         changed_keys.clear()
         dirty_getters = {}
 
-        //log('found', result.length, 'funks to re run')
+        // console.log('found', result.length, 'funks to re run')
 
         return result
     }
@@ -2146,7 +2146,7 @@
     bus.libs = {}
 
     if (nodejs)
-        require('./servers').import_server(bus, options)
+        require('./servers').import_server(bus, make_bus, options)
     
     bus.render_when_loading = true
     return bus

@@ -37,7 +37,7 @@ function set_options (bus, options) {
         }
 }
 
-function import_server (bus, options)
+function import_server (bus, make_statebus, options)
 {   var extra_methods = {
 
     serve: function serve (options) {
@@ -75,23 +75,6 @@ function import_server (bus, options)
         // use gzip compression if available
         try { bus.http.use(require('compression')())
               console.log('Enabled http compression!') } catch (e) {}
-
-
-        // Initialize new clients with an id.  We put the client id on
-        // req.client, and also in a cookie for the browser to see.
-        if (bus.options.client)
-            bus.express.use(function (req, res, next) {
-                req.client = require('cookie').parse(req.headers.cookie || '').client
-                if (!req.client) {
-                    req.client = (Math.random().toString(36).substring(2)
-                                  + Math.random().toString(36).substring(2)
-                                  + Math.random().toString(36).substring(2))
-            
-                    res.setHeader('Set-Cookie', 'client=' + req.client
-                                  + '; Expires=21 Oct 2025 00:0:00 GMT;')
-                }
-                next()
-            })
 
         // Initialize file sync
         ; (bus.options.sync_files || []).forEach( x => {
@@ -165,20 +148,34 @@ function import_server (bus, options)
             || req.method === 'OPTIONS')
             free_the_cors(req, res)
 
+        // Initialize new clients with an id.  We put the client id on
+        // req.client, and also in a cookie for the browser to see.
+        req.peer = //req.headers.peer ||
+            require('cookie').parse(req.headers.cookie || '').peer
+        if (!req.peer) {
+            req.peer = (Math.random().toString(36).substring(2)
+                        + Math.random().toString(36).substring(2)
+                        + Math.random().toString(36).substring(2))
+
+            res.setHeader('Set-Cookie', 'peer=' + req.peer
+                          + '; Expires=21 Oct 2055 00:0:00 GMT;')
+        }
+
+        // Handle the GET or PUT request!
         if (req.method === 'GET') {
 
             // Make a temporary client bus
             var cbus = bus.bus_for_http_client(req, res)
             var cb
-            function end_it_all () {
+            function end_subscription () {
                 cbus.forget(key, cb)
-                cbus.delete_bus()
                 res.end()
+                cbus.http_unsubscribe(req)
             }
 
             braidify(req, res)
             if (req.subscribe)
-                res.startSubscription({ onClose: end_it_all })
+                res.startSubscription({ onClose: end_subscription })
             else
                 res.statusCode = 200
 
@@ -188,7 +185,9 @@ function import_server (bus, options)
             // Do the get
             // cbus.honk = 'statelog'
             var key = req.path.substr(1)
+            // console.log('http_in: doing cbus.get(', key, ')')
             cbus.get(key, cb = (o) => {
+                // console.trace('http_in: Sending update of', key)
                 var body = to_http_body(o)
 
                 // If we're braiding, send via subscription
@@ -200,14 +199,11 @@ function import_server (bus, options)
 
                 // And shut down the connection if there's no subscription
                 if (!req.subscribe)
-                    end_it_all()
+                    end_subscription()
             })
         }
 
         else if (req.method === 'PUT') {
-            // Make a temporary client bus
-            var cbus = bus.bus_for_http_client(req, res)
-
             // Maybe the new state is expressed in patches
             if (req.headers.patches) {
                 console.error("We don't actually handle PUT patches yet")
@@ -234,9 +230,14 @@ function import_server (bus, options)
                         res.end()
                         return
                     }
-                    cbus.set(obj)
+
+                    // Make a temporary client bus
+                    var cbus = bus.bus_for_http_client(req, res)
+                    cbus.set(obj)   // And use it
+
                     res.statusCode = 200
                     res.end()
+                    cbus.http_unsubscribe(req)
                 })
             }
         }
@@ -246,16 +247,39 @@ function import_server (bus, options)
 
     bus_for_http_client: function (req, res) {
         var bus = this
-        if (!bus.bus_for_http_client.counter)
+        if (!bus.bus_for_http_client.counter) {
             bus.bus_for_http_client.counter = 0
-        var cbus = require('./statebus')()
+            bus.bus_for_http_client.busses = {}
+        }
+
+        // If this client has a peer ID, and we've got a bus for that peer,
+        // then re-use it!
+        if (req.peer && bus.bus_for_http_client.busses[req.peer]) {
+            var cbus = bus.bus_for_http_client.busses[req.peer]
+            cbus.client_ip = req.connection.remoteAddress
+            cbus.num_subscriptions++
+            return cbus
+        }
+
+        // Otherwise, create a new bus
+        var cbus = make_statebus()
         cbus.label = 'client_http' + bus.bus_for_http_client.counter++
         cbus.master = bus
+        cbus.num_subscriptions = 1
+        cbus.http_unsubscribe = (req) => {
+            cbus.num_subscriptions--
+            if (cbus.num_subscriptions === 0) {
+                // log('Last subscription! Killing client bus!')
+                cbus.delete_bus()
+                delete bus.bus_for_http_client.busses[req.peer]
+            }
+        }
+        bus.bus_for_http_client.busses[req.peer] = cbus
 
-        // Log in as the client
+        // And log into it as the client
         cbus.serves_auth({remoteAddress: req.connection.remoteAddress}, bus)
         bus.options.client(cbus)
-        cbus.set({key: 'current_user', val: {client: req.client}})
+        cbus.set({key: 'current_user', val: {client: req.peer}})
         return cbus
     },
 
@@ -380,7 +404,7 @@ function import_server (bus, options)
                                             id: conn.id}
                 master.set(connections)
 
-                var client = require('./statebus')()
+                var client = make_statebus()
                 client.label = 'client' + client_num++
                 master.label = master.label || 'master'
                 client.master = master
@@ -1320,7 +1344,7 @@ function import_server (bus, options)
             var allowed = post._.to.concat(post._.cc).concat(post._.from)
             return allowed.includes(current_addy()) || allowed.includes('public')
         }
-        var drtbus = master//require('./statebus')()
+        var drtbus = master//make_statebus()
         function dirty (key) { drtbus.set({key: 'dirty-'+key, n: Math.random()}) }
         function watch_for_dirt (key) { drtbus.get('dirty-'+key) }
 
@@ -1702,18 +1726,18 @@ function import_server (bus, options)
                 master.log('Logging out', key)
                 logout(key)
 
-                // Remove connection
-                master.log('Removing connections for', key)
-                var conns = master.get('connections')
-                for (var k in conns.val) {
-                    console.log('Trying key', k)
-                    if (conns.val[k].user && !conns.val[k].user.key) {
-                        console.log('Cleaning keyless user', conss.val[k].user)
-                        delete conns.val[k].user
-                        master.set(conns)
-                        continue
-                    }
-                }
+                // // Remove connection
+                // master.log('Removing connections for', key)
+                // var conns = master.get('connections')
+                // for (var k in conns.val) {
+                //     console.log('Trying key', k)
+                //     if (conns.val[k].user && !conns.val[k].user.key) {
+                //         console.log('Cleaning keyless user', conss.val[k].user)
+                //         delete conns.val[k].user
+                //         master.set(conns)
+                //         continue
+                //     }
+                // }
 
                 master.log('Dirtying users/passwords for', key)
                 master.dirty('users/passwords')
@@ -1820,20 +1844,23 @@ function import_server (bus, options)
             client.log('* saving: current_user!')
             if (val.client && !conn.client) {
                 // Set the client
+                //
+                //   Note: Should this code be moved upstream, when creating a
+                //         client bus?
                 conn.client = val.client
                 client.client_id = val.client
                 client.client_ip = conn.remoteAddress
 
-                if (conn.id) {
-                    var connections = master.get('connections')
-                    var logged_in_user =
-                        (master.get('logged_in_clients').val || {})[conn.client]
+                // if (conn.id) {
+                //     var connections = master.get('connections')
+                //     var logged_in_user =
+                //         (master.get('logged_in_clients').val || {})[conn.client]
 
-                    if (logged_in_user) {
-                        connections.val[conn.id].user = {link: user.link}
-                        master.set(connections)
-                    }
-                }
+                //     if (logged_in_user) {
+                //         connections.val[conn.id].user = {link: user.link}
+                //         master.set(connections)
+                //     }
+                // }
             }
             else {
                 if (val.create_account) {
@@ -1850,9 +1877,8 @@ function import_server (bus, options)
                     }
                 }
 
-                if (val.login_as && conn.id) {
+                if (val.login_as) {
                     // Then client is trying to log in
-                    client.log('current_user: trying to log in')
                     var creds = val.login_as
                     var login = creds.login || creds.name
                     if (login && creds.pass) {
@@ -1866,14 +1892,14 @@ function import_server (bus, options)
                             // user.log('Logging the user in!', u)
 
                             var clients     = master.get('logged_in_clients')
-                            var connections = master.get('connections')
+                            // var connections = master.get('connections')
 
                             clients.val = clients.val || {}
                             clients.val[conn.client]  = {link: user_key}
-                            connections.val[conn.id].user = {link: user_key}
+                            // connections.val[conn.id].user = {link: user_key}
 
                             master.set(clients)
-                            master.set(connections)
+                            // master.set(connections)
 
                             client.log('current_user: success logging in!')
                         }
@@ -1888,17 +1914,17 @@ function import_server (bus, options)
                     }
                 }
 
-                else if (val.logout && conn.id) {
+                else if (val.logout) {
                     client.log('current_user: logging out')
                     var clients = master.get('logged_in_clients')
-                    var connections = master.get('connections')
+                    // var connections = master.get('connections')
 
                     clients.val = clients.val || {}
                     delete clients.val[conn.client]
-                    connections.val[conn.id].user = null
+                    // connections.val[conn.id].user = null
 
                     master.set(clients)
-                    master.set(connections)
+                    // master.set(connections)
                 }
             }
 
@@ -1956,7 +1982,7 @@ function import_server (bus, options)
             //  • That resulting login must be unique across all users
 
             // There must be at least a login or a name
-            var login = o.login || o.name
+            var login = o.val.login || o.val.name
             if (!login) {
                 client.log('User must have a login or a name')
                 client.set.abort(o)
@@ -1974,7 +2000,7 @@ function import_server (bus, options)
                 client.set.abort(o)         // Abort
 
                 o = client.get(o.key)      // Add error message
-                o.error = 'The login "' + login + '" is already taken'
+                o.val.error = 'The login "' + login + '" is already taken'
                 client.set.fire(o)
 
                 return                       // And exit
@@ -2009,7 +2035,7 @@ function import_server (bus, options)
                 if (!protected.hasOwnProperty(k))
                     u.val[k] = o.val[k]
             for (var k in u.val)
-                if (!protected.hasOwnProperty(k) && !o.hasOwnProperty(k))
+                if (!protected.hasOwnProperty(k) && !o.val.hasOwnProperty(k))
                     delete u.val[k]
 
             master.set(u)
@@ -2307,7 +2333,7 @@ function import_server (bus, options)
     // Installs a GET handler at route that gets state from a getter function
     // Note: Makes too many textbusses.  Should re-use one.
     http_serve: function http_serve (route, getter) {
-        var textbus = require('./statebus')()
+        var textbus = make_statebus()
         textbus.label = 'textbus'
         var watched = new Set()
         textbus('*').to_get = (filename, old) => {
