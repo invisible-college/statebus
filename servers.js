@@ -105,17 +105,17 @@ function import_server (bus, make_statebus, options)
             // Now handle backup handlers
             if (count === 0) {
 
-                // A set to master without a to_set defined should be
+                // A set to master without a setter defined should be
                 // automatically reflected to all clients.
-                if (method === 'to_set') {
+                if (method === 'setter') {
                     bus.set.fire(arg, t)
                     bus.route(arg.key, 'on_set_sync', arg, t)
                     count++
                 }
 
-                // A get to master without a to_get defined should go to
+                // A get to master without a getter defined should go to
                 // the database, if we have one.
-                if (method === 'to_get') {
+                if (method === 'getter') {
                     bus.db_get(key)
                     // This basically renders the count useless-- you probably
                     // don't want to wrap this route() with another route().
@@ -523,7 +523,7 @@ function import_server (bus, make_statebus, options)
             if (client_bus_func && !master.options.__secure) {
 
                 // A connection
-                client('connection/*').to_get = function (key, star) {
+                client('connection/*').getter = function (key, star) {
                     var result = bus.clone(master.get(key))
                     if (master.options.connections.include_users && result.user)
                         result.user = client.get(result.user.key)
@@ -531,7 +531,7 @@ function import_server (bus, make_statebus, options)
                     result.client = star  // Deprecated.  Delete this line in v7.
                     return result
                 }
-                client('connection/*').to_set = function (o, star, t) {
+                client('connection/*').setter = function (o, star, t) {
                     // Check permissions before editing
                     if (star !== conn.id && !master.options.connections.edit_others) {
                         t.abort()
@@ -543,7 +543,7 @@ function import_server (bus, make_statebus, options)
                 }
 
                 // Your connection
-                client('connection').to_get = function () {
+                client('connection').getter = function () {
                     // subscribe to changes in authentication
                     client.get('current_user')
 
@@ -551,15 +551,15 @@ function import_server (bus, make_statebus, options)
                     delete result.key
                     return result
                 }
-                client('connection').to_set = function (o) {
+                client('connection').setter = function (o) {
                     o = client.clone(o)
                     o.key = 'connection/' + conn.id
                     client.set(o)
                 }
 
                 // All connections
-                client('connections').to_set = function noop (t) {t.abort()}
-                client('connections').to_get = function () {
+                client('connections').setter = function noop (t) {t.abort()}
+                client('connections').getter = function () {
                     var result = []
                     var conns = master.get('connections').val
                     for (var connid in conns)
@@ -663,7 +663,7 @@ function import_server (bus, make_statebus, options)
             }
             on_set.priority = true
             bus(prefix).on_set = on_set
-            bus(prefix).to_delete = function (key) {
+            bus(prefix).deleter = function (key) {
                 delete db[key]
                 if (active) save_later()
             }
@@ -729,7 +729,7 @@ function import_server (bus, make_statebus, options)
             return decodeURIComponent(k.replace('%2E', '.'))
         }
 
-        bus(prefix).to_get = function (key, t) {
+        bus(prefix).getter = function (key, t) {
             firebase_ref.child(encode_firebase_key(key)).on('value', function (x) {
                 t.done(x.val() || {})
             }, function (err) { t.abort() })
@@ -739,19 +739,19 @@ function import_server (bus, make_statebus, options)
             firebase_ref.child(encode_firebase_key(o.key)).set(o)
         }
 
-        // bus(prefix).to_set = function (o, t) {
+        // bus(prefix).setter = function (o, t) {
         //     firebase_ref.child(encode_firebase_key(o.key)).set(o, (err) => {
         //         err ? t.abort() : t.done()
         //     })
         // }
 
-        bus(prefix).to_delete = function (key, t) {
+        bus(prefix).deleter = function (key, t) {
             firebase_ref.child(encode_firebase_key(key)).set(null, (err) => {
                 err ? t.abort() : t.done()
             })
         }
 
-        bus(prefix).to_forget = function (key, t) {
+        bus(prefix).forgetter = function (key, t) {
             firebase_ref.child(encode_firebase_key(key)).off()
         }
     },
@@ -843,7 +843,7 @@ function import_server (bus, make_statebus, options)
                                                 : o))
 
                 // Publish this to the bus
-                bus.set.fire(obj, {to_get: true})
+                bus.set.fire(obj, {getter: true})
             })
         }
 
@@ -872,13 +872,13 @@ function import_server (bus, make_statebus, options)
         if (opts.set_sync) {
             var old_route = bus.route
             bus.route = function (key, method, arg, t) {
-                if (method === 'to_set') on_set(arg)
+                if (method === 'setter') on_set(arg)
                 return old_route(key, method, arg, t)
             }
         } else
             bus(prefix).on_set_sync = on_set
 
-        bus(prefix).to_delete = function (key) {
+        bus(prefix).deleter = function (key) {
             if (opts.use_transactions && !open_transaction){
                 console.time('save db')
                 db.prepare('BEGIN TRANSACTION').run()
@@ -976,7 +976,7 @@ function import_server (bus, make_statebus, options)
         }
         pg_set.priority = true
         bus(opts.prefix).on_set = pg_set
-        bus(opts.prefix).to_delete = function (key) {
+        bus(opts.prefix).deleter = function (key) {
             db.query('delete from store where key = $1', [key])
         }
 
@@ -1036,7 +1036,7 @@ function import_server (bus, make_statebus, options)
         bus.usage_log_nots = nots
 
         // Aggregate all accesses by day, to get daily active users
-        bus('usage').to_get = () => {
+        bus('usage').getter = () => {
             bus.get('time/' + refresh_interval)
             var days = []
             var last_day
@@ -1075,7 +1075,7 @@ function import_server (bus, make_statebus, options)
             return {_: days}
         }
 
-        bus('recent_hits/*').to_get = (rest) => {
+        bus('recent_hits/*').getter = (rest) => {
             bus.get('time/' + refresh_interval)
             var result = []
             for (var row of db.prepare('select * from usage where '
@@ -1091,7 +1091,7 @@ function import_server (bus, make_statebus, options)
             return {_: result}
         }
 
-        bus('recent_referers/*').to_get = (rest) => {
+        bus('recent_referers/*').getter = (rest) => {
             bus.get('time/' + refresh_interval)
             var result = []
             for (var row of db.prepare('select * from usage where '
@@ -1140,7 +1140,7 @@ function import_server (bus, make_statebus, options)
             return times
         }
 
-        bus('socket_load_times').to_get = () => {
+        bus('socket_load_times').getter = () => {
             return {_: sock_open_times()}
         }
     },
@@ -1152,21 +1152,21 @@ function import_server (bus, make_statebus, options)
     },
 
     time () {
-        if (bus('time*').to_get.length > 0)
+        if (bus('time*').getter.length > 0)
             // Then it's already installed
             return
 
         // Time ticker
         var timeouts = {}
         bus('time*', {
-            to_get: (key, rest, t) => {
+            getter: (key, rest, t) => {
                 if (key === 'time') rest = '/1000'
                 timeout = parseInt(rest.substr(1))
                 function f () { bus.set.fire({key: key, val: Date.now()}) }
                 timeouts[key] = setInterval(f, timeout)
                 f()
             },
-            to_forget: (key, rest) => {
+            forgetter: (key, rest) => {
                 if (key === 'time') key = 'time/1000'
                 clearTimeout(timeouts[key])
             }
@@ -1237,8 +1237,8 @@ function import_server (bus, make_statebus, options)
         //  - Is there security hole if users have a ? or a / in their name?
         //  - Make the master.posts/ state not require /
         //  - Make standard url tools for optional slashes, and ? query params
-        //  - Should a e.g. client to_set abort if it calls set that aborts?
-        //    - e.g. if master('posts*').to_set aborts
+        //  - Should a e.g. client setter abort if it calls set that aborts?
+        //    - e.g. if master('posts*').setter aborts
 
         // Helpers
         function get_posts (args) {
@@ -1293,15 +1293,15 @@ function import_server (bus, make_statebus, options)
         // }
 
         // Define state on master
-        if (master('posts_for/*').to_get.length === 0) {
+        if (master('posts_for/*').getter.length === 0) {
             // Get posts for each user
-            master('posts_for/*').to_get = (json) => {
+            master('posts_for/*').getter = (json) => {
                 watch_for_dirt('posts-for/' + json.for)
                 return {_: get_posts(json)}
             }
             // Saving any post will dirty the list for all users mentioned in
             // the post
-            master('post/*').to_set = (old, New, t) => {
+            master('post/*').setter = (old, New, t) => {
                 // To do: diff the cc, to, and from lists, and only dirty
                 // posts_for people who have been changed
 
@@ -1348,19 +1348,19 @@ function import_server (bus, make_statebus, options)
         function dirty (key) { drtbus.set({key: 'dirty-'+key, n: Math.random()}) }
         function watch_for_dirt (key) { drtbus.get('dirty-'+key) }
 
-        client('current_email').to_get = () => {
+        client('current_email').getter = () => {
             return {_: current_addy()}
         }
 
         // Define state on client
-        client('posts*').to_get = (k, rest) => {
+        client('posts*').getter = (k, rest) => {
             var args = bus.parse(rest.substr(1))
             args.for = current_addy()
             var e = master.get('posts_for/' + JSON.stringify(args))
             return {_: master.clone(e._).map(x=>client.get(x.key))}
         }
 
-        client('post/*').to_get = (k) => {
+        client('post/*').getter = (k) => {
             var e = master.clone(master.get(k))
             if (!e._) return {}
             if (!can_see(e))
@@ -1372,7 +1372,7 @@ function import_server (bus, make_statebus, options)
             return e
         }
 
-        client('post/*').to_set = (o, t) => {
+        client('post/*').setter = (o, t) => {
             if (!(client.validate(o, {key: 'string',
                                      _: {to: 'array',
                                          cc: 'array',
@@ -1407,7 +1407,7 @@ function import_server (bus, make_statebus, options)
             t.done()
         }
 
-        client('post/*').to_delete = (key, o, t) => {
+        client('post/*').deleter = (key, o, t) => {
             // Validate
             if (!is_author(o)) {
                 console.error('User', current_addy(),
@@ -1431,14 +1431,14 @@ function import_server (bus, make_statebus, options)
             t.done()
         }
 
-        client('friends').to_get = t => {
+        client('friends').getter = t => {
             return {_: (master.get('users').val||[])
                     .map(u=>client.get('email/' + user_addy(u)))
                     .concat([client.get('email/public')])
             }
         }
 
-        client('email/*').to_get = (rest) => {
+        client('email/*').getter = (rest) => {
             var m = rest.match(email_regex)
             var result = {address: rest}
             if (rest === 'public') {
@@ -1461,7 +1461,7 @@ function import_server (bus, make_statebus, options)
 
     sqlite_query_server: function sqlite_query_server (db) {
         var get = bus.get
-        bus('table_columns/*').to_get =
+        bus('table_columns/*').getter =
             function get_table_columns (key, rest) {
                 if (typeof key !== 'string')
                     console.log(handlers.hash)
@@ -1484,7 +1484,7 @@ function import_server (bus, make_statebus, options)
             }
 
 
-        bus('table_foreign_keys/*').to_get =
+        bus('table_foreign_keys/*').getter =
             function table_foreign_keys (key, rest) {
                 var table_name = rest
                 var foreign_keys = get('sql/PRAGMA foreign_key_list(' + table_name + ')').rows
@@ -1496,7 +1496,7 @@ function import_server (bus, make_statebus, options)
                 return result
             }
 
-        bus('sql/*').to_get =
+        bus('sql/*').getter =
             function sql (key, rest) {
                 get('time/60000')
                 var query = rest
@@ -1573,7 +1573,7 @@ function import_server (bus, make_statebus, options)
         // ************************
 
         // Getting the whole table, or a single row
-        bus(table_name + '*').to_get = function (key, rest) {
+        bus(table_name + '*').getter = function (key, rest) {
             if (rest === '')
                 // Return the whole table
                 return render_table()
@@ -1593,7 +1593,7 @@ function import_server (bus, make_statebus, options)
         }
 
         // Saving a row
-        bus(table_name + '/*').to_set = function (obj, rest) {
+        bus(table_name + '/*').setter = function (obj, rest) {
             var columns = table_columns.columns
             var key = remapped_keys.keys[obj.key] || obj.key
 
@@ -1619,7 +1619,7 @@ function import_server (bus, make_statebus, options)
         }
 
         // Inserting a new row
-        bus('new/' + table_name + '/*').to_set = function (obj) {
+        bus('new/' + table_name + '/*').setter = function (obj) {
             var columns = table_columns.columns
             var stmt = ('insert into ' + table_name + ' (' + columns.join(',')
                         + ') values (' + new Array(columns.length).join('?,') + '?)')
@@ -1638,7 +1638,7 @@ function import_server (bus, make_statebus, options)
         }
 
         // Deleting a row
-        bus(table_name + '/*').to_delete = function (key, rest) {
+        bus(table_name + '/*').deleter = function (key, rest) {
             if (remapped_keys.keys[key]) {
                 var old_key = key
                 var new_key = remapped_keys.keys[key]
@@ -1690,9 +1690,9 @@ function import_server (bus, make_statebus, options)
         if (!master.auth_initialized) {
 
             // A hash for fast lookup of a user's password
-            master('users/passwords').to_get = function (k) {
+            master('users/passwords').getter = function (k) {
                 // We compute it from the 'users' state
-                master.log('users/passwords.to_get: Computing!')
+                master.log('users/passwords.getter: Computing!')
                 var result = {key: 'users/passwords', val: {}}
                 var users = master.get('users')
                 users.val = users.val || []
@@ -1715,7 +1715,7 @@ function import_server (bus, make_statebus, options)
             master.auth_initialized = true
             master.get('users/passwords')
 
-            master('user/*').to_delete = (key, t) => {
+            master('user/*').deleter = (key, t) => {
                 master.log('Deleteinggg!!!', key)
                 // Remove from users.all
                 var users = master.get('users')
@@ -1817,7 +1817,7 @@ function import_server (bus, make_statebus, options)
         }
 
         // Current User
-        client('current_user').to_get = function (k) {
+        client('current_user').getter = function (k) {
             if (!conn.client)
                 return {val: {error: 'no client'}}
 
@@ -1826,7 +1826,7 @@ function import_server (bus, make_statebus, options)
             return result
         }
 
-        client('current_user').to_set = function (o, t) {
+        client('current_user').setter = function (o, t) {
             var val = o.val
             if (typeof val !== 'object') {
                 console.error('current_user: set to something not an object:', val)
@@ -1930,14 +1930,14 @@ function import_server (bus, make_statebus, options)
 
             t.reget()
         }
-        client('current_user').to_delete = function () {}
+        client('current_user').deleter = function () {}
 
         // Users have closet space at /user/<name>/*
         var closet_space_key = /^(user\/[^\/]+)\/.*/
         var private_closet_space_key = /^user\/[^\/]+\/private.*/
 
         // User
-        client('user/*').to_set = function (o, t) {
+        client('user/*').setter = function (o, t) {
             var c = client.get('current_user')
             var user_key = o.key.match(/^user\/([^\/]+)/)
             user_key = user_key && ('user/' + user_key[1])
@@ -2040,7 +2040,7 @@ function import_server (bus, make_statebus, options)
 
             master.set(u)
         }
-        client('user/*').to_get = function user_getter (k) {
+        client('user/*').getter = function user_getter (k) {
             var c = client.get('current_user')
             client.log('* getting:', k, 'as', c.val.user)
 
@@ -2059,7 +2059,7 @@ function import_server (bus, make_statebus, options)
             // Otherwise return the actual user
             return user_obj(k, c.val.logged_in && c.val.user.link === k)
         }
-        client('user/*').to_delete = function () {}
+        client('user/*').deleter = function () {}
         function user_obj (k, logged_in) {
             var o = master.clone(master.get(k))
             if (k.match(/^user\/([^\/]+)\/private\/(.*)$/))
@@ -2074,10 +2074,10 @@ function import_server (bus, make_statebus, options)
         // Blacklist sensitive stuff on master, in case we have a shadow set up
         var blacklist = 'users users/passwords logged_in_clients'.split(' ')
         for (var i=0; i<blacklist.length; i++) {
-            client(blacklist[i]).to_get  = function () {}
-            client(blacklist[i]).to_set   = function () {}
-            client(blacklist[i]).to_delete = function () {}
-            client(blacklist[i]).to_forget = function () {}
+            client(blacklist[i]).getter  = function () {}
+            client(blacklist[i]).setter   = function () {}
+            client(blacklist[i]).deleter = function () {}
+            client(blacklist[i]).forgetter = function () {}
         }
     },
 
@@ -2145,7 +2145,7 @@ function import_server (bus, make_statebus, options)
             was_logged_in = c.val.logged_in
         })
 
-        client(prefix_to_sync).to_get = function (key) {
+        client(prefix_to_sync).getter = function (key) {
             var c = client.get('current_user')
             if (client.loading()) return
             var prefix = client_prefix(c)
@@ -2162,7 +2162,7 @@ function import_server (bus, make_statebus, options)
             return obj
         }
 
-        client(prefix_to_sync).to_set = function (obj) {
+        client(prefix_to_sync).setter = function (obj) {
             if (validate && !validate(obj)) {
                 console.warn('Validation failed on', obj)
                 client.set.abort(obj)
@@ -2190,7 +2190,7 @@ function import_server (bus, make_statebus, options)
             p_keys && client.master.set(p_keys)
         }
 
-        client(prefix_to_sync).to_delete = function (k) {
+        client(prefix_to_sync).deleter = function (k) {
             k = client_prefix(client.get('current_user')) + k
             client.master.delete(k)
 
@@ -2216,19 +2216,19 @@ function import_server (bus, make_statebus, options)
             // to the global cache
             if (count === 0) {
                 count++
-                if (method === 'to_get')
+                if (method === 'getter')
                     bus.run_handler(function get_from_master (k) {
                         // console.log('DEFAULT GETting', k)
                         var r = master_bus.get(k)
                         // console.log('DEFAULT GETted', r)
                         bus.set.fire(r, {version: master_bus.versions[r.key]})
                         }, method, arg)
-                else if (method === 'to_set')
+                else if (method === 'setter')
                     bus.run_handler(function set_to_master (o, t) {
                         // console.log('DEFAULT ROUTE', t)
                         master_bus.set(bus.clone(o), t)
                     }, method, arg, {t: t})
-                else if (method == 'to_delete')
+                else if (method == 'deleter')
                     bus.run_handler(function delete_from_master (k, t) {
                         master_bus.delete(k)
                         return 'done'
@@ -2282,7 +2282,7 @@ function import_server (bus, make_statebus, options)
     // file or recursive directory structure at fs_path
     sync_files: function sync_files (state_path, file_path) {
         // To do:
-        //  - Hook up a to_delete handler
+        //  - Hook up a deleter handler
         //    - recursively remove directories if all files gone
 
         console.assert(state_path.substr(-1) !== '*'
@@ -2293,7 +2293,7 @@ function import_server (bus, make_statebus, options)
         var buffer = {}
         var full_file_path = require('path').join(__dirname, file_path)
 
-        bus(state_path + '*').to_get = (rest) => {
+        bus(state_path + '*').getter = (rest) => {
             // We DO want to handle:
             //   - "foo"
             //   - "foo/*"
@@ -2319,7 +2319,7 @@ function import_server (bus, make_statebus, options)
             return {_:f}
         }
 
-        bus(state_path + '/*').to_set = (o, rest, t) => {
+        bus(state_path + '/*').setter = (o, rest, t) => {
             if (rest.length>0 && rest[0] !== '/') return
             var f = Buffer.from(o._, 'base64')
             require('fs').writeFile(file_path + rest, f,
@@ -2336,7 +2336,7 @@ function import_server (bus, make_statebus, options)
         var textbus = make_statebus()
         textbus.label = 'textbus'
         var watched = new Set()
-        textbus('*').to_get = (filename, old) => {
+        textbus('*').getter = (filename, old) => {
             return {etag: Math.random() + '',
                     _: getter(filename)}
         }
@@ -2412,7 +2412,7 @@ function import_server (bus, make_statebus, options)
     },
 
     serve_wiki: () => {
-        bus('edit/*').to_get = () => ({_: require('./extras/wiki.coffee').code})
+        bus('edit/*').getter = () => ({_: require('./extras/wiki.coffee').code})
     },
 
     unix_socket_repl: function (filename) {

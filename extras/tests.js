@@ -129,13 +129,13 @@ test(function prune (done) {
 
 test(function auto_vars (done) {
     var n = require('../statebus')()
-    n('r/*').to_get = function (rest, o) {return {rest, o}}
+    n('r/*').getter = function (rest, o) {return {rest, o}}
     log(n.get('r/3'))
     assert(n.get('r/3').rest === '3')
     assert(n.get('r/3').o === undefined,
            'o is not undefined: ' + JSON.stringify(n.get('r/3')))
 
-    n('v/*').to_get = function (vars, star) {return {vars: vars, rest: star}}
+    n('v/*').getter = function (vars, star) {return {vars: vars, rest: star}}
     log(n.get('v/[3,9 4]').rest)
     log(n.get('v/[3,9 4]').rest.match(/$Bad/))
     assert(n.get('v/[3,9 4]').rest === '[3,9 4]')
@@ -145,7 +145,7 @@ test(function auto_vars (done) {
     assert(n.get('v/[3,9 4]').vars.match(/^Bad/))
     assert(Array.isArray(n.get('v/[3,4]').vars))
 
-    n('a/*').to_set = function (t, k, obj) {
+    n('a/*').setter = function (t, k, obj) {
         log('k:', k, 't:', t, 'o:', obj)
         assert(k === 'a/foo')
         assert(typeof obj === 'object')
@@ -158,7 +158,7 @@ test(function auto_vars (done) {
         n.set({key: 'a/foo', i:i})
 
     log('Forgetting things now')
-    n('v/*').to_forget = function (vars, star) {log('(from auto_vars) forgot v/' + star)}
+    n('v/*').forgetter = function (vars, star) {log('(from auto_vars) forgot v/' + star)}
     n.forget('v/[3,9 4]')
     n.forget('v/[3,4]')
 
@@ -202,9 +202,9 @@ test(function transactions (done) {
     bus.honk = 'statelog'
     bus.label = 'tranny'
 
-    // Test to_get handlers with t.done()
-    bus('foo1').to_get = function (t) {
-        log('to_geting foo1')
+    // Test getter handlers with t.done()
+    bus('foo1').getter = function (t) {
+        log('gettering foo1')
         setTimeout(()=>{
             log('returning something for foo1')
             t.done({something: 'yeah'})
@@ -215,7 +215,7 @@ test(function transactions (done) {
     setTimeout(() => { log('test foo1'); assert(foo1.something === 'yeah') }, 10)
 
     // And return a value directly
-    bus('foo2').to_get = (t) => { return {something: 'yeah'} }
+    bus('foo2').getter = (t) => { return {something: 'yeah'} }
     var foo2 = bus.get('foo2')
     setTimeout(() => { log('test foo2'); assert(foo2.something === 'yeah') }, 10)
 
@@ -227,11 +227,11 @@ test(function transactions (done) {
     bus.set({key: 'softrock1', a:1})
     bus.set({key: 'softrock2', a:1})
 
-    // Test to_set handlers with t.done(o), t.abort, 'done', 'abort'
-    bus('rock1').to_set = (t) => {setTimeout(()=>{ t.abort() }, 0)}
-    bus('rock2').to_set = ( ) => {return 'abort'}
-    bus('softrock1').to_set = (t) => {setTimeout(()=>{ t.done() }, 0)}
-    bus('softrock2').to_set = ( ) => {return 'done'}
+    // Test setter handlers with t.done(o), t.abort, 'done', 'abort'
+    bus('rock1').setter = (t) => {setTimeout(()=>{ t.abort() }, 0)}
+    bus('rock2').setter = ( ) => {return 'abort'}
+    bus('softrock1').setter = (t) => {setTimeout(()=>{ t.done() }, 0)}
+    bus('softrock2').setter = ( ) => {return 'done'}
     
     //bus.honk = true
     setTimeout(() => {
@@ -250,10 +250,10 @@ test(function transactions (done) {
 
             // Test the delete handlers with t.done(o), t.abort, 'done', 'abort'
             log("Now let's delete")
-            bus('rock1').to_delete = (t) => {setTimeout(()=>{ t.abort() }, 0)}
-            bus('rock2').to_delete = ( ) => {return 'abort'}
-            bus('softrock1').to_delete = (t) => {setTimeout(()=>{ t.done() }, 0)}
-            bus('softrock2').to_delete = ( ) => {return 'done'}
+            bus('rock1').deleter = (t) => {setTimeout(()=>{ t.abort() }, 0)}
+            bus('rock2').deleter = ( ) => {return 'abort'}
+            bus('softrock1').deleter = (t) => {setTimeout(()=>{ t.done() }, 0)}
+            bus('softrock2').deleter = ( ) => {return 'done'}
             
             log('Delete some rocks')
             bus.delete('rock1')
@@ -333,7 +333,7 @@ test(function translate_fields (done) {
 })
 
 test(function basics (done) {
-    bus('basic wait').to_get = function () {
+    bus('basic wait').getter = function () {
         setTimeout(function () {bus.set.fire({key:'basic wait', a:1})},
                    30)
     }
@@ -356,9 +356,9 @@ test(function basics (done) {
 // Multi-handlers
 test(function multiple_handlers1 (done) {
     var cuss = require('../statebus')()
-    cuss('foo').to_get = () => {log('do nothing 1')}
-    cuss('foo').to_get = () => {log('do nothing 2')}
-    cuss('foo').to_get = () => (log('doing something'),{b: 3})
+    cuss('foo').getter = () => {log('do nothing 1')}
+    cuss('foo').getter = () => {log('do nothing 2')}
+    cuss('foo').getter = () => (log('doing something'),{b: 3})
     cuss.get('foo', (o) => {
         log('Multi-handle got', o)
         cuss.forget()
@@ -368,10 +368,10 @@ test(function multiple_handlers1 (done) {
 
 test(function multiple_handlers2 (done) {
     var cuss = require('../statebus')()
-    cuss('foo').to_set = (o) => {log('do nothing 1')}
-    cuss('foo').to_set = (o) => {log('do nothing 2')}
-    cuss('foo').to_set = (o) => {log('doin something'); cuss.set.fire(o)}
-    //cuss('foo').to_set = (o) => {log('doin abortion'); cuss.set.abort(o)}
+    cuss('foo').setter = (o) => {log('do nothing 1')}
+    cuss('foo').setter = (o) => {log('do nothing 2')}
+    cuss('foo').setter = (o) => {log('doin something'); cuss.set.fire(o)}
+    //cuss('foo').setter = (o) => {log('doin abortion'); cuss.set.abort(o)}
     cuss.set({key: 'foo', b: 55})
     log('over and out')
     setTimeout(()=>{done()})
@@ -443,7 +443,7 @@ test(function get_once (done) {
 })
 
 test(function once (done) {
-    bus('takeawhile').to_get = (t) => {
+    bus('takeawhile').getter = (t) => {
         setTimeout(_=> t.return({_: 3}), 150)
     }
     bus.once(_=> {
@@ -469,7 +469,7 @@ test(function get_remote (done) {
     var count = 0
 
     // The moon responds in 30ms
-    bus('moon').to_get =
+    bus('moon').getter =
         function (k) { setTimeout(function () {bus.set.fire({key:k})},30) }
     function cb (o) {
         count++
@@ -531,7 +531,7 @@ test(function identity (done) {
     var key = 'kooder'
     var count = 0
     function fire () { bus.set.fire({key: 'kooder', count: count}) }
-    bus(key).to_get = function () { setTimeout(fire, 10) }
+    bus(key).getter = function () { setTimeout(fire, 10) }
     function cb() {
         count++
         log('cb called', count, 'times')
@@ -546,7 +546,7 @@ test(function identity (done) {
         //  2. First return from pending get
         assert(count === 1, 'cb called '+count+'!=1 times')
         bus.forget(key, cb)
-        bus(key).to_get.delete(fire)
+        bus(key).getter.delete(fire)
         done()
     }, 40)
 })
@@ -557,7 +557,7 @@ test(function forgetting (done) {
     var key = 'kooder'
     var count = 0
     function fire () { log('firing!'); bus.set.fire({key: key, count: count}) }
-    bus(key).to_get = function () { setTimeout(fire, 10) }
+    bus(key).getter = function () { setTimeout(fire, 10) }
 
     function cb (o) {
         count++
@@ -578,7 +578,7 @@ test(function forgetting (done) {
     // Done
     setTimeout(function () {
         assert(count === 2, "Count should be 2 but is", count)
-        bus(key).to_get.delete(fire)
+        bus(key).getter.delete(fire)
         done()
     }, 100)
 })
@@ -586,7 +586,7 @@ test(function forgetting (done) {
 // Can we return an object that getes another?
 test(function nested_get (done) {
     function outer () { return {inner: bus.get('inner') } }
-    bus('outer').to_get = outer
+    bus('outer').getter = outer
     log('geting the outer wrapper')
     var obj = bus.get('outer')
     log('Ok, we geted:', obj)
@@ -598,7 +598,7 @@ test(function nested_get (done) {
 
     // Done
     setTimeout(function () {
-        bus('outer').to_get.delete(outer)
+        bus('outer').getter.delete(outer)
         done()
     }, 10)
 })
@@ -609,9 +609,9 @@ test(function russian_doll_nesting (done) {
     function big () { return {middle: bus.get('middle') } }
     function middle () { return {small: bus.get('small') } }
     function small () { return {nothing: nothing} }
-    bus('big').to_get = big
-    bus('middle').to_get = middle
-    bus('small').to_get = small
+    bus('big').getter = big
+    bus('middle').getter = middle
+    bus('small').getter = small
 
     log('geting')
     var obj = bus.get('big')
@@ -638,9 +638,9 @@ test(function russian_doll_nesting (done) {
 
     // Done
     setTimeout(function () {
-        bus('big').to_get.delete(big)
-        bus('middle').to_get.delete(middle)
-        bus('small').to_get.delete(small)
+        bus('big').getter.delete(big)
+        bus('middle').getter.delete(middle)
+        bus('small').getter.delete(small)
         done()
     }, 50)
 })
@@ -649,11 +649,11 @@ test(function some_handlers_suicide (done) {
     // These handlers stop reacting after they successfully complete:
     // 
     //   .on_set
-    //   .to_set
-    //   .to_forget
-    //   .to_delete
+    //   .setter
+    //   .forgetter
+    //   .deleter
     //
-    // Ok, that's everyting except for a .to_get handler, which
+    // Ok, that's everyting except for a .getter handler, which
     // runs until its key has been forget()ed.
 
     // XXX todo
@@ -848,7 +848,7 @@ test(function proxies (done) {
 })
 
 test(function only_one (done) {
-    bus('only_one/*').to_get = function (k) {
+    bus('only_one/*').getter = function (k) {
         var id = k[k.length-1]
         return {selected: bus.get('selector').choice == id}
     }
@@ -885,7 +885,7 @@ test(function only_one (done) {
 
 test(function set_can_trigger_toget (done) {
     // bus.honk = true
-    bus('set_trigger_toget').to_get =
+    bus('set_trigger_toget').getter =
         function (k, old) {
             old.yes = Math.random()
             return old
@@ -900,7 +900,7 @@ test(function set_can_trigger_toget (done) {
         triggered++
         log('Triggered', triggered, 'times', obj)
 
-        // XXX todo: because of a bug in how to_get is handled, this triggers 4 times instead of 3
+        // XXX todo: because of a bug in how getter is handled, this triggers 4 times instead of 3
         assert(triggered <= 4)
         log('GGGGGGGGGGGG')
     })
@@ -920,7 +920,7 @@ test(function rollback_setfire (done) {
         log('Firing wait')
         bus.set.fire({key: 'wait', count: count})
     }, 50) }
-    bus('wait').to_get = wait
+    bus('wait').getter = wait
 
     // Initialize
     bus.set.fire({key: 'undo me', state: 'start'})
@@ -965,14 +965,14 @@ test(function rollback_setfire (done) {
                60)
 
     setTimeout(function () {
-        bus('wait').to_get.delete(wait)
+        bus('wait').getter.delete(wait)
         assert(phase === 3)
         done()
     }, 80)
 })
 
 test(function rollback_del (done) {
-    bus('wait forever').to_get = function () {} // shooting blanks
+    bus('wait forever').getter = function () {} // shooting blanks
     bus.set.fire({key: 'kill me', alive: true})
 
     // First do a del that will roll back
@@ -996,7 +996,7 @@ test(function rollback_del (done) {
 test(function rollback_set (done) {
     var sets = []
     var all_done = false
-    bus('candy').to_set = function (o) {sets.push(o); bus.set.fire(o)}
+    bus('candy').setter = function (o) {sets.push(o); bus.set.fire(o)}
     bus.set.fire({key: 'candy', flavor: 'lemon'})
 
     log('Trying some rollbacks starting with', bus.cache['candy'])
@@ -1041,7 +1041,7 @@ test(function rollback_set (done) {
 
 test(function rollback_abort (done) {
     var bus = require('../statebus')()
-    bus('foo').to_set = (o, t) => {t.abort()}
+    bus('foo').setter = (o, t) => {t.abort()}
     bus(()=> {
         var o = bus.get('foo')
         o.bar = 3
@@ -1058,7 +1058,7 @@ test(function loading_quirk (done) {
     // if the return from a get didn't actually change state
 
     // First define a delayed set.fire
-    bus('wait a sec').to_get = function (k) {
+    bus('wait a sec').getter = function (k) {
         setTimeout(function () { bus.set.fire({key: k}) }, 50)
     }
 
@@ -1379,7 +1379,7 @@ test(function connections_2 (done) {
 test(function flashbacks (done) {
     // We have an echo canceler.  If you set state, it shouldn't send the
     // same state back to you, but it should send it to everyone else.  But if
-    // the state is changed in a to_set handler, it *should* send you
+    // the state is changed in a setter handler, it *should* send you
     // changes.
 
     var port = 3873
@@ -1388,7 +1388,7 @@ test(function flashbacks (done) {
     var s = require('../statebus').serve({port: port, file_store: false})
     s.label = 's'
 
-    s('x').to_set = (o, t) => {
+    s('x').setter = (o, t) => {
         log('Saving x with', o)
         o.x++        // Change the value of o.x a little
         t.done(o)
@@ -1427,12 +1427,12 @@ test(function common_time (done) {
     b.honk = 3
 
     // Define a `front' that proxies for `back'
-    b('front').to_get = () => {
+    b('front').getter = () => {
         var copy = b.clone(b.get('back'))
         copy.key = 'front'
         return copy
     }
-    b('front').to_set = (o, t) => {
+    b('front').setter = (o, t) => {
         var copy = b.clone(o)
         copy.key = 'back'
 
@@ -1664,12 +1664,12 @@ if (false) {
         */
 
         var user = 3
-        bus('user').to_get =
+        bus('user').getter =
             function (k) {
                 return {user: user}
             }
 
-        bus('user').to_set =
+        bus('user').setter =
             function (o) {
                 if (o.funny)
                     bus.set({key: 'user', user: 'funny'})

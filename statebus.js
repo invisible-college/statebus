@@ -51,9 +51,9 @@
         // arrived nested within a bigger object, because we never explicity
         // got those keys.  But we don't need to get them now cause we
         // already have them.
-        var to_getters = 0
+        var getterters = 0
         if (!gets_out[key])
-            to_getters = bus.route(key, 'to_get', key)
+            getterters = bus.route(key, 'getter', key)
 
         // Now there might be a new value pubbed onto this bus.
         // Or there might be a pending get.
@@ -71,9 +71,9 @@
 
         // Otherwise, we want to make sure that a pub gets called on the
         // handler.  If there's a pending get, then it'll get called later.
-        // If there was a to_get, then it already got called.  Otherwise,
+        // If there was a getter, then it already got called.  Otherwise,
         // let's call it now.
-        else if (!pending_gets[key] && to_getters === 0) {
+        else if (!pending_gets[key] && getterters === 0) {
             // TODO: my intuition suggests that we might prefer to delay this
             // .on_set getting called in a setTimeout(f,0), to be consistent
             // with other calls to .on_set.
@@ -130,8 +130,8 @@
             var was_saving = currently_saving
             currently_saving = obj.key
 
-            // Call the to_set() handlers!
-            var num_handlers = bus.route(obj.key, 'to_set', obj, t)
+            // Call the setter() handlers!
+            var num_handlers = bus.route(obj.key, 'setter', obj, t)
             if (num_handlers === 0) {
                 // And fire if there weren't any!
                 set.fire(obj, t)
@@ -143,7 +143,7 @@
             currently_saving = was_saving
         }
         // TODO: Here's an alternative.  Instead of counting the handlers and
-        // seeing if there are zero, I could just make a to_set handler that
+        // seeing if there are zero, I could just make a setter handler that
         // is shadowed by other handlers if I can get later handlers to shadow
         // earlier ones.
     }
@@ -191,7 +191,7 @@
                 if (obj.key && !changed(obj)) {
                     color = grey
                     icon = 'x'
-                    if (t.to_get)
+                    if (t.getter)
                         message = (t.m) || 'Got ' + bus + "('"+obj.key+"')"
                     if (t.version) message += ' [' + t.version + ']'
                     statelog(obj.key, color, icon, message)
@@ -199,7 +199,7 @@
                 }
 
                 color = red, icon = '•'
-                if (t.to_get || pending_gets[obj.key]) {
+                if (t.getter || pending_gets[obj.key]) {
                     color = green
                     icon = '^'
                     message = add_diff_msg((t.m)||'Got '+bus+"('"+obj.key+"')",
@@ -409,7 +409,7 @@
             clearTimeout(to_be_forgotten[key])
             to_be_forgotten[key] = setTimeout(function () {
                 // Send a forget upstream
-                bus.route(key, 'to_forget', key, t)
+                bus.route(key, 'forgetter', key, t)
 
                 // Delete the cache entry...?
                 // delete cache[key]
@@ -429,8 +429,8 @@
         }
 
         statelog(key, yellow, 'v', 'Deleting ' + key)
-        // Call the to_delete handlers
-        var handlers_called = bus.route(key, 'to_delete', key)
+        // Call the deleter handlers
+        var handlers_called = bus.route(key, 'deleter', key)
         if (handlers_called === 0)
             // And go ahead and delete if there aren't any!
             delete cache[key]
@@ -445,11 +445,11 @@
         //  - Add transactions, so you can check permissions, abort a delete,
         //    etc.
         //    - NOTE: I did a crappy implementation of abort just now above!
-        //      But it doesn't work if called after the to_delete handler returns.
+        //      But it doesn't work if called after the deleter handler returns.
         //    - Generalize the code across set and del with a "mutate"
         //      operation
         //
-        //  - Right now we fire the to_delete handlers right here.
+        //  - Right now we fire the deleter handlers right here.
         //
         //    - Do we want to batch them up and fire them later?
         //      e.g. we could make a mark_deleted(key) like mark_changed(key)
@@ -468,7 +468,7 @@
 
         var version = (t && t.version) || 'dirty-' + new_version()
 
-        // Find any .to_get, and mark as dirty so that it re-runs
+        // Find any .getter, and mark as dirty so that it re-runs
         var found = false
         if (gets_out.hasOwnProperty(key))
             for (var i=0; i<gets_out[key].length; i++) {
@@ -588,8 +588,8 @@
     // ****************
     // Connections
     function subspace (key, params) {
-        var methods = {to_get:null, to_set:null, on_set:null, on_set_sync:null,
-                       on_delete:null, to_delete:null, to_forget:null}
+        var methods = {getter:null, setter:null, on_set:null, on_set_sync:null,
+                       on_delete:null, deleter:null, forgetter:null}
 
         if (params) {
             for (var method in params) {
@@ -756,8 +756,8 @@
 
         if (false && !funck.global_funk) {
             // \u26A1
-            var event = {'to_set':'set','on_set':'set.fire','to_get':'get',
-                         'to_delete':'delete','to_forget':'forget'}[method],
+            var event = {'setter':'set','on_set':'set.fire','getter':'get',
+                         'deleter':'delete','forgetter':'forget'}[method],
                 triggering = funk ? 're-running' : 'initiating'
             console.log('   > a', bus+'.'+event + "('" + (arg.key||arg) + "') is " + triggering
                 +'\n     ' + funk_name(funck))
@@ -802,7 +802,8 @@
         function key_arg () { return ((typeof arg.key) == 'string') ? arg.key : arg }
         function rest_arg () { return (key_arg()).substr(binding.length-1) }
         function val_arg () {
-            console.assert(method === 'to_set' || method === 'on_set' || method === 'on_set_sync')
+            console.assert(method === 'setter' || method === 'on_set' || method === 'on_set_sync',
+                           'Bad method for val_arg()')
             // Is there a time I am supposed to return bus.cache[arg]?  It used to say:
             // arg.key ? arg : bus.cache[arg]
 
@@ -821,9 +822,9 @@
             t = clone(t || {})
 
             // Add .abort() method
-            if (method === 'to_set' || method === 'to_delete')
+            if (method === 'setter' || method === 'deleter')
                 t.abort = function () {
-                    var key = method === 'to_set' ? arg.key : arg
+                    var key = method === 'setter' ? arg.key : arg
                     if (f.loading()) return
                     bus.cache[key] = bus.cache[key] || {key: key}
                     bus.backup_cache[key] = bus.backup_cache[key] || {key: key}
@@ -831,34 +832,34 @@
                 }
 
             // Add .done() method
-            if (method !== 'to_forget')
+            if (method !== 'forgetter')
                 t.done = function (o) {
-                    var key = method === 'to_set' ? arg.key : arg
+                    var key = method === 'setter' ? arg.key : arg
                     if (func.use_linked_json)
                         o = {key, val: o}
                     bus.log('We are DONE()ing', method, key, o||arg)
 
                     // We use a simple (and crappy?) heuristic to know if the
-                    // to_set handler has changed the state: whether the
+                    // setter handler has changed the state: whether the
                     // programmer passed (o) to the t.done(o) handler.  If
                     // not, we assume it hasn't changed.  If so, we assume it
                     // *has* changed, and thus we change the version of the
                     // state.  I imagine it would be more accurate to diff
-                    // from before the to_set handler began with when
+                    // from before the setter handler began with when
                     // t.done(o) ran.
                     //
                     // Note: We will likely solve this in the future by
-                    // preventing .to_set() from changing the incoming state,
+                    // preventing .setter() from changing the incoming state,
                     // except through an explicit .revise() function.
                     if (o) t.version = new_version()
 
-                    if (method === 'to_delete')
+                    if (method === 'deleter')
                         delete bus.cache[key]
-                    else if (method === 'to_set') {
+                    else if (method === 'setter') {
                         bus.set.fire(o || arg, t)
                         bus.route(key, 'on_set_sync', o || arg, t)
                     } else {
-                        // Now method === 'to_get'
+                        // Now method === 'getter'
                         o.key = key
                         bus.set.fire(o, t)
                         // And now reset the version cause it could get called again
@@ -869,14 +870,20 @@
             // Alias .return() to .done(), in case that feels better to you
             t.return = t.done
 
+            // Prepush Scratch:
+            //   var prepushed = {}
+            //   t.prepush = function (key) {
+            //       prepushed[key] = bus.get(key)
+            //   }
+
             // Alias t.reget() to bus.dirty()
-            if (method === 'to_set')
+            if (method === 'setter')
                 t.reget = function () { bus.dirty(arg.key) }
 
             // Now to call the handler, let's line up the function's special
             // named arguemnts like key, o, t, rest, vars, etc.
             var args = []
-            args[0] = (method in {to_set:1, on_set:1, on_set_sync:1}) ? val_arg() : arg
+            args[0] = (method in {setter:1, on_set:1, on_set_sync:1}) ? val_arg() : arg
             args[1] = t
             for (var k in (func.args||{})) {
                 switch (k) {
@@ -907,28 +914,28 @@
             //    arr[func.args[k]] = <compute_blah(k)>
 
             // Trigger done() or abort() by return value
-            console.assert(!(result === 'to_get' &&
+            console.assert(!(result === 'getter' &&
                              (result === 'done' || result === 'abort')),
-                           'Returning "done" or "abort" is not allowed from to_get handlers')
+                           'Returning "done" or "abort" is not allowed from getter handlers')
             if (result === 'done')  t.done()
             if (result === 'abort') t.abort()
 
             // For get
             if (func.use_linked_json) {
-                if (method === 'to_get' && result !== undefined && !f.loading()) {
+                if (method === 'getter' && result !== undefined && !f.loading()) {
                     var obj = {key: arg, val: result}
                     var new_t = clone(t || {})
-                    new_t.to_get = true
+                    new_t.getter = true
                     set.fire(obj, new_t)
                     return result
                 }
             } else {
-                if (method === 'to_get' && result instanceof Object
+                if (method === 'getter' && result instanceof Object
                     && !f.loading()     // Experimental.
                    ) {
                     result.key = arg
                     var new_t = clone(t || {})
-                    new_t.to_get = true
+                    new_t.getter = true
                     set.fire(result, new_t)
                     return result
                 }
@@ -937,29 +944,29 @@
             // Set, forget and delete handlers stop re-running once they've
             // completed without anything loading.
             // ... with f.forget()
-            if (method !== 'to_get' && !f.loading())
+            if (method !== 'getter' && !f.loading())
                 f.forget()
         })
         f.proxies_for = func
         f.arg = arg
         f.transaction = t || {}
 
-        // to_get handlers stop re-running when the key is forgotten
-        if (method === 'to_get') {
+        // getter handlers stop re-running when the key is forgotten
+        if (method === 'getter') {
             var key = arg
             function handler_done () {
                 f.forget()
-                unbind(key, 'to_forget', handler_done)
+                unbind(key, 'forgetter', handler_done)
             }
-            bind(key, 'to_forget', handler_done)
+            bind(key, 'forgetter', handler_done)
 
             // // Check if it's doubled-up
             // if (gets_out[key])
-            //     console.error('Two .to_get functions are running on the same key',
+            //     console.error('Two .getter functions are running on the same key',
             //                   key+'!', funk_name(funck), funk_name(gets_out[key]))
 
             gets_out[key] = gets_out[key] || []
-            gets_out[key].push(f)   // Record active to_get handler
+            gets_out[key].push(f)   // Record active getter handler
             pending_gets[key] = f   // Record that the get is pending
         }
 
@@ -979,9 +986,9 @@
         for (var i=0; i<handlers.length; i++)
             bus.run_handler(handlers[i].func, method, arg, {t: t, binding: handlers[i].key})
 
-        // if (method === 'to_get')
+        // if (method === 'getter')
         //     console.assert(handlers.length<2,
-        //                    'Two to_get functions are registered for the same key '+key,
+        //                    'Two getter functions are registered for the same key '+key,
         //                    handlers)
         return handlers.length
     }
@@ -1187,7 +1194,7 @@
         if (!name) throw 'Uncallback function needs a name'
         var watching = {}
         var prefix = 'uncallback/' + name
-        bus(prefix + '/*').to_get = function (key, json) {
+        bus(prefix + '/*').getter = function (key, json) {
             var args = json
             function cb (err, result) {
                 if (err) {
@@ -1212,7 +1219,7 @@
             }
         }
         if (options.stop_watching)
-            bus(prefix + '/*').to_forget = function (key, json) {
+            bus(prefix + '/*').forgetter = function (key, json) {
                 console.assert(watching[key],
                                'Forgetting a watcher for ' + JSON.stringify(key)
                                + ' that is not enabled')
@@ -1417,7 +1424,7 @@
             return bus.translate_links(bus.clone(keyed), rem_prefix)
         }
 
-        bus(prefix).to_set   = function (obj, t) {
+        bus(prefix).setter   = function (obj, t) {
             bus.set.fire(obj)
             var x = {set: obj}
             if (t.version) x.version = t.version
@@ -1426,11 +1433,11 @@
             if (t.patch)   x.set    = rem_prefix(x.set.key)
             send(x)
         }
-        bus(prefix).to_get  = function (key) { send({get: key}),
+        bus(prefix).getter  = function (key) { send({get: key}),
                                                  client_getted_keys.add(key) }
-        bus(prefix).to_forget = function (key) { send({forget: key}),
+        bus(prefix).forgetter = function (key) { send({forget: key}),
                                                  client_getted_keys.delete(key) }
-        bus(prefix).to_delete = function (key) { send({'delete': key}) }
+        bus(prefix).deleter = function (key) { send({'delete': key}) }
 
         function connect () {
             nlog('[ ] trying to open ' + url)
@@ -1933,7 +1940,7 @@
 
     // This prune() function is a temporary workaround for dealing with nested
     // objects in set() handlers, until we change statebus' behavior.  Right
-    // now, it calls .to_set only on the top-level state.  But if that state
+    // now, it calls .setter only on the top-level state.  But if that state
     // validates, it calls fire() on *every* level of state.  This means that
     // state changes can sneak inside.  Prune() will take out any changes from
     // the nested levels of state in a new object -- replacing them with the

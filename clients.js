@@ -126,7 +126,7 @@
             })
         }
 
-        bus(prefix).to_set   = function (obj, t) {
+        bus(prefix).setter   = function (obj, t) {
             bus.set.fire(obj)
 
             var put = {
@@ -141,7 +141,7 @@
             send_put(put_id)
         }
 
-        bus(prefix).to_get  = function (key, t) {
+        bus(prefix).getter  = function (key, t) {
             // Subscription can be in states:
             // - connecting
             // - connected
@@ -219,7 +219,7 @@
                 }
             }
         }
-        bus(prefix).to_forget = function (key) {
+        bus(prefix).forgetter = function (key) {
             subscriptions[key].status = 'aborted'
             subscriptions[key].aborter.abort()
         }
@@ -261,11 +261,11 @@
             sets_are_pending = false
         }
 
-        bus(prefix).to_get = function (key) {
+        bus(prefix).getter = function (key) {
             var result = localStorage.getItem(key)
             return result ? JSON.parse(result) : {key: key}
         }
-        bus(prefix).to_set = function (obj) {
+        bus(prefix).setter = function (obj) {
             // Do I need to make this recurse into the object?
             bus.log('localStore: on_set:', obj.key)
             pending_sets[obj.key] = obj
@@ -276,7 +276,7 @@
             bus.set.fire(obj)
             return obj
         }
-        bus(prefix).to_delete = function (key) { localStorage.removeItem(key) }
+        bus(prefix).deleter = function (key) { localStorage.removeItem(key) }
 
 
         // Hm... this update stuff doesn't seem to work on file:/// urls in chrome
@@ -309,7 +309,7 @@
         //  - Change the key prefix
         //  - Set this into the cache
 
-        bus(prefix).to_set = function (obj) {
+        bus(prefix).setter = function (obj) {
             window.history.replaceState(
                 '',
                 '',
@@ -742,7 +742,7 @@
     function make_component(name, func) {
         // Define the component
 
-        window[name] = users_widgets[name] = statebus.libs.react_class({
+        window[name] = users_widgets[name] = create_react_class({
             displayName: name,
             render: function () {
                 var args = []
@@ -765,10 +765,10 @@
                 }
 
                 // Wrap plain JS values with SPAN, so react doesn't complain
-                if (!React.isValidElement(vdom))
-                    // To do: should arrays be flattened into a SPAN's arguments?
-                    vdom = React.DOM.span(null, (typeof vdom === 'string')
-                                          ? vdom : JSON.stringify(vdom))
+                // if (!React.isValidElement(vdom))
+                //     // To do: should arrays be flattened into a SPAN's arguments?
+                //     vdom = React.DOM.span(null, (typeof vdom === 'string')
+                //                           ? vdom : JSON.stringify(vdom))
                 return vdom
             },
             componentDidMount: function () {
