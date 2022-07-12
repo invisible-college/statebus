@@ -691,7 +691,8 @@
                     for (var k in this.props)
                         if (this.props.hasOwnProperty(k))
                             new_props[k] = this.props[k]
-                    if (this.state.value) new_props.value = this.state.value
+                    if (this.state.hasOwnProperty('value'))
+                        new_props.value = this.state.value
                     new_props.onChange = this.onChange
                     return element(new_props)
                 }
