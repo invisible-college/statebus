@@ -2179,13 +2179,13 @@
         if (a_array !== b_array) return ' = ' + JSON.stringify(b)
         if (a_array) {
             if (a.length === b.length-1
-                && !deep_equals(a[a.length], b[b.length])) {
-                return '.push(' +JSON.stringify(b[b.length]) + ')'
+                && deep_equals(a[a.length-1], b[b.length-2])) {
+                return '.push(' +JSON.stringify(b[b.length-1]) + ')'
             }
             for (var i=0; i < a.length; i++) {
                 var tmp = sorta_diff (a[i], b[i])
                 if (tmp)
-                    return '['+i+'] = '+tmp
+                    return '['+i+']'+tmp
             }
             return null
         }
