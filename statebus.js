@@ -593,8 +593,16 @@
 
         if (params) {
             for (var method in params) {
-                console.assert(method in methods)
                 var func = params[method]
+                var param_names = {get:'getter', set:'setter',
+                                   delete: 'deleter', forget: 'forgetter',
+                                   on_set:'on_set', on_set_sync:'on_set_sync'}
+
+                // Map it from the API's name to our internal name
+                console.assert(param_names[method],
+                               'Method "' + method + '" is invalid')
+                method = param_names[method]
+
                 autodetect_args(func)
                 func.defined = func.defined || []
                 func.defined.push({bus, method, key, as: 'handler'})
@@ -917,6 +925,7 @@
             console.assert(!(result === 'getter' &&
                              (result === 'done' || result === 'abort')),
                            'Returning "done" or "abort" is not allowed from getter handlers')
+
             if (result === 'done')  t.done()
             if (result === 'abort') t.abort()
 
@@ -1241,6 +1250,10 @@
         })
     }
 
+    function aget (key) {
+        return new Promise((resolve, reject) =>
+            bus.get_once(key, (o) => resolve(o)))
+    }
 
     // ******************
     // Proxy
@@ -2122,7 +2135,7 @@
     var api = ['cache backup_cache get set forget del fire dirty get_once',
                'subspace bindings run_handler bind unbind reactive uncallback',
                'versions new_version',
-               'link',
+               'link aget',
                'funk_key funk_name funks key_id key_name id',
                'pending_gets gets_in gets_out loading_keys loading once',
                'global_funk busses rerunnable_funks',

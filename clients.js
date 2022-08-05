@@ -2,15 +2,12 @@
     var websocket_prefix = (clientjs_option('websocket_path')
                             || '_connect_to_statebus_')
 
-    // Todo: remove this global
-    window.dom = window.dom || new Proxy({}, {
-        get: function (o, k) { return o[k] },
-        set: function (o, k, v) {
-            o[k] = v
-            make_component(k, v)
-            return true
-        }
-    })
+    var react_render = ReactDOM.render
+    // make_client_statebus_maker()
+    window.bus = window.statebus()
+    bus.label = 'bus'
+
+    bus.libs = {}
 
     // ****************
     // Connecting over the Network
@@ -61,7 +58,7 @@
         return {clientid: me.client}
     }
 
-    function http_mount (prefix, url) {
+    bus.libs.http_out = (prefix, url) => {
         var preprefix = prefix.slice(0,-1)
         var has_prefix = new RegExp('^' + preprefix)
         var is_absolute = /^https?:\/\//
@@ -236,7 +233,7 @@
         bus.route = function (key, method, arg, t) {
             var d = get_domain(key)
             if (d && !connections[d]) {
-                http_mount(d + '/*', d + '/')
+                bus.libs.http_out(d + '/*', d + '/')
                 connections[d] = true
             }
 
@@ -247,7 +244,7 @@
 
     // ****************
     // Manipulate Localstorage
-    function localstorage_client (prefix) {
+    bus.libs.localstorage = (prefix) => {
         try { localStorage } catch (e) { return }
 
         // Sets are queued up, to store values with a delay, in batch
@@ -487,24 +484,19 @@
     // ###  Full-featured single-file app methods
     // ###
 
-    function make_client_statebus_maker () {
-        var extra_stuff = ['localstorage_client make_websocket client_creds',
-                           'url_store components'].join(' ').split(' ')
-        if (window.statebus) {
-            var orig_statebus = statebus
-            window.statebus = function make_client_bus () {
-                var bus = orig_statebus()
-                for (var i=0; i<extra_stuff.length; i++)
-                    bus[extra_stuff[i]] = eval(extra_stuff[i])
-                bus.localstorage_client('ls/*')
-                return bus
-            }
-        }
-    }
-
-    function load_scripts () {
-        scripts_ready()
-    }
+    // function make_client_statebus_maker () {
+    //     var extra_stuff = ['make_websocket client_creds',
+    //                        'url_store components'].join(' ').split(' ')
+    //     if (window.statebus) {
+    //         var orig_statebus = statebus
+    //         window.statebus = function make_client_bus () {
+    //             var bus = orig_statebus()
+    //             for (var i=0; i<extra_stuff.length; i++)
+    //                 bus[extra_stuff[i]] = eval(extra_stuff[i])
+    //             return bus
+    //         }
+    //     }
+    // }
 
     function clientjs_option (option_name) {
         // This function must be copy/paste synchronized with statebus.js.  Be
@@ -516,61 +508,6 @@
 
     // Todo: remove this global
     window.statebus_server = clientjs_option('server')
-    var react_render
-    function scripts_ready () {
-        react_render = ReactDOM.render
-        // make_client_statebus_maker()
-        window.bus = window.statebus()
-        bus.label = 'bus'
-
-        // improve_react()
-        // statebus.ignore_flashbacks = false
-        bus.libs = {}
-        bus.libs.http_out = http_mount
-        bus.libs.react_class = create_react_class
-        bus.libs.input = make_better_input_17()
-        bus.libs.localstorage = localstorage_client
-
-        // if (statebus_server !== 'none') {
-        //     if (clientjs_option('braid_mode')) {
-        //         console.log('Using Braid-HTTP!')
-        //         http_mount ('/*', statebus_server)
-        //     } else {
-        //         bus.ws_mount ('/*', statebus_server)
-        //     }
-        // }
-
-        // bus.net_automount()
-        http_automount()
-
-        load_coffee()
-
-        statebus.compile_coffee = compile_coffee
-        statebus.load_client_code = load_client_code
-        // statebus.load_widgets = load_widgets
-
-        if (clientjs_option('globals')) {
-            // Setup globals
-            var globals = ['get', 'set', 'state']
-
-            for (var i=0; i<globals.length; i++) {
-                console.log('globalizing', globals[i], 'as',
-                            eval('bus.' + globals[i]))
-                window[globals[i]] = eval('bus.' + globals[i])
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', function () {
-            if (window.statebus_ready)
-                for (var i=0; i<statebus_ready.length; i++)
-                    statebus_ready[i]()
-        }, false)
-
-        // document.addEventListener('DOMContentLoaded', load_widgets, false)
-        
-        // if (dom.Body || dom.body || dom.BODY)
-        //     react_render((window.Body || window.body || window.BODY)(), document.body)
-    }
 
     function improve_react() {
         function capitalize (s) {return s[0].toUpperCase() + s.slice(1)}
@@ -643,6 +580,13 @@
         for (var el in React.DOM)
             window[el.toUpperCase()] = better_element(el)
         
+        // Fixes React controlled textarea widgets so they can work with state
+        // updates triggered by forceUpdate, rather than just setState(),
+        // because statebus keeps its own state outside of React's setState(),
+        // but react doesn't know how to preserve the cursor (and selection)
+        // position for updates unless they go through setState().  So this
+        // function just wraps input widgets with a component that uses
+        // setState().
         function make_better_input (name, element) {
             window[name] = React.createFactory(React.createClass({
                 getInitialState: function() {
@@ -700,24 +644,56 @@
         }
     }
 
-    function autodetect_args (func) {
-        if (func.args) return
+    bus.libs.reactive_dom = () => {
+        // The window.dom object lets the user define new react components as
+        // functions
+        window.dom = window.dom || new Proxy({}, {
+            get: function (o, k) { return o[k] },
+            set: function (o, k, v) {
+                o[k] = v
+                make_component(k, v)
+                return true
+            }
+        })
 
-        // Get an array of the func's params
-        var comments = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg,
-            params = /([^\s,]+)/g,
-            s = func.toString().replace(comments, '')
-        func.args = s.slice(s.indexOf('(')+1, s.indexOf(')')).match(params) || []
+        // We'll define functions for all HTML tags...
+        var function_for_tag = (tag) =>
+            (...arguments) =>
+                React.createElement.apply(
+                    null,
+                    [tag].concat(Array.prototype.slice.call(arguments))
+                )
+
+        // ... or at least most of them -- there are just a few missing from
+        // this list.
+        var all_tags = 'a,abbr,address,area,article,aside,audio,b,base,bdi,bdo,blockquote,body,br,button,canvas,caption,cite,code,col,colgroup,data,datalist,dd,del,details,dfn,dialog,div,dl,dt,em,embed,fieldset,figcaption,figure,footer,form,h1,h2,h3,h4,h5,h6,head,header,hgroup,hr,html,i,iframe,img,ins,kbd,label,legend,li,link,main,map,mark,menu,meta,meter,nav,noscript,object,ol,optgroup,option,output,p,param,picture,pre,progress,q,s,samp,script,section,select,slot,small,source,span,strong,style,sub,summary,sup,table,tbody,td,template,tfoot,th,thead,title,tr,u,ul,video,input'.split(',')
+        all_tags.forEach((tagname) => {
+            window[tagname.toUpperCase()] = function_for_tag(tagname)
+        })
+
+        // We create special functions for INPUT and TEXTAREA, because they
+        // have to do extra work to maintain the cursor when we use statebus
+        // instead of React's setState() for state updates.
+        window.INPUT    = function_for_tag(make_fixed_textbox('input'))
+        window.TEXTAREA = function_for_tag(make_fixed_textbox('textarea'))
     }
 
-
-    // This one is for react v17+
-    function make_better_input_17 () {
+    // Fixes React controlled textarea widgets so they can work with state
+    // updates triggered by forceUpdate, rather than just setState(),
+    // because statebus keeps its own state outside of React's setState(),
+    // but react doesn't know how to preserve the cursor (and selection)
+    // position for updates unless they go through setState().  So this
+    // function just wraps input widgets with a component that uses
+    // setState().
+    //
+    // This one is for react v17+.
+    function make_fixed_textbox (tagname) {
+        // `tagname` can be either "input" or "textarea"
         return createReactClass({
             getInitialState: function() {
                 return {value: this.props.value}
             },
-            UNSAVE_componentWillReceiveProps: function(new_props) {
+            UNSAFE_componentWillReceiveProps: function(new_props) {
                 this.setState({value: new_props.value})
             },
             onChange: function(e) {
@@ -732,9 +708,20 @@
                         new_props[k] = this.props[k]
                 if (this.state.hasOwnProperty('value'))
                     new_props.value = this.state.value
-                return React.createElement('input', new_props)
+                new_props.onChange = this.onChange
+                return React.createElement(tagname, new_props)
             }
         })
+    }
+
+    function autodetect_args (func) {
+        if (func.args) return
+
+        // Get an array of the func's params
+        var comments = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg,
+            params = /([^\s,]+)/g,
+            s = func.toString().replace(comments, '')
+        func.args = s.slice(s.indexOf('(')+1, s.indexOf(')')).match(params) || []
     }
 
     // Load the components
@@ -885,5 +872,46 @@
     //     }
     // }
 
-    load_scripts()
+
+    bus.libs.react_class = create_react_class
+    bus.libs.coffreact = () => {
+        bus.libs.reactive_dom()
+        load_coffee()
+    }
+
+    // if (statebus_server !== 'none') {
+    //     if (clientjs_option('braid_mode')) {
+    //         console.log('Using Braid-HTTP!')
+    //         bus.libs.http_out ('/*', statebus_server)
+    //     } else {
+    //         bus.ws_mount ('/*', statebus_server)
+    //     }
+    // }
+
+    http_automount()
+
+    statebus.compile_coffee = compile_coffee
+    statebus.load_client_code = load_client_code
+
+    // if (clientjs_option('globals')) {
+    //     // Setup globals
+    //     var globals = ['get', 'set', 'state']
+
+    //     for (var i=0; i<globals.length; i++) {
+    //         console.log('globalizing', globals[i], 'as',
+    //                     eval('bus.' + globals[i]))
+    //         window[globals[i]] = eval('bus.' + globals[i])
+    //     }
+    // }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        if (window.statebus_ready)
+            for (var i=0; i<statebus_ready.length; i++)
+                statebus_ready[i]()
+    }, false)
+
+    // document.addEventListener('DOMContentLoaded', load_widgets, false)
+    // if (dom.Body || dom.body || dom.BODY)
+    //     react_render((window.Body || window.body || window.BODY)(), document.body)
+
 })()

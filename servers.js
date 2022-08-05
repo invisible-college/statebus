@@ -163,15 +163,10 @@ function import_server (bus, make_statebus, options)
 
         // Handle the GET or PUT request!
         if (req.method === 'GET') {
+            var key = req.path.substr(1)
 
             // Make a temporary client bus
             var cbus = bus.bus_for_http_client(req, res)
-            var cb
-            function end_subscription () {
-                cbus.forget(key, cb)
-                res.end()
-                cbus.http_unsubscribe(req)
-            }
 
             braidify(req, res)
             if (req.subscribe)
@@ -182,15 +177,11 @@ function import_server (bus, make_statebus, options)
             // We only return JSON
             res.setHeader('Content-Type', 'application/json')
 
-            // Do the get
-            // cbus.honk = 'statelog'
-            var key = req.path.substr(1)
             // console.log('http_in: doing cbus.get(', key, ')')
-            cbus.get(key, cb = (o) => {
+
+            var send_to_client = (o, t) => {
                 // console.trace('http_in: Sending update of', key)
                 var body = to_http_body(o)
-
-                // If we're braiding, send via subscription
 
                 // Note: if body === undefined, we need to send the
                 // equivalent of a 404.  This is missing in braid spec:
@@ -200,7 +191,30 @@ function import_server (bus, make_statebus, options)
                 // And shut down the connection if there's no subscription
                 if (!req.subscribe)
                     end_subscription()
-            })
+            }
+
+            function end_subscription () {
+                cbus.forget(key, send_to_client)
+                res.end()
+                cbus.http_unsubscribe(req)
+
+                let peer = req.headers.peer
+                delete cbus.http_callbacks[JSON.stringify({peer, key})]
+            }
+
+            // If we have a peer id, then register this callback at that peer,
+            // so it can avoid getting its own PUT versions echoed back to
+            // itself.
+            if (req.headers.peer) {
+                if (!cbus.http_callbacks)
+                    cbus.http_callbacks = {}
+                let peer = req.headers.peer
+                cbus.http_callbacks[JSON.stringify({peer, key})]
+                    = send_to_client
+            }
+
+            // And issue the get!
+            cbus.get(key, send_to_client)
         }
 
         else if (req.method === 'PUT') {
@@ -233,7 +247,24 @@ function import_server (bus, make_statebus, options)
 
                     // Make a temporary client bus
                     var cbus = bus.bus_for_http_client(req, res)
-                    cbus.set(obj)   // And use it
+                    var t = {
+                        version: req.version || cbus.new_version(),
+                        parents: req.parents
+                    }
+
+                    // If the peer declares itself, let's remember it so that
+                    // we don't send it echoes
+                    if (req.headers.peer) {
+                        let peer = req.headers.peer,
+                            key = obj.key
+                        var cb = cbus.http_callbacks[
+                            JSON.stringify({peer, key})
+                        ]
+                        if (cb) cb.has_seen(cbus, key, t.version)
+                    }
+
+                    // Now send the version to the bus!
+                    cbus.set(obj, t)
 
                     res.statusCode = 200
                     res.end()
