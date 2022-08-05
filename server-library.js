@@ -2590,7 +2590,7 @@ module.exports.import_module = function (statebus) {
 
     statebus.serve = function serve (options) {
         var bus = statebus()
-        require('./servers').run_server(bus, options)
+        require('./server-library').run_server(bus, options)
         return bus
     }
 

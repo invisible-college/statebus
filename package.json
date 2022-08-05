@@ -10,8 +10,8 @@
   "repository": "invisible-college/statebus",
   "files": [
     "statebus.js",
-    "clients.js",
-    "servers.js",
+    "client-library.js",
+    "server-library.js",
     "extras/tests.js",
     "extras/tcp-bind.js"
   ],
