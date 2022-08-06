@@ -8,6 +8,8 @@
     bus.label = 'bus'
 
     bus.libs = {}
+    bus.libs.react12 = {}
+    bus.libs.react17 = {}
 
     // ****************
     // Connecting over the Network
@@ -509,26 +511,34 @@
     // Todo: remove this global
     window.statebus_server = clientjs_option('server')
 
-    function improve_react() {
-        function capitalize (s) {return s[0].toUpperCase() + s.slice(1)}
-        function camelcase (s) { var a = s.split(/[_-]/)
-                                 return a.slice(0,1).concat(a.slice(1).map(capitalize)).join('') }
+    function is_css_prop (name) {
+        if (!is_css_prop.memoized) {
+            // Precompute all the css props
+            is_css_prop.memoized = {}
 
-        // We used to get all_css_props like this:
-        //
-        //   var all_css_props = Object.keys(document.body.style)
-        //   if (all_css_props.length < 100) // Firefox
-        //       all_css_props = Object.keys(document.body.style.__proto__)
-        //
-        // But now I've hard-coded them:
-        var all_css_props = ["alignContent","alignItems","alignSelf","alignmentBaseline","all","animation","animationDelay","animationDirection","animationDuration","animationFillMode","animationIterationCount","animationName","animationPlayState","animationTimingFunction","backfaceVisibility","background","backgroundAttachment","backgroundBlendMode","backgroundClip","backgroundColor","backgroundImage","backgroundOrigin","backgroundPosition","backgroundPositionX","backgroundPositionY","backgroundRepeat","backgroundRepeatX","backgroundRepeatY","backgroundSize","baselineShift","blockSize","border","borderBottom","borderBottomColor","borderBottomLeftRadius","borderBottomRightRadius","borderBottomStyle","borderBottomWidth","borderCollapse","borderColor","borderImage","borderImageOutset","borderImageRepeat","borderImageSlice","borderImageSource","borderImageWidth","borderLeft","borderLeftColor","borderLeftStyle","borderLeftWidth","borderRadius","borderRight","borderRightColor","borderRightStyle","borderRightWidth","borderSpacing","borderStyle","borderTop","borderTopColor","borderTopLeftRadius","borderTopRightRadius","borderTopStyle","borderTopWidth","borderWidth","bottom","boxShadow","boxSizing","breakAfter","breakBefore","breakInside","bufferedRendering","captionSide","caretColor","clear","clip","clipPath","clipRule","color","colorInterpolation","colorInterpolationFilters","colorRendering","columnCount","columnFill","columnGap","columnRule","columnRuleColor","columnRuleStyle","columnRuleWidth","columnSpan","columnWidth","columns","contain","content","counterIncrement","counterReset","cursor","cx","cy","d","direction","display","dominantBaseline","emptyCells","fill","fillOpacity","fillRule","filter","flex","flexBasis","flexDirection","flexFlow","flexGrow","flexShrink","flexWrap","float","floodColor","floodOpacity","font","fontDisplay","fontFamily","fontFeatureSettings","fontKerning","fontSize","fontStretch","fontStyle","fontVariant","fontVariantCaps","fontVariantEastAsian","fontVariantLigatures","fontVariantNumeric","fontVariationSettings","fontWeight","gap","grid","gridArea","gridAutoColumns","gridAutoFlow","gridAutoRows","gridColumn","gridColumnEnd","gridColumnGap","gridColumnStart","gridGap","gridRow","gridRowEnd","gridRowGap","gridRowStart","gridTemplate","gridTemplateAreas","gridTemplateColumns","gridTemplateRows","height","hyphens","imageRendering","inlineSize","isolation","justifyContent","justifyItems","justifySelf","left","letterSpacing","lightingColor","lineBreak","lineHeight","listStyle","listStyleImage","listStylePosition","listStyleType","margin","marginBottom","marginLeft","marginRight","marginTop","marker","markerEnd","markerMid","markerStart","mask","maskType","maxBlockSize","maxHeight","maxInlineSize","maxWidth","maxZoom","minBlockSize","minHeight","minInlineSize","minWidth","minZoom","mixBlendMode","objectFit","objectPosition","offset","offsetDistance","offsetPath","offsetRotate","opacity","order","orientation","orphans","outline","outlineColor","outlineOffset","outlineStyle","outlineWidth","overflow","overflowAnchor","overflowWrap","overflowX","overflowY","overscrollBehavior","overscrollBehaviorX","overscrollBehaviorY","padding","paddingBottom","paddingLeft","paddingRight","paddingTop","page","pageBreakAfter","pageBreakBefore","pageBreakInside","paintOrder","perspective","perspectiveOrigin","placeContent","placeItems","placeSelf","pointerEvents","position","quotes","r","resize","right","rowGap","rx","ry","scrollBehavior","shapeImageThreshold","shapeMargin","shapeOutside","shapeRendering","size","speak","src","stopColor","stopOpacity","stroke","strokeDasharray","strokeDashoffset","strokeLinecap","strokeLinejoin","strokeMiterlimit","strokeOpacity","strokeWidth","tabSize","tableLayout","textAlign","textAlignLast","textAnchor","textCombineUpright","textDecoration","textDecorationColor","textDecorationLine","textDecorationSkipInk","textDecorationStyle","textIndent","textOrientation","textOverflow","textRendering","textShadow","textSizeAdjust","textTransform","textUnderlinePosition","top","touchAction","transform","transformBox","transformOrigin","transformStyle","transition","transitionDelay","transitionDuration","transitionProperty","transitionTimingFunction","unicodeBidi","unicodeRange","userSelect","userZoom","vectorEffect","verticalAlign","visibility","webkitAlignContent","webkitAlignItems","webkitAlignSelf","webkitAnimation","webkitAnimationDelay","webkitAnimationDirection","webkitAnimationDuration","webkitAnimationFillMode","webkitAnimationIterationCount","webkitAnimationName","webkitAnimationPlayState","webkitAnimationTimingFunction","webkitAppRegion","webkitAppearance","webkitBackfaceVisibility","webkitBackgroundClip","webkitBackgroundOrigin","webkitBackgroundSize","webkitBorderAfter","webkitBorderAfterColor","webkitBorderAfterStyle","webkitBorderAfterWidth","webkitBorderBefore","webkitBorderBeforeColor","webkitBorderBeforeStyle","webkitBorderBeforeWidth","webkitBorderBottomLeftRadius","webkitBorderBottomRightRadius","webkitBorderEnd","webkitBorderEndColor","webkitBorderEndStyle","webkitBorderEndWidth","webkitBorderHorizontalSpacing","webkitBorderImage","webkitBorderRadius","webkitBorderStart","webkitBorderStartColor","webkitBorderStartStyle","webkitBorderStartWidth","webkitBorderTopLeftRadius","webkitBorderTopRightRadius","webkitBorderVerticalSpacing","webkitBoxAlign","webkitBoxDecorationBreak","webkitBoxDirection","webkitBoxFlex","webkitBoxOrdinalGroup","webkitBoxOrient","webkitBoxPack","webkitBoxReflect","webkitBoxShadow","webkitBoxSizing","webkitClipPath","webkitColumnBreakAfter","webkitColumnBreakBefore","webkitColumnBreakInside","webkitColumnCount","webkitColumnGap","webkitColumnRule","webkitColumnRuleColor","webkitColumnRuleStyle","webkitColumnRuleWidth","webkitColumnSpan","webkitColumnWidth","webkitColumns","webkitFilter","webkitFlex","webkitFlexBasis","webkitFlexDirection","webkitFlexFlow","webkitFlexGrow","webkitFlexShrink","webkitFlexWrap","webkitFontFeatureSettings","webkitFontSizeDelta","webkitFontSmoothing","webkitHighlight","webkitHyphenateCharacter","webkitJustifyContent","webkitLineBreak","webkitLineClamp","webkitLocale","webkitLogicalHeight","webkitLogicalWidth","webkitMarginAfter","webkitMarginAfterCollapse","webkitMarginBefore","webkitMarginBeforeCollapse","webkitMarginBottomCollapse","webkitMarginCollapse","webkitMarginEnd","webkitMarginStart","webkitMarginTopCollapse","webkitMask","webkitMaskBoxImage","webkitMaskBoxImageOutset","webkitMaskBoxImageRepeat","webkitMaskBoxImageSlice","webkitMaskBoxImageSource","webkitMaskBoxImageWidth","webkitMaskClip","webkitMaskComposite","webkitMaskImage","webkitMaskOrigin","webkitMaskPosition","webkitMaskPositionX","webkitMaskPositionY","webkitMaskRepeat","webkitMaskRepeatX","webkitMaskRepeatY","webkitMaskSize","webkitMaxLogicalHeight","webkitMaxLogicalWidth","webkitMinLogicalHeight","webkitMinLogicalWidth","webkitOpacity","webkitOrder","webkitPaddingAfter","webkitPaddingBefore","webkitPaddingEnd","webkitPaddingStart","webkitPerspective","webkitPerspectiveOrigin","webkitPerspectiveOriginX","webkitPerspectiveOriginY","webkitPrintColorAdjust","webkitRtlOrdering","webkitRubyPosition","webkitShapeImageThreshold","webkitShapeMargin","webkitShapeOutside","webkitTapHighlightColor","webkitTextCombine","webkitTextDecorationsInEffect","webkitTextEmphasis","webkitTextEmphasisColor","webkitTextEmphasisPosition","webkitTextEmphasisStyle","webkitTextFillColor","webkitTextOrientation","webkitTextSecurity","webkitTextSizeAdjust","webkitTextStroke","webkitTextStrokeColor","webkitTextStrokeWidth","webkitTransform","webkitTransformOrigin","webkitTransformOriginX","webkitTransformOriginY","webkitTransformOriginZ","webkitTransformStyle","webkitTransition","webkitTransitionDelay","webkitTransitionDuration","webkitTransitionProperty","webkitTransitionTimingFunction","webkitUserDrag","webkitUserModify","webkitUserSelect","webkitWritingMode","whiteSpace","widows","width","willChange","wordBreak","wordSpacing","wordWrap","writingMode","x","y","zIndex","zoom"]
+            // We used to get all_css_props like this:
+            //
+            //   var all_css_props = Object.keys(document.body.style)
+            //   if (all_css_props.length < 100) // Firefox
+            //       all_css_props = Object.keys(document.body.style.__proto__)
+            //
+            // But now I've hard-coded them:
+            var all_css_props = ["alignContent","alignItems","alignSelf","alignmentBaseline","all","animation","animationDelay","animationDirection","animationDuration","animationFillMode","animationIterationCount","animationName","animationPlayState","animationTimingFunction","backfaceVisibility","background","backgroundAttachment","backgroundBlendMode","backgroundClip","backgroundColor","backgroundImage","backgroundOrigin","backgroundPosition","backgroundPositionX","backgroundPositionY","backgroundRepeat","backgroundRepeatX","backgroundRepeatY","backgroundSize","baselineShift","blockSize","border","borderBottom","borderBottomColor","borderBottomLeftRadius","borderBottomRightRadius","borderBottomStyle","borderBottomWidth","borderCollapse","borderColor","borderImage","borderImageOutset","borderImageRepeat","borderImageSlice","borderImageSource","borderImageWidth","borderLeft","borderLeftColor","borderLeftStyle","borderLeftWidth","borderRadius","borderRight","borderRightColor","borderRightStyle","borderRightWidth","borderSpacing","borderStyle","borderTop","borderTopColor","borderTopLeftRadius","borderTopRightRadius","borderTopStyle","borderTopWidth","borderWidth","bottom","boxShadow","boxSizing","breakAfter","breakBefore","breakInside","bufferedRendering","captionSide","caretColor","clear","clip","clipPath","clipRule","color","colorInterpolation","colorInterpolationFilters","colorRendering","columnCount","columnFill","columnGap","columnRule","columnRuleColor","columnRuleStyle","columnRuleWidth","columnSpan","columnWidth","columns","contain","content","counterIncrement","counterReset","cursor","cx","cy","d","direction","display","dominantBaseline","emptyCells","fill","fillOpacity","fillRule","filter","flex","flexBasis","flexDirection","flexFlow","flexGrow","flexShrink","flexWrap","float","floodColor","floodOpacity","font","fontDisplay","fontFamily","fontFeatureSettings","fontKerning","fontSize","fontStretch","fontStyle","fontVariant","fontVariantCaps","fontVariantEastAsian","fontVariantLigatures","fontVariantNumeric","fontVariationSettings","fontWeight","gap","grid","gridArea","gridAutoColumns","gridAutoFlow","gridAutoRows","gridColumn","gridColumnEnd","gridColumnGap","gridColumnStart","gridGap","gridRow","gridRowEnd","gridRowGap","gridRowStart","gridTemplate","gridTemplateAreas","gridTemplateColumns","gridTemplateRows","height","hyphens","imageRendering","inlineSize","isolation","justifyContent","justifyItems","justifySelf","left","letterSpacing","lightingColor","lineBreak","lineHeight","listStyle","listStyleImage","listStylePosition","listStyleType","margin","marginBottom","marginLeft","marginRight","marginTop","marker","markerEnd","markerMid","markerStart","mask","maskType","maxBlockSize","maxHeight","maxInlineSize","maxWidth","maxZoom","minBlockSize","minHeight","minInlineSize","minWidth","minZoom","mixBlendMode","objectFit","objectPosition","offset","offsetDistance","offsetPath","offsetRotate","opacity","order","orientation","orphans","outline","outlineColor","outlineOffset","outlineStyle","outlineWidth","overflow","overflowAnchor","overflowWrap","overflowX","overflowY","overscrollBehavior","overscrollBehaviorX","overscrollBehaviorY","padding","paddingBottom","paddingLeft","paddingRight","paddingTop","page","pageBreakAfter","pageBreakBefore","pageBreakInside","paintOrder","perspective","perspectiveOrigin","placeContent","placeItems","placeSelf","pointerEvents","position","quotes","r","resize","right","rowGap","rx","ry","scrollBehavior","shapeImageThreshold","shapeMargin","shapeOutside","shapeRendering","size","speak","src","stopColor","stopOpacity","stroke","strokeDasharray","strokeDashoffset","strokeLinecap","strokeLinejoin","strokeMiterlimit","strokeOpacity","strokeWidth","tabSize","tableLayout","textAlign","textAlignLast","textAnchor","textCombineUpright","textDecoration","textDecorationColor","textDecorationLine","textDecorationSkipInk","textDecorationStyle","textIndent","textOrientation","textOverflow","textRendering","textShadow","textSizeAdjust","textTransform","textUnderlinePosition","top","touchAction","transform","transformBox","transformOrigin","transformStyle","transition","transitionDelay","transitionDuration","transitionProperty","transitionTimingFunction","unicodeBidi","unicodeRange","userSelect","userZoom","vectorEffect","verticalAlign","visibility","webkitAlignContent","webkitAlignItems","webkitAlignSelf","webkitAnimation","webkitAnimationDelay","webkitAnimationDirection","webkitAnimationDuration","webkitAnimationFillMode","webkitAnimationIterationCount","webkitAnimationName","webkitAnimationPlayState","webkitAnimationTimingFunction","webkitAppRegion","webkitAppearance","webkitBackfaceVisibility","webkitBackgroundClip","webkitBackgroundOrigin","webkitBackgroundSize","webkitBorderAfter","webkitBorderAfterColor","webkitBorderAfterStyle","webkitBorderAfterWidth","webkitBorderBefore","webkitBorderBeforeColor","webkitBorderBeforeStyle","webkitBorderBeforeWidth","webkitBorderBottomLeftRadius","webkitBorderBottomRightRadius","webkitBorderEnd","webkitBorderEndColor","webkitBorderEndStyle","webkitBorderEndWidth","webkitBorderHorizontalSpacing","webkitBorderImage","webkitBorderRadius","webkitBorderStart","webkitBorderStartColor","webkitBorderStartStyle","webkitBorderStartWidth","webkitBorderTopLeftRadius","webkitBorderTopRightRadius","webkitBorderVerticalSpacing","webkitBoxAlign","webkitBoxDecorationBreak","webkitBoxDirection","webkitBoxFlex","webkitBoxOrdinalGroup","webkitBoxOrient","webkitBoxPack","webkitBoxReflect","webkitBoxShadow","webkitBoxSizing","webkitClipPath","webkitColumnBreakAfter","webkitColumnBreakBefore","webkitColumnBreakInside","webkitColumnCount","webkitColumnGap","webkitColumnRule","webkitColumnRuleColor","webkitColumnRuleStyle","webkitColumnRuleWidth","webkitColumnSpan","webkitColumnWidth","webkitColumns","webkitFilter","webkitFlex","webkitFlexBasis","webkitFlexDirection","webkitFlexFlow","webkitFlexGrow","webkitFlexShrink","webkitFlexWrap","webkitFontFeatureSettings","webkitFontSizeDelta","webkitFontSmoothing","webkitHighlight","webkitHyphenateCharacter","webkitJustifyContent","webkitLineBreak","webkitLineClamp","webkitLocale","webkitLogicalHeight","webkitLogicalWidth","webkitMarginAfter","webkitMarginAfterCollapse","webkitMarginBefore","webkitMarginBeforeCollapse","webkitMarginBottomCollapse","webkitMarginCollapse","webkitMarginEnd","webkitMarginStart","webkitMarginTopCollapse","webkitMask","webkitMaskBoxImage","webkitMaskBoxImageOutset","webkitMaskBoxImageRepeat","webkitMaskBoxImageSlice","webkitMaskBoxImageSource","webkitMaskBoxImageWidth","webkitMaskClip","webkitMaskComposite","webkitMaskImage","webkitMaskOrigin","webkitMaskPosition","webkitMaskPositionX","webkitMaskPositionY","webkitMaskRepeat","webkitMaskRepeatX","webkitMaskRepeatY","webkitMaskSize","webkitMaxLogicalHeight","webkitMaxLogicalWidth","webkitMinLogicalHeight","webkitMinLogicalWidth","webkitOpacity","webkitOrder","webkitPaddingAfter","webkitPaddingBefore","webkitPaddingEnd","webkitPaddingStart","webkitPerspective","webkitPerspectiveOrigin","webkitPerspectiveOriginX","webkitPerspectiveOriginY","webkitPrintColorAdjust","webkitRtlOrdering","webkitRubyPosition","webkitShapeImageThreshold","webkitShapeMargin","webkitShapeOutside","webkitTapHighlightColor","webkitTextCombine","webkitTextDecorationsInEffect","webkitTextEmphasis","webkitTextEmphasisColor","webkitTextEmphasisPosition","webkitTextEmphasisStyle","webkitTextFillColor","webkitTextOrientation","webkitTextSecurity","webkitTextSizeAdjust","webkitTextStroke","webkitTextStrokeColor","webkitTextStrokeWidth","webkitTransform","webkitTransformOrigin","webkitTransformOriginX","webkitTransformOriginY","webkitTransformOriginZ","webkitTransformStyle","webkitTransition","webkitTransitionDelay","webkitTransitionDuration","webkitTransitionProperty","webkitTransitionTimingFunction","webkitUserDrag","webkitUserModify","webkitUserSelect","webkitWritingMode","whiteSpace","widows","width","willChange","wordBreak","wordSpacing","wordWrap","writingMode","x","y","zIndex","zoom"]
 
-        var ignore = {d:1, cx:1, cy:1, rx:1, ry:1, x:1, y:1,
-                      content:1, fill:1, stroke:1, src:1}
-        var is_css_prop = {}
-        for (var i=0; i<all_css_props.length; i++)
-            if (!ignore[all_css_props[i]])
-                is_css_prop[all_css_props[i]] = true
+            var ignore = {d:1, cx:1, cy:1, rx:1, ry:1, x:1, y:1,
+                          content:1, fill:1, stroke:1, src:1}
+
+            for (var i=0; i<all_css_props.length; i++)
+                if (!ignore[all_css_props[i]])
+                    is_css_prop.memoized[all_css_props[i]] = true
+        }
+        return is_css_prop.memoized[name]
+    }
+
+    // ================================================================
+    // React v12 Support
+
+    bus.libs.react12.improve_react = () => {
 
         function better_element(el) {
             // To do:
@@ -557,7 +567,7 @@
                     // Styles get redirected to the style field
                     else if (arg instanceof Object)
                         for (var k in arg)
-                            if (is_css_prop[k]
+                            if (is_css_prop(k)
                                 && !(k in {width:1,height:1,size:1}
                                      && el in {canvas:1, input:1, embed:1, object:1}))
                                 attrs.style[k] = arg[k]        // Merge styles
@@ -644,7 +654,7 @@
         }
     }
 
-    bus.libs.reactive_dom = () => {
+    bus.libs.react17.reactive_dom = () => {
         // The window.dom object lets the user define new react components as
         // functions
         window.dom = window.dom || new Proxy({}, {
@@ -658,11 +668,48 @@
 
         // We'll define functions for all HTML tags...
         var function_for_tag = (tag) =>
-            (...arguments) =>
-                React.createElement.apply(
+            (...arguments) => {
+                var children = []
+                var attrs = {style: {}}
+                
+                for (var i=0; i<arguments.length; i++) {
+                    var arg = arguments[i]
+
+                    if (arg === undefined)
+                        continue
+
+                    // Strings, DOM nodes, and arrays become children
+                    else if (typeof arg === 'string'   // For "foo"
+                        || arg instanceof String  // For new String()
+                        || arg && React.isValidElement(arg)
+                        || arg instanceof Array)
+                        children.push(arg)
+
+                    // // Arrays append onto the children
+                    // else if (arg instanceof Array)
+                    //     Array.prototype.push.apply(children, arg)
+
+                    // Pure objects get merged into object city
+                    // Styles get redirected to the style field
+                    else if (arg instanceof Object)
+                        for (var k in arg)
+                            if (is_css_prop(k)
+                                && !(k in {width:1,height:1,size:1}
+                                     && tag in {canvas:1, input:1, embed:1, object:1}))
+                                attrs.style[k] = arg[k]        // Merge styles
+                            else if (k === 'style')            // Merge insides of style tags
+                                for (var k2 in arg[k])
+                                    attrs.style[k2] = arg[k][k2]
+                            else
+                                attrs[k] = arg[k]          // Or be normal.
+                }
+
+                // Now call React.createElement(tag, attrs, children...)
+                return React.createElement.apply(
                     null,
-                    [tag].concat(Array.prototype.slice.call(arguments))
+                    [tag, attrs].concat(children)
                 )
+            }
 
         // ... or at least most of them -- there are just a few missing from
         // this list.
@@ -676,6 +723,54 @@
         // instead of React's setState() for state updates.
         window.INPUT    = function_for_tag(make_fixed_textbox('input'))
         window.TEXTAREA = function_for_tag(make_fixed_textbox('textarea'))
+
+
+        // Improve the functions ^^^ put this above
+        function better_element(el) {
+            // To do:
+            //  - Don't put all args into a children array, cause react thinks
+            //    that means they need a key.
+
+            return function () {
+                var children = []
+                var attrs = {style: {}}
+                
+                for (var i=0; i<arguments.length; i++) {
+                    var arg = arguments[i]
+
+                    // Strings and DOM nodes and undefined become children
+                    if (typeof arg === 'string'   // For "foo"
+                        || arg instanceof String  // For new String()
+                        || arg && React.isValidElement(arg)
+                        || arg === undefined)
+                        children.push(arg)
+
+                    // Arrays append onto the children
+                    else if (arg instanceof Array)
+                        Array.prototype.push.apply(children, arg)
+
+                    // Pure objects get merged into object city
+                    // Styles get redirected to the style field
+                    else if (arg instanceof Object)
+                        for (var k in arg)
+                            if (is_css_prop(k)
+                                && !(k in {width:1,height:1,size:1}
+                                     && el in {canvas:1, input:1, embed:1, object:1}))
+                                attrs.style[k] = arg[k]        // Merge styles
+                            else if (k === 'style')            // Merge insides of style tags
+                                for (var k2 in arg[k])
+                                    attrs.style[k2] = arg[k][k2]
+                            else {
+                                attrs[k] = arg[k]          // Or be normal.
+
+                                if (k === 'key')
+                                    attrs['data-key'] = arg[k]
+                            }
+                }
+                if (children.length === 0) children = undefined
+                return React.DOM[el](attrs, children)
+            }
+        }
     }
 
     // Fixes React controlled textarea widgets so they can work with state
@@ -873,10 +968,20 @@
     // }
 
 
-    bus.libs.react_class = create_react_class
-    bus.libs.coffreact = () => {
-        bus.libs.reactive_dom()
+    bus.libs.react17.react_class = create_react_class
+    bus.libs.react17.coffreact = () => {
+        bus.libs.react17.reactive_dom()
         load_coffee()
+        if (dom.BODY)
+            document.addEventListener(
+                'DOMContentLoaded',
+                () => {
+                    var root = document.createElement('root')
+                    document.body.appendChild(root)
+                    ReactDOM.render(BODY(), root)
+                },
+                false
+            )
     }
 
     // if (statebus_server !== 'none') {
@@ -911,7 +1016,4 @@
     }, false)
 
     // document.addEventListener('DOMContentLoaded', load_widgets, false)
-    // if (dom.Body || dom.body || dom.BODY)
-    //     react_render((window.Body || window.body || window.BODY)(), document.body)
-
 })()

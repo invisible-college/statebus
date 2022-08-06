@@ -199,7 +199,8 @@ function import_server (bus, make_statebus, options)
                 cbus.http_unsubscribe(req)
 
                 let peer = req.headers.peer
-                delete cbus.http_callbacks[JSON.stringify({peer, key})]
+                if (cbus.http_callbacks)
+                    delete cbus.http_callbacks[JSON.stringify({peer, key})]
             }
 
             // If we have a peer id, then register this callback at that peer,
