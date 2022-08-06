@@ -430,9 +430,11 @@
         statelog(key, yellow, 'v', 'Deleting ' + key)
         // Call the to_delete handlers
         var handlers_called = bus.route(key, 'to_delete', key)
-        if (handlers_called === 0)
+        if (handlers_called === 0) {
             // And go ahead and delete if there aren't any!
             delete cache[key]
+            delete backup_cache[key]
+        }
 
         // Call the on_delete handlers
         bus.route(key, 'on_delete', cache[key] || {key: key}, t)
@@ -828,9 +830,10 @@
                     // except through an explicit .revise() function.
                     if (o) t.version = new_version()
 
-                    if (method === 'to_delete')
+                    if (method === 'to_delete') {
                         delete bus.cache[key]
-                    else if (method === 'to_save') {
+                        delete bus.backup_cache[key]
+                    } else if (method === 'to_save') {
                         bus.save.fire(o || arg, t)
                         bus.route(key, 'on_set_sync', o || arg, t)
                     } else {
