@@ -1745,7 +1745,10 @@
                                                  client_fetched_keys.add(key) }
         bus(prefix).to_forget = function (key) { send({forget: key}),
                                                  client_fetched_keys.delete(key) }
-        bus(prefix).to_delete = function (key) { send({'delete': key}) }
+        bus(prefix).to_delete = function (key, t) {
+            t.done()
+            send({'delete': key})
+        }
 
         function connect () {
             nlog('[ ] trying to open ' + url)
