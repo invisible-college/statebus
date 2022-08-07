@@ -1691,6 +1691,11 @@ function import_server (bus, make_statebus, options)
     },
 
     serves_auth: function serves_auth (conn, master) {
+        // Right now, we only support accounts at '@username', but in general
+        // we could allow the prefix to be configurable.  We just have to go
+        // through this function and make all the regular expressions (like
+        // /@*.../) parameterizable.
+        var prefix = '@'
         var client = this // to keep me straight while programming
         function logout (user_key) {
             var clients = master.get('logged_in_clients')
@@ -1747,7 +1752,7 @@ function import_server (bus, make_statebus, options)
             master.auth_initialized = true
             master.get('users/passwords')
 
-            master('user/*').deleter = (key, t) => {
+            master(prefix + '*').deleter = (key, t) => {
                 master.log('Deleteinggg!!!', key)
                 // Remove from users.all
                 var users = master.get('users')
@@ -1820,11 +1825,11 @@ function import_server (bus, make_statebus, options)
             //   might create it, even though the account hasn't been created
             //   yet, and then this will rename it to some random ID.
             //
-            var key = 'user/' + params.name
+            var key = prefix + params.name
             if (!params.name)
-                key = 'user/' + Math.random().toString(36).substring(7,13)
+                key = prefix + Math.random().toString(36).substring(7,13)
             while (master.cache.hasOwnProperty(key))
-                key = 'user/' + Math.random().toString(36).substring(7,13)
+                key = prefix + Math.random().toString(36).substring(7,13)
 
             // Make account object
             var new_account = {
@@ -1964,15 +1969,15 @@ function import_server (bus, make_statebus, options)
         }
         client('current_user').deleter = function () {}
 
-        // Users have closet space at /user/<name>/*
-        var closet_space_key = /^(user\/[^\/]+)\/.*/
-        var private_closet_space_key = /^user\/[^\/]+\/private.*/
+        // Users have closet space at @<name>/*
+        var closet_space_key = /^(@[^\/]+)\/.*/
+        var private_closet_space_key = /^@[^\/]+\/private.*/
 
         // User
-        client('user/*').setter = function (o, t) {
+        client(prefix + '*').setter = function (o, t) {
             var c = client.get('current_user')
-            var user_key = o.key.match(/^user\/([^\/]+)/)
-            user_key = user_key && ('user/' + user_key[1])
+            var user_key = o.key.match(/^@([^\/]+)/)
+            user_key = user_key && (prefix + user_key[1])
 
             // Only the current user can touch himself.
             if (!c.val.logged_in || c.val.user.link !== user_key) {
@@ -1985,7 +1990,7 @@ function import_server (bus, make_statebus, options)
                 return
             }
 
-            // Users have closet space at /user/<name>/*
+            // Users have closet space at @<name>/*
             if (o.key.match(closet_space_key)) {
                 client.log('saving closet data')
                 master.set(o, t)
@@ -1993,7 +1998,7 @@ function import_server (bus, make_statebus, options)
             }
 
             // Ok, then it must be a plain user
-            console.assert(o.key.match(/^user\/[^\/]+$/))
+            console.assert(o.key.match(/^@[^\/]+$/))
 
             // Validate types
             if (!client.validate(o, {key: 'string',
@@ -2072,11 +2077,11 @@ function import_server (bus, make_statebus, options)
 
             master.set(u)
         }
-        client('user/*').getter = function user_getter (k) {
+        client(prefix + '*').getter = function user_getter (k) {
             var c = client.get('current_user')
             client.log('* getting:', k, 'as', c.val.user)
 
-            // Users have closet space at /user/<name>/*
+            // Users have closet space at @<name>/*
             if (k.match(closet_space_key)) {
                 var obj_user = k.match(closet_space_key)[1]
                 if (k.match(private_closet_space_key)
@@ -2091,10 +2096,10 @@ function import_server (bus, make_statebus, options)
             // Otherwise return the actual user
             return user_obj(k, c.val.logged_in && c.val.user.link === k)
         }
-        client('user/*').deleter = function () {}
+        client(prefix + '*').deleter = function () {}
         function user_obj (k, logged_in) {
             var o = master.clone(master.get(k))
-            if (k.match(/^user\/([^\/]+)\/private\/(.*)$/))
+            if (k.match(/^@([^\/]+)\/private\/(.*)$/))
                 return logged_in ? o : {key: k}
 
             o.val = o.val || {}
@@ -2434,7 +2439,7 @@ function import_server (bus, make_statebus, options)
         path = path || 'client.js'
         bus.http.get('/' + path, (req, res) => {
             var files =
-                ['extras/coffee.js', 'extras/sockjs.js', 'extras/react.js',
+                ['extras/coffee.js', 'extras/sockjs.js',
                  'statebus.js', 'client.js'].map((f) => fs.readFileSync('node_modules/statebus/' + f))
             files.unshift(fs.readFileSync(
                 'node_modules/braidify/braidify-client.js'
