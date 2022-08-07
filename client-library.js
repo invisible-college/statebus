@@ -661,7 +661,7 @@
             get: function (o, k) { return o[k] },
             set: function (o, k, v) {
                 o[k] = v
-                make_component(k, v)
+                window[k] = make_component(k, v)
                 return true
             }
         })
@@ -713,7 +713,7 @@
 
         // ... or at least most of them -- there are just a few missing from
         // this list.
-        var all_tags = 'a,abbr,address,area,article,aside,audio,b,base,bdi,bdo,blockquote,body,br,button,canvas,caption,cite,code,col,colgroup,data,datalist,dd,del,details,dfn,dialog,div,dl,dt,em,embed,fieldset,figcaption,figure,footer,form,h1,h2,h3,h4,h5,h6,head,header,hgroup,hr,html,i,iframe,img,ins,kbd,label,legend,li,link,main,map,mark,menu,meta,meter,nav,noscript,object,ol,optgroup,option,output,p,param,picture,pre,progress,q,s,samp,script,section,select,slot,small,source,span,strong,style,sub,summary,sup,table,tbody,td,template,tfoot,th,thead,title,tr,u,ul,video,input'.split(',')
+        var all_tags = 'a,abbr,address,area,article,aside,audio,b,base,bdi,bdo,blockquote,br,button,canvas,caption,cite,code,col,colgroup,data,datalist,dd,del,details,dfn,dialog,div,dl,dt,em,embed,fieldset,figcaption,figure,footer,form,h1,h2,h3,h4,h5,h6,head,header,hgroup,hr,html,i,iframe,img,ins,kbd,label,legend,li,link,main,map,mark,menu,meta,meter,nav,noscript,object,ol,optgroup,option,output,p,param,picture,pre,progress,q,s,samp,script,section,select,slot,small,source,span,strong,style,sub,summary,sup,svg,table,tbody,td,template,tfoot,th,thead,title,tr,u,ul,video,input,circle,ellipse,g,image,line,path,polygon,polyline,rect,switch,symbol,text,textPath,tspan,use'.split(',')
         all_tags.forEach((tagname) => {
             window[tagname.toUpperCase()] = function_for_tag(tagname)
         })
@@ -823,8 +823,7 @@
     var users_widgets = {}
     function make_component(name, func) {
         // Define the component
-
-        window[name] = users_widgets[name] = create_react_class({
+        return users_widgets[name] = create_react_class({
             displayName: name,
             render: function () {
                 var args = []
