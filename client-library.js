@@ -721,8 +721,8 @@
         // We create special functions for INPUT and TEXTAREA, because they
         // have to do extra work to maintain the cursor when we use statebus
         // instead of React's setState() for state updates.
-        window.INPUT    = function_for_tag(make_fixed_textbox('input'))
-        window.TEXTAREA = function_for_tag(make_fixed_textbox('textarea'))
+        window.INPUT    = function_for_tag(bus.libs.react17.input)
+        window.TEXTAREA = function_for_tag(bus.libs.react17.textarea)
 
 
         // Improve the functions ^^^ put this above
@@ -808,6 +808,12 @@
             }
         })
     }
+
+    // We create special functions for INPUT and TEXTAREA, because they
+    // have to do extra work to maintain the cursor when we use statebus
+    // instead of React's setState() for state updates.
+    bus.libs.react17.input = make_fixed_textbox('input')
+    bus.libs.react17.textarea = make_fixed_textbox('textarea')
 
     function autodetect_args (func) {
         if (func.args) return
