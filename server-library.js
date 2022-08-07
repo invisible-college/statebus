@@ -145,8 +145,11 @@ function import_server (bus, make_statebus, options)
         // If this requests knows about Braid then we presume the programmer
         // knows that any client might make this cross-origin request.
         if (req.headers.version || req.headers.parents || req.headers.subscribe
+            || req.headers.peer || req.headers['put-order']
             || req.method === 'OPTIONS')
             free_the_cors(req, res)
+        if (req.method === 'OPTIONS')
+            return
 
         // Initialize new clients with an id.  We put the client id on
         // req.client, and also in a cookie for the browser to see.
@@ -258,7 +261,7 @@ function import_server (bus, make_statebus, options)
                     if (req.headers.peer) {
                         let peer = req.headers.peer,
                             key = obj.key
-                        var cb = cbus.http_callbacks[
+                        var cb = cbus.http_callbacks && cbus.http_callbacks[
                             JSON.stringify({peer, key})
                         ]
                         if (cb) cb.has_seen(cbus, key, t.version)
@@ -2535,7 +2538,7 @@ function free_the_cors (req, res, next) {
     var free_the_cors = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "OPTIONS, HEAD, GET, PUT, UNSUBSCRIBE",
-        "Access-Control-Allow-Headers": "subscribe, peer, version, parents, merge-type, content-type, patches, cache-control"
+        "Access-Control-Allow-Headers": "subscribe, peer, version, parents, merge-type, content-type, patches, cache-control, put-order"
     }
     Object.entries(free_the_cors).forEach(x => res.setHeader(x[0], x[1]))
     if (req.method === 'OPTIONS') {
