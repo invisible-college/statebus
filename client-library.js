@@ -784,7 +784,9 @@
     // This one is for react v17+.
     function make_fixed_textbox (tagname) {
         // `tagname` can be either "input" or "textarea"
-        return createReactClass({
+
+        // Create a special component
+        var component = createReactClass({
             getInitialState: function() {
                 return {value: this.props.value}
             },
@@ -796,16 +798,33 @@
                 if (this.props.value)
                     this.setState({value: e.target.value})
             },
+            onInput: function(e) {
+                this.props.onInput && this.props.onInput(e)
+                if (this.props.value)
+                    this.setState({value: e.target.value})
+            },
             render: function() {
-                var new_props = {}
-                for (var k in this.props)
-                    if (this.props.hasOwnProperty(k))
-                        new_props[k] = this.props[k]
-                if (this.state.hasOwnProperty('value'))
-                    new_props.value = this.state.value
-                new_props.onChange = this.onChange
+                var new_props = {
+                    ...this.props,
+                    ref: this.props.forwarded_ref   // We had to rename ref
+                }
+                delete new_props.forwarded_ref      // Delete the old name
+
+                // Now replace any onChange or onInput with our wrapper handlers
+                if (new_props.hasOwnProperty('onChange'))
+                    new_props.onChange = this.onChange
+                if (new_props.hasOwnProperty('onInput'))
+                    new_props.onInput = this.onInput
+
                 return React.createElement(tagname, new_props)
             }
+        })
+
+        // But react components don't pass through the `ref` prop by default,
+        // so we have to do that with this special function and rename it to
+        // forwarded_ref temporarily:
+        return React.forwardRef((props, ref) => {
+            return React.createElement(component, {...props, forwarded_ref: ref})
         })
     }
 
