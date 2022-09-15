@@ -2,7 +2,6 @@
     var websocket_prefix = (clientjs_option('websocket_path')
                             || '_connect_to_statebus_')
 
-    var react_render = ReactDOM.render
     // make_client_statebus_maker()
     window.bus = window.statebus()
     bus.label = 'bus'
@@ -183,7 +182,7 @@
                         headers: {accept: 'application/json'},
                         signal: aborter.signal
                     }
-                ).andThen( function (x) {
+                ).andThen( function (new_version) {
                     // New update received!
                     if (subscriptions[key].status === 'connecting') {
                         console.log('%c[*] opened ' + key,
@@ -196,7 +195,7 @@
                     // Return the update
                     t.return({
                         key: key,
-                        val: add_prefixes(JSON.parse(x.body))
+                        val: add_prefixes(JSON.parse(new_version.body))
                     })
                 }).catch( function (e) {
                     if (subscriptions[key].status === 'aborted') {
@@ -831,9 +830,10 @@
     // We create special functions for INPUT and TEXTAREA, because they
     // have to do extra work to maintain the cursor when we use statebus
     // instead of React's setState() for state updates.
-    bus.libs.react17.input = make_fixed_textbox('input')
-    bus.libs.react17.textarea = make_fixed_textbox('textarea')
-
+    if (window.React && !React.createClass && window.createReactClass) {
+        bus.libs.react17.input = make_fixed_textbox('input')
+        bus.libs.react17.textarea = make_fixed_textbox('textarea')
+    }
     function autodetect_args (func) {
         if (func.args) return
 
@@ -981,6 +981,7 @@
         return widge(props, children)
     }
 
+    // var react_render = ReactDOM.render
     // window.users_widgets = users_widgets
     // function load_widgets () {
     //     for (var w in users_widgets) {
