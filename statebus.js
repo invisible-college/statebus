@@ -1034,6 +1034,9 @@
         //    funk.react().
         //
         // ...which will make it re-run with the original arg1 and arg2 .
+        //
+        // Each subsequent time you call f(arg1, arg2), it will change the
+        // remembered args and re-run the funk.
         function funk () {
             console.assert(executing_funk === global_funk
                            || executing_funk !== funk, 'Recursive funk', funk.func)

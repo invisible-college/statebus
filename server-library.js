@@ -2054,7 +2054,9 @@ function import_server (bus, make_statebus, options)
             o.val.pass = o.val.pass && require('bcrypt-nodejs').hashSync(o.val.pass)
             u.val.pass = o.val.pass || u.val.pass
 
-            // // Users can have pictures (remove this soon)
+            // // Allow clients to save a base64 image in the .pic field,
+            // // which we'll convert into an image file here.  (Note: removed.
+            // // There are more elegant solutions possible now.)
             // // Bug: if user changes name, this picture's url doesn't change.
             // if (o.pic && o.pic.indexOf('data:image') > -1) {
             //     var img_type = o.pic.match(/^data:image\/(\w+);base64,/)[1]
@@ -2063,19 +2065,19 @@ function import_server (bus, make_statebus, options)
             //     // ensure that the uploads directory exists
             //     if (!fs.existsSync(upload_dir))
             //         fs.mkdirSync(upload_dir)
-
+            //
             //     // bug: users with the same name can overwrite each other's files
             //     u.pic = u.name + '.' + img_type
             //     fs.writeFile(upload_dir + u.pic, b64, {encoding: 'base64'})
             // }
 
             // For anything else, go ahead and add it to the user object
-            var protected = {key:1, name:1, /*pic:1,*/ pass:1}
+            var reserved = {'key':true, 'name':true, 'pass':true}
             for (var k in o.val)
-                if (!protected.hasOwnProperty(k))
+                if (!reserved.hasOwnProperty(k))
                     u.val[k] = o.val[k]
             for (var k in u.val)
-                if (!protected.hasOwnProperty(k) && !o.val.hasOwnProperty(k))
+                if (!reserved.hasOwnProperty(k) && !o.val.hasOwnProperty(k))
                     delete u.val[k]
 
             master.set(u)
