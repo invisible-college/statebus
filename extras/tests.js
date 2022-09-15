@@ -1122,22 +1122,22 @@ function setup_servers () {
     c.ws_mount('/*', 'statei://localhost:' + port)
 
     s.set({key: 'users',
-            val: [ {link: 'user/1'},
-                   {link: 'user/2'},
-                   {link: 'user/3'} ] })
-    s.set({ key: 'user/1', val: {
+            val: [ {link: '@1'},
+                   {link: '@2'},
+                   {link: '@3'} ] })
+    s.set({ key: '@1', val: {
         name: 'mike',
         email: 'toomim@gmail.com',
         admin: true,
         pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y'
     }})
-    s.set({ key: 'user/2', val: {
+    s.set({ key: '@2', val: {
         name: 'j',
         email: 'jtoomim@gmail.com',
         admin: true,
         pass: '$2a$10$Ti7BgAZS8sB0Z62o2NKsIuCdmU3q9xP7jexVccTcG19Y8qpBpl/1y'
     }})
-    s.set({ key: 'user/3', val: {
+    s.set({ key: '@3', val: {
         name: 'boo',
         email: 'boo@gmail.com',
         admin: false,
@@ -1260,7 +1260,7 @@ test(function create_account (done) {
     // Log out
     delay(600, () => {
         assert(cu.val.logged_in)
-        assert(cu.val.user.link === '/user/bob')
+        assert(cu.val.user.link === '/@bob')
 
         log('Now let\'s log out!')
         cu.val.logout = true; c.set(cu)
@@ -1276,7 +1276,7 @@ test(function create_account (done) {
     
     delay(600, () => {
         assert(cu.val.logged_in)
-        assert(cu.val.user.link === '/user/bob')
+        assert(cu.val.user.link === '/@bob')
         done()
     })
 })
@@ -1521,7 +1521,7 @@ if (false) {
             // Logged in as mike
             [(u.logged_in
               && u.user.name === 'mike'
-              && u.user.key === '/user/1'
+              && u.user.key === '/@1'
 
               // We can see our email
               && u.user.email
@@ -1547,7 +1547,7 @@ if (false) {
             // Logged in as j
             [(u.logged_in
               && u.user.name === 'j'
-              && u.user.key === '/user/2'
+              && u.user.key === '/@2'
 
               // We can see j's email
               && u.user.email
@@ -1564,10 +1564,10 @@ if (false) {
         c('/current_user').on_set = function (o) {
             //if (o.user && o.user.name === 'j') {
             // log(s.userbus.deps('/current_user'))
-            // log(s.userbus.deps('/user/2'))
+            // log(s.userbus.deps('/@2'))
             //}
         }
-        c('/user/*').on_set = function (o) {
+        c('/@*').on_set = function (o) {
             //log('-> Got new', o.key, o.email ? 'with email' : '')
         }
         c('/current_user').on_set = function (o) {
@@ -1575,9 +1575,9 @@ if (false) {
         }
         c(function loop () {
             u = c.get('/current_user')
-            user1 = c.get('/user/1')
-            user2 = c.get('/user/2')
-            user3 = c.get('/user/3')
+            user1 = c.get('/@1')
+            user2 = c.get('/@2')
+            user3 = c.get('/@3')
             var st = states()
 
             if (phase===1)
@@ -1613,12 +1613,12 @@ if (false) {
         var cu = c.get('/current_user')
         c.set({key: '/current_user', val: {create_account: {name: 'a', pass: 'a'}}})
         c.set({key: '/current_user', val: {login_as: {name: 'a', pass: 'a'}}})
-        var a_closet = c.get('/user/a/foo')
-        var a_private = c.get('/user/a/private/foo')
+        var a_closet = c.get('/@a/foo')
+        var a_private = c.get('/@a/private/foo')
 
         delay(400, () => {
-            c.set({key: '/user/a/foo', _: 3})
-            c.set({key: '/user/a/private/foo', _: 4})
+            c.set({key: '/@a/foo', _: 3})
+            c.set({key: '/@a/private/foo', _: 4})
         })
 
         // User A can see it
