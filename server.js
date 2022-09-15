@@ -2021,12 +2021,12 @@ function import_server (bus, options)
             // }
 
             // For anything else, go ahead and add it to the user object
-            var protected = {key:1, name:1, /*pic:1,*/ pass:1}
+            var protected_fields = {key:1, name:1, /*pic:1,*/ pass:1}
             for (var k in o)
-                if (!protected.hasOwnProperty(k))
+                if (!protected_fields.hasOwnProperty(k))
                     u[k] = o[k]
             for (var k in u)
-                if (!protected.hasOwnProperty(k) && !o.hasOwnProperty(k))
+                if (!protected_fields.hasOwnProperty(k) && !o.hasOwnProperty(k))
                     delete u[k]
 
             master.save(u)
