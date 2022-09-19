@@ -2,8 +2,10 @@
 (function(name, definition) {
     if (typeof module != 'undefined') module.exports = definition()
     else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
-    else this[name] = definition()
-}('statebus', function() {statelog_indent = 0; var busses = {}, bus_count = 0, executing_funk, global_funk, funks = {}, clean_timer, symbols, nodejs = typeof window === 'undefined'; function make_bus (options) {
+    else if(this) this[name] = definition()
+    else if(window) window[name] = definition()
+
+}('statebus', function() {var statelog_indent = 0; var busses = {}, bus_count = 0, executing_funk, global_funk, funks = {}, clean_timer, symbols, nodejs = typeof window === 'undefined'; function make_bus (options) {
 
 
     // ****************
@@ -731,6 +733,7 @@
             }
         }
 
+        let handler
         // Now iterate through prefixes
         for (var i=0; i < wildcard_handlers.length; i++) {
             handler = wildcard_handlers[i]
