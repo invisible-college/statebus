@@ -1673,7 +1673,7 @@
         }
 
         // Recurse through each property on objects
-        else if (typeof input === 'object') {
+        else if (typeof input === 'object' && input !== null) {
             var new_obj = {}
             for (var k in input)
                 new_obj[f(k, input)] = translate_fields(input[k], f)
