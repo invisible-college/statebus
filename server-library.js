@@ -166,7 +166,7 @@ function import_server (bus, make_statebus, options)
 
         // Handle the GET or PUT request!
         if (req.method === 'GET') {
-            var key = req.path.substr(1)
+            var key = req.url.substr(1)
 
             // Make a temporary client bus
             var cbus = bus.bus_for_http_client(req, res)
