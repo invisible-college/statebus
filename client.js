@@ -416,10 +416,6 @@
             delete next_props['children']; delete this_props['children']
             // delete next_props['kids']; delete this_props['kids']
 
-            next_props = bus.clone(next_props)
-            this_props = bus.clone(this_props)
-            
-
             return !bus.deep_equals([next_state, next_props], [this.state, this_props])
 
             // TODO:
