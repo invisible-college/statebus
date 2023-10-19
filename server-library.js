@@ -2539,7 +2539,7 @@ function import_server (bus, make_statebus, options)
 function free_the_cors (req, res, next) {
     var free_the_cors = {
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "OPTIONS, HEAD, GET, PUT, UNSUBSCRIBE",
+        "Access-Control-Allow-Methods": "OPTIONS, HEAD, GET, PUT, DELETE, UNSUBSCRIBE",
         "Access-Control-Allow-Headers": "subscribe, peer, version, parents, merge-type, content-type, patches, cache-control, put-order"
     }
     Object.entries(free_the_cors).forEach(x => res.setHeader(x[0], x[1]))
