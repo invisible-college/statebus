@@ -201,6 +201,7 @@
                         }
 
                         // Else, reconnect!
+                        console.log('Reconnecting due to', e)
                         setTimeout(() => subscribe(key, t),
                                    reconnect_attempts > 0 ? 5000 : 1500)
                         subscriptions[key].status = 'reconnecting'
@@ -232,10 +233,17 @@
                         }
 
                         // Return the update
-                        t.return({
-                            key: key,
-                            val: add_prefixes(JSON.parse(new_version.body))
-                        })
+                        if (new_version.body)
+                            // As a snapshot body
+                            t.return({
+                                key: key,
+                                val: add_prefixes(JSON.parse(new_version.body))
+                            })
+                        else if (new_version.patches)
+                            // As a patch
+                            bus.set.fire(key, {patch: new_version.patches.map(
+                                patch => patch.range + ' = ' + patch.content
+                            )})
                     },
                     reconnect
                 )).catch(reconnect)
