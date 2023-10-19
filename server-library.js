@@ -236,8 +236,7 @@ function import_server (bus, make_statebus, options)
                     var key = req.url.substr(1)
                     cbus.get_once(key, (obj) => {
                         cbus.set(key, {patch: statebus_patches})
-                        res.statusCode = 200
-                        res.end
+                        res.sendStatus(200)
                         console.log('We just processed a patch!')
                     })
                 })

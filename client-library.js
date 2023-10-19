@@ -107,12 +107,15 @@
                         patches: the_put.patches
                     }
                 ).then(function (res) {
-                    if (res.status !== 200)
+                    if (res.status === 200) {
+                        console.log('PUT succeeded!')
+                        puts.delete(id)
+                    }
+                    else
                         console.error(
                             'Server gave error on PUT:', e,
                             'for', {body: the_put.body, patches: the_put.patches}
                         )
-                    puts.delete(id)
                 }).catch(function (e) {
                     console.error(e, 'Error on PUT, waiting...', the_put.url)
                     the_put.status = 'waiting'
