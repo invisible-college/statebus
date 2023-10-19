@@ -102,15 +102,15 @@
         if (typeof obj === 'string' && t && t.patch) {
             if (typeof t.patch == 'string') t.patch = [t.patch]
             // Apply the patch locally
+            var key = obj,
+                obj = bus.cache[key]
+
             console.log('set: applying the patch!', {
-                key: obj,
-                val: bus.cache[obj],
+                key: key,
+                obj: obj,
                 patch: t.patch[0]
             })
-            obj = {
-                key: obj,
-                val: apply_patch((bus.cache[obj] && bus.cache[obj].val), t.patch[0])
-            }
+            obj.val = apply_patch(obj.val, t.patch[0])
         }
 
         if (!('key' in obj) || typeof obj.key !== 'string') {

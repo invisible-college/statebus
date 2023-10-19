@@ -233,10 +233,13 @@ function import_server (bus, make_statebus, options)
                         patch.range + ' = ' + patch.content
                     )
                     var cbus = bus.bus_for_http_client(req, res)
-                    cbus.set(req.url.substr(1), {patch: statebus_patches})
-                    res.statusCode = 200
-                    res.end
-                    console.log('We just processed a patch!')
+                    var key = req.url.substr(1)
+                    cbus.get_once(key, (obj) => {
+                        cbus.set(key, {patch: statebus_patches})
+                        res.statusCode = 200
+                        res.end
+                        console.log('We just processed a patch!')
+                    })
                 })
             } else {
                 // Otherwise, we assume the body is content-type: json
@@ -2547,7 +2550,7 @@ function free_the_cors (req, res, next) {
     var free_the_cors = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "OPTIONS, HEAD, GET, PUT, DELETE, UNSUBSCRIBE",
-        "Access-Control-Allow-Headers": "subscribe, peer, version, parents, merge-type, content-type, patches, cache-control, put-order"
+        "Access-Control-Allow-Headers": "subscribe, peer, version, parents, merge-type, content-type, content-range, patches, cache-control, put-order"
     }
     Object.entries(free_the_cors).forEach(x => res.setHeader(x[0], x[1]))
     if (req.method === 'OPTIONS') {
