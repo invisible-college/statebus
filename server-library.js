@@ -1,7 +1,7 @@
 var fs = require('fs'),
     util = require('util')
 
-var braidify = require('braidify').http_server
+var braidify = require('braid-http').http_server
 
 
 function default_options (bus) { return {
@@ -142,6 +142,8 @@ function import_server (bus, make_statebus, options)
             console.log(req.method, req.url, req.headers.subscribe
                         ? 'Subscribe: ' + req.headers.subscribe : '')
 
+        braidify(req, res)
+
         // If this requests knows about Braid then we presume the programmer
         // knows that any client might make this cross-origin request.
         if (req.headers.version || req.headers.parents || req.headers.subscribe
@@ -171,7 +173,6 @@ function import_server (bus, make_statebus, options)
             // Make a temporary client bus
             var cbus = bus.bus_for_http_client(req, res)
 
-            braidify(req, res)
             if (req.subscribe)
                 res.startSubscription({ onClose: end_subscription })
             else
@@ -222,15 +223,21 @@ function import_server (bus, make_statebus, options)
         }
 
         else if (req.method === 'PUT') {
+
             // Maybe the new state is expressed in patches
-            if (req.headers.patches) {
-                console.error("We don't actually handle PUT patches yet")
+            if (req.headers.patches || req.headers['content-range']) {
 
-                // var patches = await req.patches()
-                // console.log("...but we see these patches:", patches)
-
-                res.statusCode = 500
-                res.end()
+                var patches = req.patches().then(patches => {
+                    console.log("...and we see these patches:", patches)
+                    var statebus_patches = patches.map(patch =>
+                        patch.range + ' = ' + patch.content
+                    )
+                    var cbus = bus.bus_for_http_client(req, res)
+                    cbus.set(req.url.substr(1), {patch: statebus_patches})
+                    res.statusCode = 200
+                    res.end
+                    console.log('We just processed a patch!')
+                })
             } else {
                 // Otherwise, we assume the body is content-type: json
                 if (typeof req.headers['content-type'] !== 'string'
@@ -516,7 +523,7 @@ function import_server (bus, make_statebus, options)
                     if (message.patch) {
                         var o = bus.cache[message.set] || {key: message.set}
                         try {
-                            message.set = bus.apply_patch(o, message.patch[0])
+                            message.set = bus.apply_patch(o.val, message.patch[0])
                         } catch (e) {
                             console.error('Received bad sockjs message from '
                                           + conn.remoteAddress +': ', message, e)
@@ -2447,7 +2454,7 @@ function import_server (bus, make_statebus, options)
                 ['extras/coffee.js', 'extras/sockjs.js',
                  'statebus.js', 'client.js'].map((f) => fs.readFileSync('node_modules/statebus/' + f))
             files.unshift(fs.readFileSync(
-                'node_modules/braidify/braidify-client.js'
+                'node_modules/braid-http/braid-http-client.js'
             ))
             res.send(files.join(';\n'))
         })

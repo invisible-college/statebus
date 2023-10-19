@@ -93,11 +93,24 @@
 
     var currently_saving
     function set (obj, t) {
-        // First let's handle diffs
+        // First let's handle patches.  We receive them as:
+        //
+        //     set("foo", {patch: ['.foo.bar = "blah"]})
+        //
+        // Note the `obj` will actually be a string, set to the key in this case.
+        //
         if (typeof obj === 'string' && t && t.patch) {
             if (typeof t.patch == 'string') t.patch = [t.patch]
             // Apply the patch locally
-            obj = apply_patch(bus.cache[obj] || {key: obj}, t.patch[0])
+            console.log('set: applying the patch!', {
+                key: obj,
+                val: bus.cache[obj],
+                patch: t.patch[0]
+            })
+            obj = {
+                key: obj,
+                val: apply_patch((bus.cache[obj] && bus.cache[obj].val), t.patch[0])
+            }
         }
 
         if (!('key' in obj) || typeof obj.key !== 'string') {
@@ -1272,7 +1285,7 @@
         get_base: Symbol('get_base')
     }
     function make_proxy () {
-        function item_proxy (base, o) {
+        function item_proxy (base, path, o) {
 
             // Primitives pass through unscathed
             if (typeof o === 'number'
@@ -1287,7 +1300,7 @@
             // We recursively descend through {key: ...} links
             if (typeof o === 'object' && 'link' in o) {
                 var new_base = bus.get(o.link)
-                return item_proxy(new_base, new_base.val)
+                return item_proxy(new_base, '', new_base.val)
             }
 
 
@@ -1307,12 +1320,20 @@
                         return true
                     if (typeof k === 'symbol')
                         return undefined
-                    return item_proxy(base, o[proxied_2_keyed(k)])
+
+                    // Compute the new path
+                    var new_path = path + '[' + JSON.stringify(k) + ']'
+                    return item_proxy(base, new_path, o[proxied_2_keyed(k)])
                 },
                 set: function set(o, k, v) {
                     var value = translate_fields(v, proxied_2_keyed)
                     o[proxied_2_keyed(k)] = value
-                    bus.set(base)
+                    var new_path = path + '[' + JSON.stringify(k) + ']'
+                    bus.set(
+                        base,
+                        // Forward the patch too
+                        {patch: [new_path + ' = ' + JSON.stringify(v)]}
+                    )
                     return true
                 },
                 has: function has(o, k) {
@@ -1320,6 +1341,7 @@
                 },
                 deleteProperty: function del (o, k) {
                     delete o[proxied_2_keyed(k)]
+                    return true // Report success to Proxy
                 }
                 // For function proxies:
                 //
@@ -1339,15 +1361,15 @@
                     return undefined
                 bogus_check(k)
                 var base = bus.get(k)
-                return item_proxy(base, base.val)
+                return item_proxy(base, '', base.val)
             },
             set: function set(o, key, val) {
-                bus.set({key: key,
-                          val: translate_fields(val, proxied_2_keyed)})
+                bus.set({key: key, val: translate_fields(val, proxied_2_keyed)})
                 return true
             },
             deleteProperty: function del (o, k) {
                 bus.delete(proxied_2_keyed(k))
+                return true // Report success to Proxy
             },
             // For function proxies:
             // apply: function apply (o, This, args) {
@@ -1552,11 +1574,25 @@
                     var t = {version: message.version,
                              parents: message.parents,
                              patch: message.patch}
-                    if (t.patch)
-                        msg.set = apply_patch(bus.cache[msg.set] || {key: msg.set},
-                                               message.patch[0])
+
+                    var obj
+
+                    // Are we receiving a patch?
+                    if (message.patch && typeof message.set === 'string') {
+                        // Then message.set is a key, and we are applying a
+                        // patch to the data at that key
+                        var key = message.set
+                        obj = apply_patch(bus.cache[key] && bus.cache[key].val,
+                                          message.patch[0])
+                    }
+
+                    // Then we're receiving the full state as an object
+                    else
+                        obj = message.set
+
                     if (!(t.version||t.parents||t.patch))
                         t = undefined
+
                     bus.set.fire(add_prefixes(message.set), t)
                 } catch (err) {
                     console.error('Received bad network message from '
@@ -1726,24 +1762,29 @@
             path = x[1],
             new_stuff = JSON.parse(x[2])
 
-        var path_segment = /^(\.([^\.\[]+))|(\[((-?\d+):)?(-?\d+)\])/
+        var path_segment = /^(\.?([^\.\[]+))|(\[((-?\d+):)?(-?\d+)\])|\[("(\\"|[^"])*")\]/
         var curr_obj = obj,
             last_obj = null
-        function de_neg (x) {
-            return x[0] === '-'
-                ? curr_obj.length - parseInt(x.substr(1))
-                : parseInt(x)
+        function de_neg (numstr) {
+            return numstr[0] === '-'
+                ? curr_obj.length - parseInt(numstr.substr(1))
+                : parseInt(numstr)
         }
+
+        console.log('Getting path', path, 'in obj', obj)
 
         while (true) {
             var match = path_segment.exec(path),
-                subpath = match[0],
-                field = match[2],
-                slice_start = match[5],
-                slice_end = match[6]
+                subpath = match ? match[0] : '',
+                field = match && match[2],
+                slice_start = match && match[5],
+                slice_end = match && match[6],
+                quoted_field = match && match[7]
 
             slice_start = slice_start && de_neg(slice_start)
             slice_end = slice_end && de_neg(slice_end)
+
+            if (quoted_field) field = JSON.parse(quoted_field)
 
             // console.log('Descending', {curr_obj, path, subpath, field, slice_start, slice_end, last_obj})
 

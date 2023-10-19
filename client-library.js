@@ -86,10 +86,16 @@
             send_put(id)
         }
         function send_put (id) {
+            var the_put = puts.get(id)
             try {
-                puts.get(id).status = 'sending'
+                console.log('Sending a put!', {
+                    patches: the_put.patches,
+                    body: the_put.body
+                })
+
+                the_put.status = 'sending'
                 braid_fetch(
-                    puts.get(id).url,
+                    the_put.url,
                     {
                         method: 'put',
                         headers: {
@@ -97,20 +103,23 @@
                             'put-order': id,
                             'peer': bus.client_creds().clientid
                         },
-                        body: puts.get(id).body
+                        body: the_put.body,
+                        patches: the_put.patches
                     }
                 ).then(function (res) {
                     if (res.status !== 200)
-                        console.error('Server gave error on PUT:',
-                                      e, 'for', puts.get(id).body)
+                        console.error(
+                            'Server gave error on PUT:', e,
+                            'for', {body: the_put.body, patches: the_put.patches}
+                        )
                     puts.delete(id)
                 }).catch(function (e) {
-                    console.error(e, 'Error on PUT, waiting...', puts.get(id).url)
-                    puts.get(id).status = 'waiting'
+                    console.error(e, 'Error on PUT, waiting...', the_put.url)
+                    the_put.status = 'waiting'
                 })
             } catch (e) {
-                console.error(e, 'Error on PUT, waiting...', puts.get(id).url)
-                puts.get(id).status = 'waiting'
+                console.error(e, 'Error on PUT, waiting...', the_put.url)
+                the_put.status = 'waiting'
             }
         }
         function retry_put (id) {
@@ -128,13 +137,24 @@
         bus(prefix).setter   = function (obj, t) {
             bus.set.fire(obj)
 
-            var put = {
-                url: url + rem_prefix(obj.key),
-                body: JSON.stringify(obj.val)
-            }
+            var put = {url: url + rem_prefix(obj.key)}
+
+            // Set the version and parents
             if (t.version) put.version = t.version
             if (t.parents) put.parents = t.parents
-            if (t.patch)   put.patch   = t.patch
+
+            // Do we have patches?
+            if (t.patch) {
+                put.patches = t.patch.map(patch => {
+                    var match = patch.match(/(.*) = (.*)/),
+                        range = match[1],
+                        content = match[2]
+                    return {unit: 'json', range, content}
+                })
+            }
+            // Then we just have a simple body.
+            else put.body = JSON.stringify(obj.val)
+
             var put_id = put_counter++
             puts.set(put_id, put)
             send_put(put_id)
@@ -169,7 +189,20 @@
 
             function subscribe (key, t) {
                 var aborter = new AbortController(),
-                    reconnect_attempts = 0
+                    reconnect_attempts = 0,
+                    reconnect = (e) => {
+                        if (subscriptions[key].status === 'aborted') {
+                            // Then this get is over and done with!
+                            delete subscriptions[key]
+                            return
+                        }
+
+                        // Else, reconnect!
+                        setTimeout(() => subscribe(key, t),
+                                   reconnect_attempts > 0 ? 5000 : 1500)
+                        subscriptions[key].status = 'reconnecting'
+                        reconnect_attempts++
+                    }
 
                 // Start the subscription!
                 braid_fetch(
@@ -184,34 +217,25 @@
                         signal: aborter.signal,
                         // credentials: 'include'
                     }
-                ).andThen( function (new_version) {
-                    // New update received!
-                    if (subscriptions[key].status === 'connecting') {
-                        console.log('%c[*] opened ' + key,
-                                    'color: blue')
-                        reconnect_attempts = 0
-                        subscriptions[key].status = 'connected'
-                        send_all_puts()
-                    }
+                ).then(res => res.subscribe(
+                    new_version => {
+                        // New update received!
+                        if (subscriptions[key].status === 'connecting') {
+                            console.log('%c[*] opened ' + key,
+                                        'color: blue')
+                            reconnect_attempts = 0
+                            subscriptions[key].status = 'connected'
+                            send_all_puts()
+                        }
 
-                    // Return the update
-                    t.return({
-                        key: key,
-                        val: add_prefixes(JSON.parse(new_version.body))
-                    })
-                }).catch( function (e) {
-                    if (subscriptions[key].status === 'aborted') {
-                        // Then this get is over and done with!
-                        delete subscriptions[key]
-                        return
-                    }
-
-                    // Reconnect!
-                    setTimeout(function () { subscribe(key, t) },
-                               reconnect_attempts > 0 ? 5000 : 1500)
-                    subscriptions[key].status = 'reconnecting'
-                    reconnect_attempts++
-                })
+                        // Return the update
+                        t.return({
+                            key: key,
+                            val: add_prefixes(JSON.parse(new_version.body))
+                        })
+                    },
+                    reconnect
+                )).catch(reconnect)
 
                 // Remember this subscription
                 subscriptions[key] = {
