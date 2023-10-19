@@ -186,6 +186,26 @@
             || executing_funk && executing_funk.latest_reaction_at
             || new_version()
 
+        // Handle patches.  We receive them as:
+        //
+        //     set.fire("foo", {patch: ['.foo.bar = "blah"]})
+        //
+        // Note the `obj` will actually be a string, set to the key in this case.
+        //
+        if (typeof obj === 'string' && t && t.patch) {
+            if (typeof t.patch == 'string') t.patch = [t.patch]
+            // Apply the patch locally
+            var key = obj,
+                obj = bus.cache[key]
+
+            console.log('set.fire: applying the patch!', {
+                key: key,
+                obj: obj,
+                patch: t.patch[0]
+            })
+            obj.val = apply_patch(obj.val, t.patch[0])
+        }
+
         // Print a statelog entry
         if (obj.key && honking_at(obj.key)) {
             // Warning: Changes to *nested* objects will *not* be printed out!
@@ -1771,7 +1791,7 @@
                 : parseInt(numstr)
         }
 
-        console.log('Getting path', path, 'in obj', obj)
+        console.log('Getting path', JSON.stringify(path), 'in obj', obj)
 
         while (true) {
             var match = path_segment.exec(path),
@@ -1790,11 +1810,19 @@
 
             // If it's the final item, set it
             if (path.length == subpath.length) {
-                if (field)                               // Object
-                    curr_obj[field] = new_stuff
+                if (!subpath) return new_stuff
+                else if (field)                          // Object
+                    if (new_stuff === undefined)
+                        delete curr_obj[field]           // - Delete a field in object
+                    else
+                        curr_obj[field] = new_stuff      // - Set a field in object
+
                 else if (typeof curr_obj == 'string') {  // String
-                    console.assert(typeof new_stuff == 'string')
-                    if (!slice_start) {slice_start = slice_end; slice_end = slice_end+1}
+                    console.assert(typeof new_stuff === 'string')
+                    if (!slice_start) {
+                        slice_start = slice_end
+                        slice_end = slice_end + 1
+                    }
                     if (last_obj) {
                         var s = last_obj[last_field]
                         last_obj[last_field] = (s.slice(0, slice_start)
