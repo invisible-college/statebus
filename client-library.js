@@ -40,10 +40,10 @@
         return new WebSocket(url + '/' + websocket_prefix + '/websocket')
         // return new SockJS(url + '/' + websocket_prefix)
     }
-    function client_creds (server_url) {
+    bus.client_creds = function client_creds () {
         // This function is only used for websocket connections.
         // http connections set the cookie on the server.
-        var me = bus.get('ls/me')
+        var me = JSON.parse(localStorage['ls/me'])
         bus.log('connect: me is', me)
         if (!me.client) {
             // Create a client id if we have none yet.
@@ -52,7 +52,7 @@
             me.client = c || (Math.random().toString(36).substring(2)
                               + Math.random().toString(36).substring(2)
                               + Math.random().toString(36).substring(2))
-            bus.set(me)
+            localStorage['ls/me'] = JSON.stringify(me)
         }
 
         set_cookie('peer', me.client)
@@ -95,6 +95,7 @@
                         headers: {
                             'content-type': 'application/json',
                             'put-order': id,
+                            'peer': bus.client_creds().clientid
                         },
                         body: puts.get(id).body
                     }
@@ -104,11 +105,11 @@
                                       e, 'for', puts.get(id).body)
                     puts.delete(id)
                 }).catch(function (e) {
-                    console.error('Error on PUT, waiting...', puts.get(id).url)
+                    console.error(e, 'Error on PUT, waiting...', puts.get(id).url)
                     puts.get(id).status = 'waiting'
                 })
             } catch (e) {
-                console.error('Error on PUT, waiting...', puts.get(id).url)
+                console.error(e, 'Error on PUT, waiting...', puts.get(id).url)
                 puts.get(id).status = 'waiting'
             }
         }
@@ -180,7 +181,8 @@
                         method: 'get',
                         subscribe: true,
                         headers: {accept: 'application/json'},
-                        signal: aborter.signal
+                        signal: aborter.signal,
+                        // credentials: 'include'
                     }
                 ).andThen( function (new_version) {
                     // New update received!
@@ -208,6 +210,7 @@
                     setTimeout(function () { subscribe(key, t) },
                                reconnect_attempts > 0 ? 5000 : 1500)
                     subscriptions[key].status = 'reconnecting'
+                    reconnect_attempts++
                 })
 
                 // Remember this subscription
