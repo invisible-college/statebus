@@ -198,11 +198,11 @@
             var key = obj,
                 obj = bus.cache[key]
 
-            console.log('set.fire: applying the patch!', {
-                key: key,
-                obj: obj,
-                patch: t.patch[0]
-            })
+            // console.log('set.fire: applying the patch!', {
+            //     key: key,
+            //     obj: obj,
+            //     patch: t.patch[0]
+            // })
             obj.val = apply_patch(obj.val, t.patch[0])
         }
 
@@ -1791,7 +1791,7 @@
                 : parseInt(numstr)
         }
 
-        console.log('Getting path', JSON.stringify(path), 'in obj', obj)
+        // console.log('Getting path', JSON.stringify(path), 'in obj', obj)
 
         while (true) {
             var match = path_segment.exec(path),
