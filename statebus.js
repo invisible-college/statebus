@@ -1360,7 +1360,13 @@
                     return o.hasOwnProperty(proxied_2_keyed(k))
                 },
                 deleteProperty: function del (o, k) {
+                    var new_path = path + '[' + JSON.stringify(k) + ']'
                     delete o[proxied_2_keyed(k)]
+                    bus.set(
+                        base,
+                        // Forward the patch too
+                        {patch: [new_path + ' = ']}
+                    )
                     return true // Report success to Proxy
                 }
                 // For function proxies:
