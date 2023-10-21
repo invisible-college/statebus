@@ -88,10 +88,10 @@
         function send_put (id) {
             var the_put = puts.get(id)
             try {
-                console.log('Sending a put!', {
-                    patches: the_put.patches,
-                    body: the_put.body
-                })
+                // console.log('Sending a put!', {
+                //     patches: the_put.patches,
+                //     body: the_put.body
+                // })
 
                 the_put.status = 'sending'
                 braid_fetch(
@@ -108,7 +108,7 @@
                     }
                 ).then(function (res) {
                     if (res.status === 200) {
-                        console.log('PUT succeeded!')
+                        // console.log('PUT succeeded!')
                         puts.delete(id)
                     }
                     else
