@@ -1784,9 +1784,9 @@
         // The final object can be a slice
         // Set the value in the final object
 
-        var x = patch.match(/(.*) = (.*)/),
-            path = x[1],
-            new_stuff = JSON.parse(x[2])
+        var match = patch.match(/(.*) = (.*)/),
+            path = match[1],
+            new_stuff = match[2].length ? JSON.parse(match[2]) : undefined
 
         var path_segment = /^(\.?([^\.\[]+))|(\[((-?\d+):)?(-?\d+)\])|\[("(\\"|[^"])*")\]/
         var curr_obj = obj,
