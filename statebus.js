@@ -1456,6 +1456,9 @@
         link: Symbol('link')
     }
 
+    if (nodejs)
+        var util = require('util')
+
     // The top-level Proxy object holds HTTP resources
     var top_level_proxy = new Proxy(cache, {
         get: function get(o, k) {
