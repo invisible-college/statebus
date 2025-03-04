@@ -1462,14 +1462,17 @@
             if (k === symbols.is_proxy)
                 return true
             if (k === symbols.raw)
-                return raw_proxy()
-            if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
-                return undefined
+                return bus.cache
+            // if (k === 'inspect' || k === 'valueOf' || typeof k === 'symbol')
+            //     return undefined
             bogus_check(k)
             var base = bus.get(k)
             return json_proxy(base, '', base.val)
         },
         set: function set(o, key, val) {
+            if (typeof key === 'symbol')
+                return true
+
             bus.set({
                 key: key,
                 val: escape_json_to_bus(val)
@@ -1495,42 +1498,59 @@
 
             return o
 
-        // We recursively descend through {key: ...} links
+        // Then o must be an object, array, or link
+
+        // First, handle links.
         if (typeof o === 'object' && 'link' in o) {
             // var new_base = bus.get(o.link)
             // return json_proxy(new_base, '', new_base.val)
             return link(o.link)
+
+            // Todo: to allow modifying links, or adding new fields to them,
+            // we'll need to treat them more like a json_proxy, that passes
+            // the base into the proxy creator, allowing edits, etc.
         }
 
+        // Now it must be an array or object.  Shallow clone it, so we can set
+        // a custom formatter on it
+        var target = o
+        if (Array.isArray(target)) target = [...o]
+        else                       target = {...o}
 
-        // For function proxies:
-        //
-        // // Javascript won't let us function call a proxy unless the
-        // // "target" is a function.  So we make a dummy target, and
-        // // don't use it.
-        // var dummy = function () {}
+        // Now set the custom formatter
+        if (nodejs)
+            target[util.inspect.custom] = function print_as_proxy (depth, opts) {
+                var formatted = Array.isArray(target) ? [] : {}
+                for (let prop of Object.getOwnPropertyNames(target))
+                    formatted[prop] = target[prop]
+                formatted = unescape_bus_to_json(formatted)
 
+                return `Proxy ${util.inspect(formatted, { ...opts, customInspect: true })}`
+            }
 
-        return new Proxy(o, {
+        var proxy = new Proxy(target, {
             get: function (o, k) {
                 if (k === 'inspect' || k === 'valueOf')
                     return undefined
-                // if (custom_inspect && k === custom_inspect)
-                //     return custom_inspect
                 if (k === symbols.is_proxy)
                     return true
                 if (k === symbols.raw)
                     return o
-                if (typeof k === 'symbol')
-                    return undefined
 
                 // Compute the new path
                 var new_path = path + '[' + JSON.stringify(k) + ']'
                 return json_proxy(base, new_path, o[escape_field_json_to_bus(k)])
             },
-            set: function (o, k, v) {
+            set: function (target, k, v) {
                 var value = escape_json_to_bus(v)
-                o[escape_field_json_to_bus(k)] = value
+                var escaped_key = escape_field_json_to_bus(k)
+
+                // Now mutate both the shallow-copied target and the original
+                // object because we have two because es6 proxies are stupidly
+                // designed and we had to make a copy to make custom inspect
+                // symbol work
+                     o[escaped_key] = value
+                target[escaped_key] = value
                 var new_path = path + '[' + JSON.stringify(k) + ']'
                 bus.set.sync(
                     base,
@@ -1541,20 +1561,20 @@
                 )
                 return true
             },
-            has: function (o, k) {
-                // if (custom_inspect && k === custom_inspect)
-                //     return true
-                return o.hasOwnProperty(escape_field_json_to_bus(k))
-            },
-            ownKeys: function () {
-                return Object.keys(o).map(unescape_field_bus_to_json)
-            },
-            getOwnPropertyDescriptor: function (target, key) {
-                return { enumerable: true, configurable: true, value: this.get(o, key) }
-            },
-            deleteProperty: function del (o, k) {
+            // has: function (o, k) {
+            //     return o.hasOwnProperty(escape_field_json_to_bus(k))
+            // },
+            // ownKeys: function () {
+            //     return Object.keys(target).map(unescape_field_bus_to_json)
+            // },
+            // getOwnPropertyDescriptor: function (target, key) {
+            //     return { enumerable: true, configurable: true, value: this.get(target, key) }
+            // },
+            deleteProperty: function del (target, k) {
                 var new_path = path + '[' + JSON.stringify(k) + ']'
-                delete o[escape_field_json_to_bus(k)]
+                var escaped_key = escape_field_json_to_bus(k)
+                delete      o[escaped_key]
+                delete target[escaped_key]
                 bus.set(
                     base,
                     // Forward the patches too
@@ -1563,16 +1583,31 @@
                                 content: undefined}]}
                 )
                 return true // Report success to Proxy
-            }
-            // For function proxies:
-            //
-            // apply: function apply (o, This, args) {
-            //     return translate_fields(o, unescape_field_from_bus)
-            // }
+            },
         })
+
+        return proxy
     }
 
     bus.state = top_level_proxy
+
+    // This doesn't work because custom inspectors only work when the
+    // util.inspect.custom symbol is defined on the "target" of the
+    // proxy... which right now is `cache` for the top_level_proxy.  I could
+    // shallow-copy cache into a new target variable, and add this symbol to
+    // it, and keep them in sync, but that sounds annoying.  I'm just going to
+    // ignore the custom proxy formatter on the top-level-proxy for now.
+
+    // if (nodejs) {
+    //     var util = require('util')
+    //     top_level_proxy[util.inspect.custom] = function(depth, opts) {
+    //         var formatted = {}
+    //         for (let prop of Object.getOwnPropertyNames(cache)) {
+    //             formatted[prop] = cache[prop].val
+    //         }
+    //         return `STATE ${util.inspect(formatted, { ...opts, customInspect: true })}`
+    //     }
+    // }
 
     // This is temporary code to wrap the cache as a flat key/valuel store
     // that returns raw objects, dereferencing .val.  We can remove it once we
@@ -1589,26 +1624,29 @@
         })
     }
 
-    // How proxy links work right now:
-    //  - The user creates a link with bus.link(key)
-    //    - which produces a {[symbols.link]: key}
-    //    - which when set() into a proxy, is replaced with a {link: key}, to store internally
-    //  - Then, when get()ing that internal {link: key} through Proxy:
-    //    - We auto-dereference the key, with another get()
-    //    - So the user actually sees the value of the resource on the other side of the link
-    function link (url) {
-        return {
-            link: url,
-            [symbols.link]: true,
-            _: (args, o) => (o = get(url), json_proxy(o, '', o.val))
-        }
-    }
 
-    // // The proxy object for links.  Disabled for now.
-    // // This type of link has to be function called, as link(), to dereference.
+    // Old link code:
+
+    // // How proxy links work right now:
+    // //  - The user creates a link with bus.link(key)
+    // //    - which produces a {[symbols.link]: key}
+    // //    - which when set() into a proxy, is replaced with a {link: key}, to store internally
+    // //  - Then, when get()ing that internal {link: key} through Proxy:
+    // //    - We auto-dereference the key, with another get()
+    // //    - So the user actually sees the value of the resource on the other side of the link
+    // function link (url) {
+    //     return {
+    //         link: url,
+    //         [symbols.link]: true,
+    //         _: (args, o) => (o = get(url), json_proxy(o, '', o.val))
+    //     }
+    // }
+
+    // The proxy object for links.  Disabled for now.
+    // This type of link has to be function called, as link(), to dereference.
     // function proxy_link (url) {
     //     function follow_link () {}
-    //     return new Proxy(follow_link, {
+    //     var proxy = new Proxy(follow_link, {
     //         get: function (o, k) {
     //             console.log('get', k)
     //             if (k === 'inspect' || k === 'valueOf')
@@ -1686,7 +1724,109 @@
     //             return top_level_proxy[url]
     //         }
     //     })
+
+    //     proxy[util.inspect.custom] = function(depth, opts) {
+    //         var formatted = Array.isArray(o) ? [] : {}
+    //         for (let prop of Object.getOwnPropertyNames(o)) {
+    //             formatted[prop] = o[prop]
+    //         }
+    //         return `*${util.inspect({link: url})}`
+    //     }
+
+    //     return proxy
+
     // }
+
+    // function proxy_link2 (url) {
+    //     var target = {link: url}
+
+    //     Object.setPrototypeOf(obj, Function.prototype);
+    //     Object.defineProperty(obj, 'toString', {
+    //         value: function() { return `{link: "${this.link}"}`; },
+    //         writable: true,
+    //         configurable: true
+    //     })
+
+    //     return new Proxy(target, {
+    //         apply(target, this_arg, args) {
+    //             return top_level_proxy[url]
+    //         }
+    //     })
+    // }
+
+
+    // New link code
+    function link (url) {
+        var target = () => {}
+
+        // Use non-enumerable properties for function stuff
+        Object.defineProperties(target, {
+            // 'length': { value: 0, enumerable: false },
+            'name': { value: '', enumerable: false },
+            'prototype': { value: {}, enumerable: false },
+
+            // Make link enumerable
+            'link': { value: url, enumerable: true, writable: true, configurable: true },
+            'toString': {
+                value: function() { return `{link: "${this.link}"}` },
+                enumerable: false
+            },
+
+            // Add toJSON method
+            'toJSON': {
+                value: function() { return { link: this.link } },
+                enumerable: false
+            }
+        })
+
+        var proxy = new Proxy(target, {
+            get: function (o, k) {
+                // console.log('link getting',k)
+                // if (k === 'inspect' || k === 'valueOf')
+                //     return undefined
+
+                // if (custom_inspect && k === custom_inspect)
+                //     return custom_inspect
+                if (k === symbols.is_proxy)
+                    return true
+                if (k === symbols.link)
+                    return true
+                if (k === symbols.raw)
+                    return {link: url}
+                // if (typeof k === 'symbol')
+                //     return undefined
+
+                // if (k === 'link')
+                //     return url
+
+                return target[k]
+
+                // return undefined
+
+            },
+            apply(target, this_arg, args) {
+                return top_level_proxy[url]
+            },
+            has: function (o, k) {
+                if (k === symbols.link)
+                     return true
+                return Reflect.has(o, k)
+            },
+        })
+
+        if (nodejs)
+            proxy[util.inspect.custom] = function(depth, opts) {
+                var formatted = Array.isArray(target) ? [] : {}
+                for (let prop of Object.getOwnPropertyNames(target)) {
+                    formatted[prop] = target[prop]
+                }
+                formatted = {link: url}
+                return `Proxy ${util.inspect(formatted, { ...opts, customInspect: true })}`
+            }
+
+        return proxy
+    }
+
     function raw (proxy) {
         if (!(typeof proxy === 'object' && proxy[symbols.is_proxy]))
             return proxy
@@ -2099,13 +2239,14 @@
     var unescape_field_bus_to_json = (field) =>
         unescape_field_from_nelson(unescape_field_from_bus(field))
 
-    var escape_json_to_bus = (obj) => {
+    var escape_json_to_bus         = (obj) => {
         obj = translate_fields(obj, escape_field_json_to_bus)
-        return deep_map(obj, o => (typeof o === 'object' && symbols.link in o
+        return deep_map(obj, o => ((typeof o === 'object' || typeof o === 'function')
+                                   && symbols.link in o
                                    ? {link: o.link}
                                    : o))
     }
-    var unescape_bus_to_json = (obj) =>
+    var unescape_bus_to_json       = (obj) =>
         translate_fields(obj, field => unescape_field_bus_to_json(field))
         
 
@@ -2443,6 +2584,8 @@
 
         if (typeof obj === 'object') {
             if (schema === 'object')     return true
+            if (schema === 'link')
+                return validate(obj, {link: 'string'})
 
             if (typeof schema === 'object') {
                 for (var k in obj) {
@@ -2599,8 +2742,9 @@
     if (nodejs)
         // Use require.call() instead of require() to fool jsdelivr.net into ignoring the require
         require.call(null, './server-library').import_server(bus, make_bus, options)
-    
+
     bus.render_when_loading = true
+
     return bus
 }
 

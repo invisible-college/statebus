@@ -81,12 +81,13 @@ test(function validation (done) {
         [{a: false}, {a: 'boolean'}, true],
         [{a: 1, b: 2}, {a: 1}, false],
         [{a: 1, b: 2}, {a: 1, '*':'*'}, true],
-        [{a: 2, b: 2}, {a: 1, '*':'*'}, false]
+        [{a: 2, b: 2}, {a: 1, '*':'*'}, false],
+        [{a: {link: "foo"}}, {a: 'link'}, true]
     ]
 
     for (var i=0; i<v_tests.length; i++)
         assert(bus.validate(v_tests[i][0], v_tests[i][1]) === v_tests[i][2],
-               'Validation test failed', v_tests[i])
+               'Validation test failed: ' + i + ' ' + JSON.stringify(v_tests[i]))
 
     done()
 })
@@ -319,9 +320,82 @@ test(function proxy_link (done) {
     done()
 })
 
+function verify_no_proxies (bus) {
+    bus.deep_map(bus.cache, o => {
+        if ((typeof o === 'object' || typeof o === 'function')
+            && o[bus.symbols.is_proxy]) {
+            console.trace('NOOOO proxy is here', obj)
+            throw 'We got a bad one!!!'
+        }
+        return o
+    })
+}
+
 // Disable the version of proxy_links_through where the user does not have to
 // explicitly traverse links with ._()
 if (true)
+    test(function proxy_links_through3 (done) {
+        var bus = require('../statebus')()
+
+        // First try to dereference through three links
+
+        bus.state.a = [bus.link('b')]
+        bus.state.b = bus.link('c')
+        bus.state.c = 'see'
+
+        verify_no_proxies(bus)
+
+        log('state.c is',        bus.state.c)
+        log('state.b is',        bus.state.b, 'from cache', bus.cache.b)
+        log('state.a is',        bus.state.a)
+        log('state.a[0] is',     bus.state.a[0])
+        log('state.a[0]() is',   bus.state.a[0]())
+        log('state.a[0]()() is', bus.state.a[0]()())
+        assert(bus.state.a[0]()() === 'see')
+
+        verify_no_proxies(bus)
+
+        // Add a little more wrapping and try some more
+
+        bus.state.nested = [99, {a: bus.link('a')}]
+        log('nested is', bus.state.nested, bus.state.nested[bus.symbols.is_proxy])
+        log('raw nested is', bus.state[bus.symbols.raw].nested)
+        log('raw cache is', bus.cache.nested)
+
+        log('nested[1].a()[0]()() is', bus.state.nested[1].a()[0]()())
+        assert(bus.state.nested[1].a()[0]()() === 'see')
+
+        verify_no_proxies(bus)
+
+        // Now try to go raw at the top-level
+
+        log('Raw is', bus.state[bus.symbols.raw].nested)
+        log('Raw is', bus.raw(bus.state).nested)
+        assert(bus.deep_equals(
+            bus.state[bus.symbols.raw].nested,
+            bus.raw(bus.state).nested
+        ))
+
+        verify_no_proxies(bus)
+
+        log('Gonna deep_quals between:',
+            bus.raw(bus.state).nested.val,
+            [ 99, { a: { link: 'a' } } ])
+
+        assert(bus.deep_equals(
+            bus.raw(bus.state).nested.val,
+            [ 99, { a: { link: 'a' } } ]
+        ))
+
+        // Now try to go raw within
+
+        log('Raw inner is', bus.raw(bus.state.nested[1]))
+
+        log('Bad raw call is', bus.raw(bus.state.nested[0]))
+
+        done()
+    })
+else if (false)
     test(function proxy_links_through2 (done) {
         var bus = require('../statebus')()
 
@@ -445,6 +519,90 @@ test(function copy_link (done) {
     done()
 })
 
+
+
+// This was useful test code for figuring out how to set custom formatters on
+// proxies. It's not needed anymore.
+//
+// test(function proxy_printing_in_node (done) {
+//     var bus = require('../statebus')(), state = bus.state
+//
+//     state.a = [bus.link('b')]
+//     state.b = 3
+//     state.c = {a: 3, link: 99}
+//
+//     log('a in cache is', bus.cache.a,
+//         {'typeof': typeof bus.cache.a === 'object',
+//          symbolsin: bus.symbols.link in bus.cache.a})
+//
+//     log('state:', state)
+//     log('state.a:', state.a)
+//     log('state.b:', state.b)
+//     log('state.c:', state.c)
+//
+//     var util = require('util')
+//
+//     assert(util.inspect(state.a) === "Proxy [ { link: 'b' } ]")
+//     assert(util.inspect(state.b) === "3")
+//     assert(util.inspect(state.c) === "Proxy { a: 3, link: 99 }")
+//
+//     log('passed!')
+//
+//     // This version is abstracted and tested:
+//     var util = require('util')
+//     function make_proxy(target) {
+//         // Don't proxy null or non-objects
+//         if (!target || typeof target !== 'object') return target
+//
+//         // Create proxies for all nested objects
+//         var clean = Array.isArray(target) ? [] : {}
+//         for (let prop of Object.getOwnPropertyNames(target)) {
+//             clean[prop] = make_proxy(target[prop])
+//         }
+//
+//         // Create the proxy
+//         var proxy = new Proxy(clean, {
+//             get(target, prop) {
+//                 return target[prop]
+//             }
+//         })
+//
+//         // Add custom inspector
+//         proxy[util.inspect.custom] = function(depth, opts) {
+//             var formatted = Array.isArray(target) ? [] : {}
+//             for (let prop of Object.getOwnPropertyNames(target)) {
+//                 formatted[prop] = target[prop]
+//             }
+//             return `Proxy ${util.inspect(formatted, { ...opts, customInspect: true })}`
+//         }
+//
+//         return proxy
+//     }
+//
+//     // Test various scenarios
+//     var data = {
+//         name: 'parent',
+//         child: {
+//             name: 'kid',
+//             toy: {
+//                 name: 'teddy'
+//             }
+//         },
+//         numbers: [1, 2, {x: 3}],  // Test with array containing object
+//         nullVal: null,            // Test with null
+//         primitive: 42             // Test with primitive
+//     }
+//
+//     var proxied = make_proxy(data)
+//     console.log('Full object:', proxied)
+//     console.log('Child:', proxied.child)
+//     console.log('Toy:', proxied.child.toy)
+//     console.log('Numbers:', proxied.numbers)
+//     console.log('Null value:', proxied.nullVal)
+//     console.log('Primitive:', proxied.primitive)
+//
+//     done()
+// })
 
 test(function translate_fields (done) {
     // Translate Statebus -> Proxy format
@@ -906,6 +1064,8 @@ test(function readfile (done) {
 test(function proxies (done) {
     var bus = require('../statebus').serve({file_store: false})
     var state = bus.state
+
+    log('Top-level proxy looks like:', bus.state)
 
     assert(state.array === undefined)
     assert(state.bar === undefined)
