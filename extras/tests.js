@@ -1129,17 +1129,14 @@ test(function proxies (done) {
 
     state.foo = 3
     // This should set into _
-    console.assert(bus.validate(bus.cache.foo,
-                                {key: 'foo', _: 3}))
+    assert(bus.validate(bus.cache.foo, {key: 'foo', _: 3}))
 
 
     state.foo = {a: 5}
     // This should set directly on it
-    console.assert(bus.validate(bus.cache.foo,
-                                {key: 'foo', a: 5}))
+    assert(bus.validate(bus.cache.foo, {key: 'foo', a: 5}))
     state.foo.b = 6
-    console.assert(bus.validate(bus.cache.foo,
-                                {key: 'foo', b: 6}))
+    assert(bus.validate(bus.cache.foo, {key: 'foo', b: 6}))
 
     state.bar = [3]
     state.foo = {a: 3, bar: state.bar}
@@ -1156,6 +1153,23 @@ test(function proxies (done) {
     })
 
     // Getting a normal property should do a get
+})
+
+test(function proxy_link_escaping (done) {
+    var bus = require('../statebus')()
+    var state = bus.state
+
+    // See that links get escaped
+    state.foo = {link: "bar"}
+    assert(bus.validate(bus.cache.foo,
+                        {key: "foo", val: {_link: "bar"}}))
+
+    // And unescaped
+    // log("state.foo", state.foo)
+    // log("state.foo", JSON.stringify(state.foo))
+    assert(bus.validate(state.foo, {link: "bar"}))
+
+    done()
 })
 
 test(function path_parts (done) {

@@ -1487,6 +1487,7 @@
             return true // Report success to Proxy
         }
     })
+    bus.state = top_level_proxy
 
     // The proxy within; a recursive tree holds each piece of JSON in a resource
     function json_proxy (base, path, o) {
@@ -1533,6 +1534,8 @@
 
         var proxy = new Proxy(target, {
             get: function (o, k) {
+                // console.log('proxy get:', o, k)
+
                 if (k === 'inspect' || k === 'valueOf')
                     return undefined
                 if (k === symbols.is_proxy)
@@ -1564,15 +1567,17 @@
                 )
                 return true
             },
-            // has: function (o, k) {
-            //     return o.hasOwnProperty(escape_field_json_to_bus(k))
-            // },
-            // ownKeys: function () {
-            //     return Object.keys(target).map(unescape_field_bus_to_json)
-            // },
-            // getOwnPropertyDescriptor: function (target, key) {
-            //     return { enumerable: true, configurable: true, value: this.get(target, key) }
-            // },
+            has: function (o, k) {
+                return o.hasOwnProperty(escape_field_json_to_bus(k))
+            },
+            ownKeys: function () {
+                return Object.keys(target).map(unescape_field_bus_to_json)
+            },
+            getOwnPropertyDescriptor: function (target, key) {
+                return { enumerable: true, configurable: true,
+                         value: this.get(target, escape_field_json_to_bus(key))
+                       }
+            },
             deleteProperty: function del (target, k) {
                 var new_path = path + '[' + JSON.stringify(k) + ']'
                 var escaped_key = escape_field_json_to_bus(k)
@@ -1592,8 +1597,6 @@
         return proxy
     }
 
-    bus.state = top_level_proxy
-
     // This doesn't work because custom inspectors only work when the
     // util.inspect.custom symbol is defined on the "target" of the
     // proxy... which right now is `cache` for the top_level_proxy.  I could
@@ -1612,20 +1615,22 @@
     //     }
     // }
 
-    // This is temporary code to wrap the cache as a flat key/valuel store
-    // that returns raw objects, dereferencing .val.  We can remove it once we
-    // remove the internal .val stuff from statebus.
-    function raw_proxy () {
-        return new Proxy(cache, {
-            get: function get(o, k) { return bus.cache[k].val },
-            set: function set(o, key, val) {
-                return false
-            },
-            deleteProperty: function del (o, k) {
-                return false
-            }
-        })
-    }
+    // This is disabled because it's not being used.
+    //
+    // // This is temporary code to wrap the cache as a flat key/valuel store
+    // // that returns raw objects, dereferencing .val.  We can remove it once we
+    // // remove the internal .val stuff from statebus.
+    // function raw_proxy () {
+    //     return new Proxy(cache, {
+    //         get: function get(o, k) { return bus.cache[k].val },
+    //         set: function set(o, key, val) {
+    //             return false
+    //         },
+    //         deleteProperty: function del (o, k) {
+    //             return false
+    //         }
+    //     })
+    // }
 
 
     // Old link code:
