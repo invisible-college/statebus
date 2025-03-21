@@ -480,7 +480,7 @@ else
         ))
 
         log('Gonna deep_quals between:',
-            bus.raw(bus.state).nested,
+            bus.cache.nested.val,
             [ 99, { a: { link: 'a' } } ])
 
         assert(bus.deep_equals(

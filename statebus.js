@@ -1541,7 +1541,7 @@
                 if (k === symbols.is_proxy)
                     return true
                 if (k === symbols.raw)
-                    return o
+                    return unescape_bus_to_json(o)
 
                 // Compute the new path
                 var new_path = path + '[' + JSON.stringify(k) + ']'
