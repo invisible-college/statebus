@@ -2371,31 +2371,34 @@ function import_server (bus, make_statebus, options)
     // Installs a GET handler at route that gets state from a getter function
     // Note: Makes too many textbusses.  Should re-use one.
     http_serve: function http_serve (route, getter) {
-        var textbus = make_statebus()
-        textbus.label = 'textbus'
-        var watched = new Set()
-        textbus('*').getter = (filename, old) => {
-            return {etag: Math.random() + '',
-                    _: getter(filename)}
+        if (!this.filebus) {
+            this.filebus = make_statebus()
+            this.filebus.label = 'filebus'
         }
+        var filebus = this.filebus
+
+        filebus('*').getter = (filename, old) => ({
+            etag: Math.random() + '',
+            contents: getter(filename)
+        })
         bus.http.get(route, (req, res) => {
             var path = req.path
-            var etag = textbus.cache[path] && textbus.cache[path].etag
+            var etag = filebus.cache[path] && filebus.cache[path].etag
             if (etag && req.get('If-None-Match') === etag) {
                 res.status(304).end()
                 return
             }
 
-            textbus.get(req.path) // So that textbus never clears the cache
-            textbus.get(req.path, function cb (o) {
+            filebus.get(req.path) // So that filebus never clears the cache
+            filebus.get(req.path, function cb (o) {
                 res.setHeader('Cache-Control', 'public')
                 // res.setHeader('Cache-Control', 'public, max-age='
                 //               + (60 * 60 * 24 * 30))  // 1 month
                 res.setHeader('ETag', o.etag)
                 res.setHeader('Access-Control-Allow-Origin', '*')
                 res.setHeader('Content-Type', 'application/javascript')
-                res.send(o._)
-                textbus.forget(o.key, cb)  // But we do want to forget the cb
+                res.send(o.contents)
+                filebus.forget(o.key, cb)  // But we do want to forget the cb
             })
         })
     },

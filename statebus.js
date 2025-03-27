@@ -963,45 +963,11 @@
         // We're currently calling that (param1,param2:val2) part "function params", and presuming
         // that it exists in the () part of the pattern like in /foo/bar*().
         function func_args () {
-            // This code is copied from Raphael Walker's parser.coffee
-            function split_once (str, char) {
-                var i = str.indexOf(char)
-                return i === -1 ? [str, ""] : [str.slice(0, i), str.slice(i + 1)]
-            }
-
-            // Function Strings -- an alternative to query strings
-            //
-            function parse_function_string (str) {
-                // Coffeescript doesn't have object comprehensions :(
-                var ret = {}
-
-                // Now process the string:
-                str
-                    // Pull out the parentheses
-                    .slice(1, -1)
-                    // Split by commas. TODO: Allow spaces after commas?
-                    .split(",")
-                    // Delete empty parts (this ensures that empty strings
-                    // will properly result in empty func_string, and allows trailing
-                    // commas)
-                    .filter(part => part.length)
-                    .forEach(part => {
-                        // If the part has a comma, its a key:value, otherwise
-                        // it's just a singleton
-                        var [k, v] = split_once(part, ":")
-                        
-                        if (v.length === 0) ret[k] = true
-                        // If the value is itself a func_string params object, parse it recursively
-                        else if (v.startsWith("(")) ret[k] = parse_function_string(v)
-                        else ret[k] = v
-                    })
-                return ret
-            }
             // console.log('Getting func_args from', func.statebus_binding.args)
             if (!(func.statebus_binding.args
                   && func.statebus_binding.args.func_args))
                 return undefined
-            return parse_function_string(func.statebus_binding.args.func_args)
+            return funcarg_parse(func.statebus_binding.args.func_args)
         }
         var f = reactive(function () {
             // Initialize transaction
@@ -1446,6 +1412,62 @@
         return new Promise((resolve, reject) =>
             bus.get_once(key, (o) => resolve(o)))
     }
+
+    // ******************
+    // Function Args -- an alternative to Query Params
+
+    // Parse a funcarg string.
+
+    function funcarg_parse (str) {
+        // Coffeescript doesn't have object comprehensions :(
+        var ret = {}
+
+        function split_once (str, char) {
+            var i = str.indexOf(char)
+            return i === -1 ? [str, ""] : [str.slice(0, i), str.slice(i + 1)]
+        }
+
+        // Now process the string:
+        str
+            // Pull out the parentheses
+            .slice(1, -1)
+            // Split by commas. TODO: Allow spaces after commas?
+            .split(",")
+            // Delete empty parts (this ensures that empty strings
+            // will properly result in empty func_string, and allows trailing
+            // commas)
+            .filter(part => part.length)
+            .forEach(part => {
+                // If the part has a comma, its a key:value, otherwise
+                // it's just a singleton
+                var [k, v] = split_once(part, ":")
+
+                if (v.length === 0) ret[k] = true
+                // If the value is itself a func_string params object, parse it recursively
+                else if (v.startsWith("(")) ret[k] = funcarg_parse(v)
+                else ret[k] = v
+            })
+        return ret
+    }
+
+    // Generate a funcarg string
+    function funcarg_stringify (obj) {
+        var inner = Object.entries(obj)
+        // Allowed values in KSON are: object, string, true
+        // Arrays are in fact objects, and we don't need to treat them differently.
+        // Their order won't change!
+            .filter(([k, v]) => v)
+            .sort()
+            .map(([k, v]) => {
+                if (typeof v === "boolean") return k
+                if (typeof v === "string") return `${k}:${v}`
+                if (typeof v === "object") return `${k}:${funcarg_string(v)}`
+                return ""
+            })
+            .join(",")
+        return inner.length ? `(${inner})` : ""
+    }
+
 
     // ******************
     // Proxy
@@ -2717,6 +2739,7 @@
                'old_subspace new_subspace bindings run_handler bind unbind reactive uncallback',
                'versions new_version',
                'aget client_bus_for',
+               'funcarg_parse funcarg_stringify',
                'funk_key funk_name funks key_id key_name id',
                'pending_gets gets_in gets_out loading_keys loading once',
                'global_funk busses rerunnable_funks',
