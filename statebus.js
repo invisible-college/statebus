@@ -663,14 +663,17 @@
 
         function pattern_matcher (pattern) {
             var param_names = []
-            var regex = new RegExp('^' + pattern.replace(/(?<=^|\/):[^/()]+|\*/g, function (match) {
+            function replace_param (match, prefix, param, star) {
                 // Replace * with .*
-                if (match === '*') return '.*'
+                if (star === '*') return '.*'
 
                 // Replace :foo with ([^/]+), and remember the "foo" name
-                param_names.push(match.slice(1))
-                return '([^/]+)'
-            }) + '$')
+                param_names.push(param.slice(1))
+                return prefix + '([^/]+)'
+            }
+            var regex = new RegExp('^'
+                                   + pattern.replace(/(^|\/)(:[^/()]+)|(\*)/g, replace_param)
+                                   + '$')
             
             return function (path) {
                 var match = path.match(regex)
@@ -752,7 +755,7 @@
                     method: method,
                     params: matches
                 }
-                result.push({method, key:handler.pattern, func:handler.funk})
+                result.push({method:method, key:handler.pattern, func:handler.funk})
                 seen[funk_key(handler.funk)] = true
             }
         }
@@ -761,6 +764,11 @@
     }
 
     function run_handler(funck, method, arg, options) {
+        // If method == "save",   then arg is an object {}
+        // If method == "fetch",  then arg is a key
+        // If method == "forget", then arg is a key
+        // If method == "delete", then arg is a key
+
         options = options || {}
         var t = options.t,
             just_make_it = options.dont_run,
@@ -821,7 +829,7 @@
         // Fresh fetch/save/forget/delete handlers will just be regular
         // functions.  We'll store their arg and transaction and let them
         // re-run until they are done re-running.
-        function key_arg () { return ((typeof arg.key) == 'string') ? arg.key : arg }
+        function key_arg () { return ((typeof arg.key) === 'string') ? arg.key : arg }
         function rest_arg () { return (key_arg()).substr(binding.length-1) }
         function vars_arg () {
             var r = rest_arg()
