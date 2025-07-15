@@ -297,6 +297,7 @@ function import_server (bus, options)
         cbus.serves_auth({remoteAddress: req.connection.remoteAddress}, bus)
         bus.options.client(cbus)
         cbus.save({key: 'current_user', client: req.client})
+        req.client_bus = cbus
         return cbus
     },
 
