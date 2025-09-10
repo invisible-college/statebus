@@ -190,10 +190,10 @@ function import_server (bus, make_statebus, options)
 
             function send_update (obj, t) {
                 var body = to_http_body(obj)
-                // console.log('http_in: Sending update of', body)
+                console.log('http_in: Sending update of', body, 'for', req.url)
 
                 res.sendUpdate({
-                    body,
+                    body: body || '',
                     // If body === undefined, send 404
                     status: body === undefined ? 404 : 200
                 })
@@ -1031,154 +1031,6 @@ function import_server (bus, make_statebus, options)
                 } else return o
             })
         }
-    },
-
-    setup_usage_log (opts) {
-        bus.serve_time()
-        opts = opts || {}
-        opts.filename = opts.filename || 'db.sqlite'
-        var db = new (require('better-sqlite3'))(opts.filename)
-        bus.usage_log_db = db
-        //db.pragma('journal_mode = WAL')
-        db.prepare('create table if not exists usage (date integer, event text, details text)').run()
-        db.prepare('create index if not exists date_index on usage (date)').run()
-        var refresh_interval = 1000*60
-
-        var nots = ["details not like '%facebookexternalhit%'",
-                    "details not like '%/apple-touch-icon%'",
-                    "details not like '%Googlebot%'",
-                    "details not like '%AdsBot-Google%'",
-                    "details not like '%Google-Adwords-Instant%'",
-                    "details not like '%Apache-HttpClient%'",
-                    "details not like '%SafeDNSBot%'",
-                    "details not like '%RevueBot%'",
-                    "details not like '%MetaURI API%'",
-                    "details not like '%redback/v%'",
-                    "details not like '%Slackbot%'",
-                    "details not like '%HTTP_Request2/%'",
-                    "details not like '%python-requests/%'",
-                    "details not like '%LightspeedSystemsCrawler/%'",
-                    "details not like '%CipaCrawler/%'",
-                    "details not like '%Twitterbot/%'",
-                    "details not like '%Go-http-client/%'",
-                    "details not like '%/cheese_service%'"
-                   ].join(' and ')
-        bus.usage_log_nots = nots
-
-        // Aggregate all accesses by day, to get daily active users
-        bus('usage').getter = () => {
-            bus.get('time/' + refresh_interval)
-            var days = []
-            var last_day
-            for (var row of db.prepare('select * from usage where '
-                                       + nots + ' order by date').iterate()) {
-                row.details = JSON.parse(row.details)
-                if (row.details.agent && row.details.agent.match(/bot/)) continue
-
-                var d = new Date(row.date * 1000)
-                var day = d.getFullYear() + '-' + (d.getMonth()+1) + '-' + d.getDate()
-                if (last_day !== day)
-                    days.push({day: day,    // Init
-                               clients: new Set(),
-                               ips: new Set(),
-                               client_socket_opens: new Set(),
-                               ip_socket_opens: new Set()
-                              })
-                last_day = day
-                
-                if (row.event === 'socket open') {
-                    days[days.length-1].client_socket_opens.add(row.details.client)
-                    days[days.length-1].ip_socket_opens.add(row.details.ip)
-                }
-                days[days.length-1].clients.add(row.details.client)
-                days[days.length-1].ips.add(row.details.ip)
-            }
-
-            for (var i=0; i<days.length; i++)
-                days[i] = {day: days[i].day,
-                           ip_hits: days[i].ips.size,
-                           client_hits: days[i].clients.size,
-                           client_socket_opens: days[i].client_socket_opens.size,
-                           ip_socket_opens: days[i].ip_socket_opens.size
-                          }
-
-            return {_: days}
-        }
-
-        bus('recent_hits/*').getter = (rest) => {
-            bus.get('time/' + refresh_interval)
-            var result = []
-            for (var row of db.prepare('select * from usage where '
-                                       + nots + ' order by date desc limit ?').iterate(
-                                           [parseInt(rest)])) {
-
-                row.details = JSON.parse(row.details)
-                if (row.details.agent && row.details.agent.match(/bot/)) continue
-
-                result.push({url: row.details.url, ip: row.details.ip, date: row.date})
-            }
-
-            return {_: result}
-        }
-
-        bus('recent_referers/*').getter = (rest) => {
-            bus.get('time/' + refresh_interval)
-            var result = []
-            for (var row of db.prepare('select * from usage where '
-                                       + nots + ' order by date desc limit ?').iterate(
-                                           [parseInt(rest)])) {
-
-                row.details = JSON.parse(row.details)
-                if (row.details.agent && row.details.agent.match(/bot/)) continue
-
-                if (row.details.referer && !row.details.referer.match(/^https:\/\/cheeseburgertherapy.com/))
-                    result.push({url: row.details.url, referer: row.details.referer,
-                                 date: row.date})
-            }
-
-            return {_: result}
-        }
-
-
-        function sock_open_time (sock_event) {
-            var client = JSON.parse(sock_event.details).client
-            if (!client) return null
-
-            var http_req = db.prepare('select * from usage where event = "http request" and date < ? and '
-                                      + ' details like ? and '
-                                      + nots + ' order by date desc limit 1').get([sock_event.date,
-                                                                                       '%'+client+'%'])
-            if (!http_req) return null
-
-            var delay = sock_event.date - http_req.date
-            var res = !delay || delay > 300 ? 'fail' : delay
-            if (delay && delay < 300
-                && JSON.parse(sock_event.details).ip
-                !== JSON.parse(http_req.details).ip)
-                console.error('Yuck!', delay, sock_event, http_req)
-            return [res, JSON.parse(http_req.details).url]
-        }
-        function sock_open_times () {
-            var opens = db.prepare('select * from usage where event = "socket open" and '
-                                   + nots + ' order by date desc limit ?').all(500)
-            var times = []
-            for (var i=0; i<opens.length; i++) {
-                times.push(sock_open_time(opens[i]))
-                // Get the most recent http hit before this open, from the same client id
-                // subract the times
-            }
-            return times
-        }
-
-        bus('socket_load_times').getter = () => {
-            return {_: sock_open_times()}
-        }
-    },
-    log_usage(event, details) {
-        bus.usage_log_db.prepare('insert into usage (date, event, details) values (?, ?, ?)')
-            .run([new Date().getTime()/1000,
-                  event,
-                  JSON.stringify(details)])
     },
 
     time () {
@@ -2371,35 +2223,41 @@ function import_server (bus, make_statebus, options)
     // Installs a GET handler at route that gets state from a getter function
     // Note: Makes too many textbusses.  Should re-use one.
     http_serve: function http_serve (route, getter) {
-        if (!this.filebus) {
-            this.filebus = make_statebus()
-            this.filebus.label = 'filebus'
-        }
-        var filebus = this.filebus
+        // if (!this.filebus) {
+        //     this.filebus = make_statebus()
+        //     this.filebus.label = 'filebus'
+        // }
+        // var filebus = this.filebus
 
-        filebus('*').getter = (filename, old) => ({
-            etag: Math.random() + '',
-            contents: getter(filename)
-        })
+        var cache = this.compiled_coffee = this.compiled_coffee || {}
+
+        // filebus('*').getter = (filename, old) => ({
+        //     etag: Math.random() + '',
+        //     contents: getter(filename)
+        // })
         bus.http.get(route, (req, res) => {
+            console.log('Getting', route, req.path, 'from',
+                        Object.values(cache).map(x => JSON.stringify(x).substr(0, 100)))
             var path = req.path
-            var etag = filebus.cache[path] && filebus.cache[path].etag
+            var etag = cache[path] && cache[path].etag
             if (etag && req.get('If-None-Match') === etag) {
                 res.status(304).end()
                 return
             }
 
-            filebus.get(req.path) // So that filebus never clears the cache
-            filebus.get(req.path, function cb (o) {
-                res.setHeader('Cache-Control', 'public')
-                // res.setHeader('Cache-Control', 'public, max-age='
-                //               + (60 * 60 * 24 * 30))  // 1 month
-                res.setHeader('ETag', o.etag)
-                res.setHeader('Access-Control-Allow-Origin', '*')
-                res.setHeader('Content-Type', 'application/javascript')
-                res.send(o.contents)
-                filebus.forget(o.key, cb)  // But we do want to forget the cb
-            })
+            if (!cache[path])
+                cache[path] = {
+                    etag: Math.random() + '',
+                    contents: getter(path)
+                }
+
+            res.setHeader('Cache-Control', 'public')
+            // res.setHeader('Cache-Control', 'public, max-age='
+            //               + (60 * 60 * 24 * 30))  // 1 month
+            res.setHeader('ETag', cache[path].etag)
+            res.setHeader('Access-Control-Allow-Origin', '*')
+            res.setHeader('Content-Type', 'application/javascript')
+            res.send(cache[path].contents)
         })
     },
 
@@ -2407,7 +2265,11 @@ function import_server (bus, make_statebus, options)
         bus.http_serve('/client/:filename', (filename) => {
             filename = /\/client\/(.*)/.exec(filename)[0]
             var source_filename = filename.substr(1)
-            var source = bus.read_file(source_filename)
+            var source = fs.readFileSync(source_filename) + ''
+            // var source = bus.read_file(source_filename)
+
+            // console.log('Source is', source)
+
             if (bus.loading()) throw 'loading'
             if (filename.match(/\.coffee$/))
                 return bus.compile_coffee(source, source_filename)
@@ -2423,7 +2285,8 @@ function import_server (bus, make_statebus, options)
                                                                     sourceMap: true})
         } catch (e) {
             console.error('Could not compile ' + e.toString())
-            return 'console.error(' + JSON.stringify(e.toString()) + ')'
+            return 'console.error(' + JSON.stringify("When compiling " + filename + ": "
+                                                     + e.toString()) + ')'
         }
 
         var source_map = JSON.parse(compiled.v3SourceMap)

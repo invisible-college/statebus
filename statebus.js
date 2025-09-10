@@ -119,7 +119,7 @@
 
         if (!('key' in obj) || typeof obj.key !== 'string') {
             console.error('Error: set(obj) called on object without a key: ', obj)
-            console.trace('Bad set(obj)')
+            //console.trace('Bad set(obj)')
         }
         bogus_check(obj.key)
 
