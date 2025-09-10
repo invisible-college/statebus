@@ -22,7 +22,8 @@ function default_options (bus) { return {
             certificate_bundle: 'certs/certificate-bundle'},
     connections: {include_users: true, edit_others: true},
     websocket_path: '_connect_to_statebus_',
-    __secure: false
+    __secure: false,
+    use_http2: true
 }}
 
 function set_options (bus, options) {
@@ -46,10 +47,10 @@ function set_options (bus, options) {
 function import_server (bus, options)
 {   var extra_methods = {
 
-    serve: function serve (options) {
+    serve: function serve (options={}) {
         var master = bus
-        bus.honk = options.honk ?? 'statelog'
         master.label = 'master'
+        bus.honk = options.honk ?? 'statelog'
 
         // Initialize Options
         set_options(bus, options)
@@ -58,6 +59,12 @@ function import_server (bus, options)
                require('fs').existsSync(bus.options.certs.private_key)
             || require('fs').existsSync(bus.options.certs.certificate)
             || require('fs').existsSync(bus.options.certs.certificate_bundle))
+
+        // Only allow H2 with SSL/TLS for now
+        if (bus.options.use_http2 && !use_ssl) {
+            console.log('HTTP/2 disabled because we have no TLS/SSL support.')
+            bus.options.use_http2 = false
+        }
 
         function c (client, conn) {
             client.honk = bus.honk
@@ -71,17 +78,22 @@ function import_server (bus, options)
 
         // ******************************************
         // ***** Create our own http server *********
-        bus.make_http_server({port: bus.options.port, use_ssl})
+        bus.make_http_server({port: bus.options.port,
+                              use_ssl,
+                              use_http2: bus.options.use_http2})
         bus.sockjs_server(this.http_server, c) // Serve via sockjs on it
         var express = require('express')
-        bus.express = express()
+        if (bus.options.use_http2)
+            bus.express = require('http2-express-bridge')(express)
+        else
+            bus.express = express()
         bus.http = express.Router()
         bus.install_express(bus.express)
         bus.initialize_braid_http()
 
-        // use gzip compression if available
-        try { bus.http.use(require('compression')())
-              console.log('Enabled http compression!') } catch (e) {}
+        // // use gzip compression if available
+        // try { bus.http.use(require('compression')())
+        //       console.log('Enabled http compression!') } catch (e) {}
 
 
         // Initialize new clients with an id.  We put the client id on
@@ -167,7 +179,8 @@ function import_server (bus, options)
             bus.make_http_server({
                 port: bus.options.backdoor,
                 name: 'backdoor_http_server',
-                use_ssl: use_ssl
+                use_ssl: use_ssl,
+                use_http2: bus.options.use_http2
             })
             bus.sockjs_server(this.backdoor_http_server)
         }
@@ -262,10 +275,11 @@ function import_server (bus, options)
                 if (typeof req.headers['content-type'] !== 'string'
                     || req.headers['content-type'].toLowerCase() !== 'application/json')
                     console.error('Error: PUT content-type is not application/json')
-                var body = ''
-                req.on('data', chunk => {body += chunk.toString()})
+                var chunks = []
+                req.on('data', chunk => {chunks.push(chunk)})
                 req.on('end', () => {
                     try {
+                        var body = Buffer.concat(chunks).toString()
                         console.log('gonna parse', body)
                         var path = req.url.substr(1)
                         var obj = bus.from_http_body(path, body)
@@ -308,15 +322,7 @@ function import_server (bus, options)
         if (options.use_ssl) {
             // Load with TLS/SSL
             console.log('Encryption ON')
-
-            // use http2 compatible library if available
-            try {
-                var http = require('spdy')
-                console.log('Found spdy library. HTTP/2 enabled!')
-            } catch (e) {
-                var http = require('https')
-            }
-
+            var http1 = require('https')
             var protocol = 'https'
             var ssl_options = {
                 ca: (fs.existsSync(this.options.certs.certificate_bundle)
@@ -332,11 +338,26 @@ function import_server (bus, options)
         else {
             // Load unencrypted server
             console.log('Encryption OFF')
-            var http = require('http')
+            var http1 = require('http')
             var protocol = 'http'
             var ssl_options = undefined
         }
 
+        // Create the http server
+        var http_server
+        if (options.use_http2) {
+            console.log('Using HTTP/2')
+            // The HTTP2 way
+            http2 = require('http2')
+            http_server = http2[options.use_ssl ? 'createSecureServer' : 'createServer'](
+                {...ssl_options, allowHTTP1: true}
+            )
+        } else
+            // Or the HTTP1 way
+            http_server = http1.createServer(ssl_options)
+
+        // Choose the port to listen on
+        var port
         if (options.port === 'auto') {
             var bind = require('./extras/tcp-bind')
             function find_a_port () {
@@ -360,18 +381,16 @@ function import_server (bus, options)
                     bus.redirect_port_80()
                 } catch (e) {fd = find_a_port()}
             else fd = find_a_port()
-            var http_server = http.createServer(ssl_options)
-            http_server.listen({fd: fd}, () => {
-                console.log('Listening on '+protocol+'://<host>:'+bus.port)
-            })
+
+            port = {fd: fd}
         }
-        else {
-            bus.port = bus.options.port
-            var http_server = http.createServer(ssl_options)
-            http_server.listen(bus.options.port, () => {
-                console.log('Listening on '+protocol+'://<host>:'+bus.port)
-            })
-        }
+        else
+            port = bus.port = bus.options.port
+
+        // And start the server listening on the port!
+        http_server.listen(port, () => {
+            console.log('Listening on '+protocol+'://<host>:'+bus.port)
+        })
 
         bus[options.name || 'http_server'] = http_server
     },

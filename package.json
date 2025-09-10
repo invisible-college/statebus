@@ -1,6 +1,6 @@
 {
   "name": "statebus",
-  "version": "6.1.32",
+  "version": "6.2.0",
   "description": "Synchronize state.",
   "main": "statebus.js",
   "scripts": {
@@ -18,10 +18,11 @@
   "dependencies": {
     "bcrypt-nodejs": "0.0.3",
     "braidify": "^0.1.18",
-    "chokidar": "^3.4.0",
+    "chokidar": "^4.0.3",
     "coffeescript": "^2.3.1",
     "cookie": "^0.3.1",
-    "express": "^4.15.3",
+    "express": "^4.21.2",
+    "http2-express-bridge": "^1.0.7",
     "sockjs": "^0.3.18",
     "websocket": "^1.0.24"
   }
