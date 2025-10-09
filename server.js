@@ -3,8 +3,8 @@ var fs = require('fs'),
 
 // Import braidify if it's available
 try {
-    var braidify = require('braidify').http_server
-    console.log('Found braidify library. Braid-HTTP enabled!')
+    var braidify = require('braid-http').http_server
+    console.log('Found braid-http library. Braid-HTTP enabled!')
 } catch (e) {
     var braidify = undefined
 }
@@ -219,7 +219,10 @@ function import_server (bus, options)
                 res.end()
             }
 
-            braidify && braidify(req, res)
+            // Braidify the request
+            braidify && braidify(req, res); if (req.is_multiplexer) return
+
+            // Handle subscription
             if (req.subscribe) {
                 res.startSubscription({ onClose: end_it_all })
                 console.log('yay subscription!')
@@ -237,7 +240,7 @@ function import_server (bus, options)
                     // Note: if body === undefined, we need to send the
                     // equivalent of a 404.  This is missing in braid spec:
                     // https://github.com/braid-org/braid-spec/issues/110
-                    res.sendVersion({body: body || 'null'})
+                    res.sendUpdate({body: body || 'null'})
 
                 // Or just return the current version
                 else {
@@ -2416,7 +2419,7 @@ function import_server (bus, options)
                  'statebus.js', 'client.js'].map((f) => fs.readFileSync('node_modules/statebus/' + f))
             if (bus.options.braid_mode)
                 files.unshift(fs.readFileSync(
-                    'node_modules/braidify/braidify-client.js'
+                    'node_modules/braid-http/braid-http-client.js'
                 ))
             res.send(files.join(';\n'))
         })

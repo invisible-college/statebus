@@ -59,6 +59,8 @@
     }
 
     function braid_http_mount (prefix, url) {
+        throw "Sorry, braid_http_mount is disabled! Tell mike you're using it, and he'll re-enable it."
+
         var preprefix = prefix.slice(0,-1)
         var has_prefix = new RegExp('^' + preprefix)
         var is_absolute = /^https?:\/\//
@@ -553,12 +555,15 @@
         improve_react()
         window.ignore_flashbacks = false
         if (statebus_server !== 'none') {
-            if (clientjs_option('braid_mode')) {
-                console.log('Using Braid-HTTP!')
-                braid_http_mount ('/*', statebus_server)
-            } else {
+            // Disable "braid_mode" for now
+            if (clientjs_option('braid_mode'))
+                console.log('braid_mode is disabled for now.  Tell mike that you\'re using it, and he\'ll re-enable it!')
+            // if (clientjs_option('braid_mode')) {
+            //     console.log('Using Braid-HTTP!')
+            //     braid_http_mount ('/*', statebus_server)
+            // } else {
                 bus.net_mount ('/*', statebus_server)
-            }
+            // }
         }
 
         if (window.statebus_backdoor) {
