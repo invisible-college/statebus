@@ -13,6 +13,7 @@
     // ****************
     // Connecting over the Network
     function set_cookie (key, val) {
+        // max-age is 400 days, the max allowed in chrome now
         document.cookie = key + '=' + val + '; max-age=34560000;'
     }
     function get_cookie (key) {

@@ -167,6 +167,7 @@ function import_server (bus, make_statebus, options)
                          + Math.random().toString(36).substring(2))
         
         // Add peer to response cookie, so client knows we've named it
+        // (max-age is 400 days, the max allowed in chrome now)
         res.setHeader('Set-Cookie', 'peer=' + client_id
                       + '; max-age=34560000;')
 
