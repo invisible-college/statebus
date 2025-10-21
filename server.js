@@ -106,6 +106,7 @@ function import_server (bus, options)
                                   + Math.random().toString(36).substring(2)
                                   + Math.random().toString(36).substring(2))
             
+                    // max-age is 400 days, the max allowed in chrome now
                     res.setHeader('Set-Cookie', 'client=' + req.client
                                   + '; max-age=34560000;')
                 }
