@@ -14,7 +14,7 @@
     // ****************
     // Connecting over the Network
     function set_cookie (key, val) {
-        document.cookie = key + '=' + val + '; Expires=21 Oct 2025 00:0:00 GMT;'
+        document.cookie = key + '=' + val + '; max-age=34560000;'
     }
     function get_cookie (key) {
         var c = document.cookie.match('(^|;)\\s*' + key + '\\s*=\\s*([^;]+)');

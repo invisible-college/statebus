@@ -107,7 +107,7 @@ function import_server (bus, options)
                                   + Math.random().toString(36).substring(2))
             
                     res.setHeader('Set-Cookie', 'client=' + req.client
-                                  + '; Expires=21 Oct 2025 00:0:00 GMT;')
+                                  + '; max-age=34560000;')
                 }
                 next()
             })
