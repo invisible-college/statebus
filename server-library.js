@@ -167,10 +167,8 @@ function import_server (bus, make_statebus, options)
                          + Math.random().toString(36).substring(2))
         
         // Add peer to response cookie, so client knows we've named it
-        var expires = new Date()
-        expires.setFullYear(expires.getFullYear() + 20)
         res.setHeader('Set-Cookie', 'peer=' + client_id
-                      + '; Expires=' + expires.toUTCString() + ';')
+                      + '; max-age=34560000;')
 
         // Decode the key
         var key = decodeURIComponent(req.url.substr(1))
