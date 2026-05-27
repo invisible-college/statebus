@@ -671,9 +671,9 @@
                 param_names.push(param.slice(1))
                 return prefix + '([^/]+)'
             }
-            var regex = new RegExp('^'
-                                   + pattern.replace(/(^|\/)(:[^/()]+)|(\*)/g, replace_param)
-                                   + '$')
+            var regex = new RegExp(
+                '^' + pattern.replace(/(^|\/)(:[^/()]+)|(\*)/g, replace_param) + '$'
+            )
             
             return function (path) {
                 var match = path.match(regex)
