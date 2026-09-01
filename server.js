@@ -2364,9 +2364,7 @@ function import_server (bus, options)
 
             textbus.fetch(req.path) // So that textbus never clears the cache
             textbus.fetch(req.path, function cb (o) {
-                res.setHeader('Cache-Control', 'public')
-                // res.setHeader('Cache-Control', 'public, max-age='
-                //               + (60 * 60 * 24 * 30))  // 1 month
+                res.setHeader('Cache-Control', 'public, max-age=' + (60 * 60 * 6))  // 6 hours
                 res.setHeader('ETag', o.etag)
                 res.setHeader('Access-Control-Allow-Origin', '*')
                 res.setHeader('Content-Type', 'application/javascript')

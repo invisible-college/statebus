@@ -1,6 +1,6 @@
 {
   "name": "statebus",
-  "version": "6.2.3",
+  "version": "6.2.4",
   "description": "Synchronize state.",
   "main": "statebus.js",
   "scripts": {
@@ -11,7 +11,14 @@
     "statebus.js",
     "client.js",
     "server.js",
-    "extras/",
+    "extras/coffee.js",
+    "extras/dash.coffee",
+    "extras/diffsync.js",
+    "extras/getCaretCoordinates.js",
+    "extras/react.js",
+    "extras/sockjs.js",
+    "extras/tcp-bind.js",
+    "extras/tests.js",
     "readme.md"
   ],
   "repository": "invisible-college/statebus",
