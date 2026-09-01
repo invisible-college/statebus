@@ -2010,7 +2010,7 @@ function import_server (bus, options)
             // Validate that the login/name is not changed to something clobberish
             var old_login = u.login || u.name
             if (old_login.toLowerCase() !== login.toLowerCase()
-                && userpass.hasOwnProperty(login)) {
+                && userpass.hasOwnProperty(login.toLowerCase())) {
                 client.log('The login', login, 'is already taken. Aborting.')
                 client.save.abort(o)         // Abort
 
