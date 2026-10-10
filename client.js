@@ -461,7 +461,7 @@
     re_rendering = false
     function schedule_re_render() {
         if (!re_render_scheduled) {
-            requestAnimationFrame(function () {
+            requestAnimationFrame(bus.extend_reaction(function () {
                 re_render_scheduled = false
 
                 // Re-renders dirty components
@@ -476,7 +476,7 @@
                             re_rendering = false
                         }
                 }
-            })
+            }))
             re_render_scheduled = true
         }
     }

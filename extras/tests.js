@@ -1644,6 +1644,66 @@ test(function common_time (done) {
     delay(50, done)
 })
 
+test(function closed_net_mount_stops_retrying (done) {
+    // Nothing listens on port 1, so the socket never opens, and this fetch
+    // waits in the outbox with a retry timer running
+    var c = require('../statebus')()
+    var mount = c.net_mount('/*', 'statei://localhost:1')
+    c.fetch('/anything')
+    mount.close()
+
+    // Count the retries over the next second
+    var retries = 0
+    var real_setTimeout = setTimeout
+    setTimeout = function (f) {
+        if (f.name == 'flush_outbox') retries++
+        return real_setTimeout.apply(this, arguments)
+    }
+    real_setTimeout(function () {
+        setTimeout = real_setTimeout
+        assert(retries == 0, 'flush_outbox retried ' + retries + ' times after close()')
+        done()
+    }, 1000)
+})
+
+test(function extend_reaction (done) {
+    var forgotten = []
+    function record_forget (key) { forgotten.push(key) }
+    bus('extended/*').to_forget = record_forget
+
+    // Reads two keys, and reacts to a change by leaving its re-run for
+    // later, the way client.js waits for an animation frame.  The re-run
+    // reads only one of the keys.
+    var rerun, reading_b = true
+    var funk = bus.reactive(function () {
+        if (funk.called_directly) {
+            bus.fetch('extended/a')
+            if (reading_b) bus.fetch('extended/b')
+        } else
+            rerun = bus.extend_reaction(function () {
+                reading_b = false
+                funk()
+            })
+    })
+    funk()
+    bus.save({key: 'extended/a', n: 1})
+
+    // While the re-run waits, nothing is forgotten
+    setTimeout(function () {
+        assert(rerun, 'The change did not start a reaction')
+        assert(forgotten.length == 0, 'Forgot ' + forgotten + ' before the re-run')
+        rerun()
+
+        // Within a second after it, the key it stopped reading is forgotten
+        setTimeout(function () {
+            assert.deepEqual(forgotten, ['extended/b'])
+            funk.forget()
+            bus('extended/*').to_forget.delete(record_forget)
+            done()
+        }, 1100)
+    }, 400)
+})
+
 
 // The following tests are unfinished
 if (false) {
