@@ -1626,6 +1626,31 @@ test(function wrong_password (done) {
     })
 })
 
+test(function login_already_taken (done) {
+    var {s, c} = setup_servers()
+
+    // Log in as mike
+    delay(500, () => {
+        var cu = c.get('/current_user')
+        cu.val = {login_as: {name: 'mike', pass: 'yeah'}}
+        c.set(cu)
+        c.get('/@1')
+    })
+
+    // Try to take j's login, in different case
+    delay(500, () => {
+        assert(c.get('/current_user').val.logged_in, 'Not logged in')
+        var me = c.get('/@1')
+        me.val.name = 'J'
+        c.set(me)
+    })
+
+    delay(500, () => {
+        assert(s.get('@1').val.name === 'mike', 'mike took the login "J", which j already has')
+        done()
+    })
+})
+
 test(function create_account (done) {
     var {s, c} = setup_servers()
     var cu
@@ -1908,6 +1933,66 @@ test(function common_time (done) {
 
     // And we're done!
     delay(50, done)
+})
+
+test(function closed_ws_mount_stops_retrying (done) {
+    // Nothing listens on port 1, so the socket never opens, and this get
+    // waits in the outbox with a retry timer running
+    var c = require('../statebus')()
+    var mount = c.ws_mount('/*', 'statei://localhost:1')
+    c.get('/anything')
+    mount.close()
+
+    // Count the retries over the next second
+    var retries = 0
+    var real_setTimeout = setTimeout
+    setTimeout = function (f) {
+        if (f.name == 'flush_outbox') retries++
+        return real_setTimeout.apply(this, arguments)
+    }
+    real_setTimeout(function () {
+        setTimeout = real_setTimeout
+        assert(retries == 0, 'flush_outbox retried ' + retries + ' times after close()')
+        done()
+    }, 1000)
+})
+
+test(function extend_reaction (done) {
+    var forgotten = []
+    function record_forget (key) { forgotten.push(key) }
+    bus('extended/*').forgetter = record_forget
+
+    // Reads two keys, and reacts to a change by leaving its re-run for
+    // later, the way client-library.js waits for an animation frame.  The
+    // re-run reads only one of the keys.
+    var rerun, reading_b = true
+    var funk = bus.reactive(function () {
+        if (funk.called_directly) {
+            bus.get('extended/a')
+            if (reading_b) bus.get('extended/b')
+        } else
+            rerun = bus.extend_reaction(function () {
+                reading_b = false
+                funk()
+            })
+    })
+    funk()
+    bus.set({key: 'extended/a', n: 1})
+
+    // While the re-run waits, nothing is forgotten
+    setTimeout(function () {
+        assert(rerun, 'The change did not start a reaction')
+        assert(forgotten.length == 0, 'Forgot ' + forgotten + ' before the re-run')
+        rerun()
+
+        // Within a second after it, the key it stopped reading is forgotten
+        setTimeout(function () {
+            assert.deepEqual(forgotten, ['extended/b'])
+            funk.forget()
+            bus('extended/*').forgetter.delete(record_forget)
+            done()
+        }, 1100)
+    }, 400)
 })
 
 

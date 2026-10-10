@@ -3,7 +3,7 @@
     if (typeof module != 'undefined') module.exports = definition()
     else if (typeof define == 'function' && typeof define.amd == 'object') define(definition)
     else this[name] = definition()
-}('statebus', function() {statelog_indent = 0; var busses = {}, bus_count = 0, executing_funk, global_funk, funks = {}, clean_timer, symbols, nodejs = typeof window === 'undefined'; function make_bus (options) {
+}('statebus', function() {statelog_indent = 0; var busses = {}, bus_count = 0, executing_funk, global_funk, funks = {}, clean_timer, unfinished_extended_reactions = 0, symbols, nodejs = typeof window === 'undefined'; function make_bus (options) {
 
 
     // ****************
@@ -454,7 +454,14 @@
         // .on_get handler.
         if (!gets_in.has_any(key)) {
             clearTimeout(to_be_forgotten[key])
-            to_be_forgotten[key] = setTimeout(function () {
+            to_be_forgotten[key] = setTimeout(function run_forgetters () {
+                // Wait for any unfinished extended reaction, which may get
+                // the key again
+                if (unfinished_extended_reactions) {
+                    to_be_forgotten[key] = setTimeout(run_forgetters, 1000)
+                    return
+                }
+
                 // Send a forget upstream
                 bus.route(key, 'forgetter', key, t)
 
@@ -1306,6 +1313,31 @@
     // Tells you whether the currently executing funk is loading
     function loading () { return executing_funk.loading() }
 
+    // A reaction normally ends when its reactive function returns.  If it
+    // leaves work for code that runs later, such as on the next animation
+    // frame, wrap that code:
+    //
+    //    requestAnimationFrame(bus.extend_reaction(f))
+    //
+    // The reaction then lasts until f has run, and the state it read stays
+    // loaded until then.  f must eventually run, and if it leaves work for
+    // later too, wrap that as well.  Gets inside f don't make it reactive, so
+    // read state in a reactive function that f calls.
+    function extend_reaction (f) {
+        unfinished_extended_reactions++
+        var finished = false
+        return function () {
+            try {
+                return f.apply(this, arguments)
+            } finally {
+                if (!finished) {
+                    finished = true
+                    unfinished_extended_reactions--
+                }
+            }
+        }
+    }
+
     bus.default = function () {
         bus.deep_map(arguments, function (o) {
             if (o.key && !(bus.cache.hasOwnProperty(o.key)))
@@ -1978,7 +2010,7 @@
                     // But normally we just send the message immediately
                     else
                         sock.send(outbox.shift())
-            else
+            else if (!done)
                 setTimeout(flush_outbox, 400)
         }
         function add_prefix (key) {
@@ -2736,7 +2768,7 @@
 
     // Make these private methods accessible
     var api = ['cache backup_cache get set forget del fire dirty get_once',
-               'old_subspace new_subspace bindings run_handler bind unbind reactive uncallback',
+               'old_subspace new_subspace bindings run_handler bind unbind reactive extend_reaction uncallback',
                'versions new_version',
                'aget client_bus_for',
                'funcarg_parse funcarg_stringify',

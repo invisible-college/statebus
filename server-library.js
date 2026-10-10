@@ -15,7 +15,8 @@ function default_options (bus) { return {
     websocket: false,
     websocket_path: '_connect_to_statebus_',
     free_cors: true,
-    __secure: false   // Only for websocket for connections state.  Deprecate soon.
+    __secure: false,  // Only for websocket for connections state.  Deprecate soon.
+    use_http2: true
 }}
 
 function set_options (bus, options) {
@@ -39,9 +40,9 @@ function set_options (bus, options) {
 function import_server (bus, make_statebus, options)
 {   var extra_methods = {
 
-    serve: function serve (options) {
+    serve: function serve (options={}) {
         var master = bus
-        bus.honk = 'statelog'
+        bus.honk = options.honk ?? 'statelog'
         master.label = 'master'
 
         // Initialize Options
@@ -51,6 +52,12 @@ function import_server (bus, make_statebus, options)
                require('fs').existsSync(bus.options.certs.private_key)
             || require('fs').existsSync(bus.options.certs.certificate)
             || require('fs').existsSync(bus.options.certs.certificate_bundle))
+
+        // Only allow H2 with SSL/TLS for now
+        if (bus.options.use_http2 && !use_ssl) {
+            console.log('HTTP/2 disabled because we have no TLS/SSL support.')
+            bus.options.use_http2 = false
+        }
 
         // Create the client
         if (bus.options.client)
@@ -62,19 +69,25 @@ function import_server (bus, make_statebus, options)
             }
 
         // Create HTTP server
-        bus.make_http_server({port: bus.options.port, use_ssl})
+        bus.make_http_server({port: bus.options.port,
+                              use_ssl,
+                              use_http2: bus.options.use_http2})
         if (bus.options.websocket)
             bus.sockjs_server(this.http_server)   // Serve via sockjs on it
         var express = require('express')
-        bus.express = express()
+        if (bus.options.use_http2)
+            bus.express = require('http2-express-bridge')(express)
+        else
+            bus.express = express()
         bus.http = express.Router()
         bus.install_express(bus.express)
 
         // User will put his routes in here
         bus.express.use(bus.http)
 
-        // Connect bus to the HTTP server
-        bus.express.use(bus.http_in)
+        // Connect bus to the HTTP server.  Braid-http answers multiplexer
+        // requests itself, and gives http_in the response to write to.
+        bus.express.use(require('braid-http').http_server(bus.http_in))
 
         // use gzip compression if available
         try { bus.http.use(require('compression')())
@@ -153,9 +166,6 @@ function import_server (bus, make_statebus, options)
             return
         }
 
-        // Braidify the req and res
-        require('braid-http').http_server(req, res)
-
         // Initialize new clients with an id.  We put the client id on
         // req.client, and also in a cookie for the browser to see.
         var client_id = req.headers.peer ||
@@ -176,16 +186,18 @@ function import_server (bus, make_statebus, options)
 
         // Make the client bus
         var client_bus = bus.client_bus_for(client_id)
+        req.client_bus = client_bus
 
         // Handle a GET!
         if (req.method === 'GET') {
+            // We assume all content is JSON.  Braid-http labels each update's
+            // body with this, and starting a subscription sends the headers.
+            res.setHeader('Repr-Type', 'application/json')
+
             if (req.subscribe)
                 res.startSubscription({ onClose: close_subscription })
             else
                 res.statusCode = 200
-
-            // We assume all content is JSON
-            res.setHeader('Content-Type', 'application/json')
 
             function send_update (obj, t) {
                 var body = to_http_body(obj)
@@ -266,15 +278,16 @@ function import_server (bus, make_statebus, options)
                     console.error('Error: PUT content-type is not application/json')
 
                 // Start downloading it
-                var body = ''
-                req.on('data', chunk => {body += chunk.toString()})
+                var chunks = []
+                req.on('data', chunk => {chunks.push(chunk)})
 
                 // When the body is downloaded...
                 req.on('end', () => {
 
                     // Parse it as JSON
                     try {
-                        var obj = from_http_body(path, key)
+                        var body = Buffer.concat(chunks).toString()
+                        var obj = from_http_body(key, body)
                     } catch (e) {
                         console.error('Error: PUT body was not valid json', e)
                         res.statusCode = 500
@@ -292,7 +305,6 @@ function import_server (bus, make_statebus, options)
 
                     res.statusCode = 200
                     res.end()
-                    client_bus.http_unsubscribe(req)
                 })
             }
         }
@@ -309,15 +321,7 @@ function import_server (bus, make_statebus, options)
         if (options.use_ssl) {
             // Load with TLS/SSL
             console.log('Encryption ON')
-
-            // use http2 compatible library if available
-            try {
-                var http = require('spdy')
-                console.log('Found spdy library. HTTP/2 enabled!')
-            } catch (e) {
-                var http = require('https')
-            }
-
+            var http1 = require('https')
             var protocol = 'https'
             var ssl_options = {
                 ca: (fs.existsSync(this.options.certs.certificate_bundle)
@@ -333,11 +337,26 @@ function import_server (bus, make_statebus, options)
         else {
             // Load unencrypted server
             console.log('Encryption OFF')
-            var http = require('http')
+            var http1 = require('http')
             var protocol = 'http'
             var ssl_options = undefined
         }
 
+        // Create the http server
+        var http_server
+        if (options.use_http2) {
+            console.log('Using HTTP/2')
+            // The HTTP2 way
+            var http2 = require('http2')
+            http_server = http2[options.use_ssl ? 'createSecureServer' : 'createServer'](
+                {...ssl_options, allowHTTP1: true}
+            )
+        } else
+            // Or the HTTP1 way
+            http_server = http1.createServer(ssl_options)
+
+        // Choose the port to listen on
+        var port
         if (options.port === 'auto') {
             var bind = require('./extras/tcp-bind')
             function find_a_port () {
@@ -361,18 +380,16 @@ function import_server (bus, make_statebus, options)
                     bus.redirect_port_80()
                 } catch (e) {fd = find_a_port()}
             else fd = find_a_port()
-            var http_server = http.createServer(ssl_options)
-            http_server.listen({fd: fd}, () => {
-                console.log('Listening on '+protocol+'://<host>:'+bus.port)
-            })
+
+            port = {fd: fd}
         }
-        else {
-            bus.port = bus.options.port
-            var http_server = http.createServer(ssl_options)
-            http_server.listen(bus.options.port, () => {
-                console.log('Listening on '+protocol+'://<host>:'+bus.port)
-            })
-        }
+        else
+            port = bus.port = bus.options.port
+
+        // And start the server listening on the port!
+        http_server.listen(port, () => {
+            console.log('Listening on '+protocol+'://<host>:'+bus.port)
+        })
 
         bus[options.name || 'http_server'] = http_server
     },
@@ -948,13 +965,15 @@ function import_server (bus, make_statebus, options)
 
         // Rotating backups
         setInterval(
-            // Copy the current db over backups/db.<curr_date> every minute
+            // Copy the current db over backups/db.<curr_date> every minute,
+            // with backups/ beside the db unless opts.backup_dir says otherwise
             //
             // Note: in future we might want to use db.backup():
             // https://github.com/JoshuaWise/better-sqlite3/blob/master/docs/api.md#backupdestination-options---promise
             function backup_db() {
                 if (opts.backups === false) return
-                var backup_dir = opts.backup_dir || 'backups'
+                var path = require('path')
+                var backup_dir = opts.backup_dir || path.join(path.dirname(opts.filename), 'backups')
                 if (fs.existsSync && !fs.existsSync(backup_dir))
                     fs.mkdirSync(backup_dir)
 
@@ -968,7 +987,7 @@ function import_server (bus, make_statebus, options)
 
                 require('child_process').execFile(
                     'sqlite3',
-                    [opts.filename, '.backup '+"'"+backup_dir+'/'+opts.filename+'.'+date+"'"])
+                    [opts.filename, '.backup '+"'"+path.join(backup_dir, path.basename(opts.filename)+'.'+date)+"'"])
             },
             1000 * 60 // Every minute
         )
@@ -1882,7 +1901,7 @@ function import_server (bus, make_statebus, options)
             // Validate that the login/name is not changed to something clobberish
             var old_login = u.val.login || u.val.name
             if (old_login.toLowerCase() !== login.toLowerCase()
-                && userpass.hasOwnProperty(login)) {
+                && userpass.val.hasOwnProperty(login.toLowerCase())) {
                 client.log('The login', login, 'is already taken. Aborting.')
                 client.set.abort(o)         // Abort
 
@@ -2250,9 +2269,7 @@ function import_server (bus, make_statebus, options)
                     contents: getter(path)
                 }
 
-            res.setHeader('Cache-Control', 'public')
-            // res.setHeader('Cache-Control', 'public, max-age='
-            //               + (60 * 60 * 24 * 30))  // 1 month
+            res.setHeader('Cache-Control', 'public, max-age=' + (60 * 60 * 6))  // 6 hours
             res.setHeader('ETag', cache[path].etag)
             res.setHeader('Access-Control-Allow-Origin', '*')
             res.setHeader('Content-Type', 'application/javascript')
