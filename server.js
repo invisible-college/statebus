@@ -981,7 +981,8 @@ function import_server (bus, options)
             // https://github.com/JoshuaWise/better-sqlite3/blob/master/docs/api.md#backupdestination-options---promise
             function backup_db() {
                 if (opts.backups === false) return
-                var backup_dir = opts.backup_dir || 'backups'
+                var path = require('path')
+                var backup_dir = opts.backup_dir || path.join(path.dirname(opts.filename), 'backups')
                 if (fs.existsSync && !fs.existsSync(backup_dir))
                     fs.mkdirSync(backup_dir)
 
@@ -995,7 +996,7 @@ function import_server (bus, options)
 
                 require('child_process').execFile(
                     'sqlite3',
-                    [opts.filename, '.backup '+"'"+backup_dir+'/'+opts.filename+'.'+date+"'"])
+                    [opts.filename, '.backup '+"'"+path.join(backup_dir, path.basename(opts.filename)+'.'+date)+"'"])
             },
             1000 * 60 // Every minute
         )
