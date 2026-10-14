@@ -580,7 +580,7 @@ function import_server (bus, options)
                     }
                     o.id     = star
                     o.client = star      // Deprecated.  Delete this line in v7.
-                    master.save(client.clone(o))
+                    master.save.sync(client.clone(o))
                 }
 
                 // Your connection
@@ -595,7 +595,7 @@ function import_server (bus, options)
                 client('connection').to_save = function (o) {
                     o = client.clone(o)
                     o.key = 'connection/' + conn.id
-                    client.save(o)
+                    client.save.sync(o)
                 }
 
                 // All connections
