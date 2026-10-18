@@ -903,23 +903,26 @@
 
             // Add .done() method
             if (method !== 'to_forget')
-                t.done = function (o) {
+                t.done = function (o, params) {
                     var key = method === 'to_save' ? arg.key : arg
                     bus.log('We are DONE()ing', method, key, o||arg)
 
-                    // We use a simple (and crappy?) heuristic to know if the
-                    // to_save handler has changed the state: whether the
-                    // programmer passed (o) to the t.done(o) handler.  If
-                    // not, we assume it hasn't changed.  If so, we assume it
-                    // *has* changed, and thus we change the version of the
-                    // state.  I imagine it would be more accurate to diff
-                    // from before the to_save handler began with when
-                    // t.done(o) ran.
-                    //
-                    // Note: We will likely solve this in the future by
-                    // preventing .to_save() from changing the incoming state,
-                    // except through an explicit .revise() function.
-                    if (o) t.version = new_version()
+                    if (params && params.version)
+                        t.version = params.version
+                    else
+                        // We use a simple (and crappy) heuristic to know if the
+                        // to_save handler has changed the state: whether the
+                        // programmer passed (o) to the t.done(o) handler.  If
+                        // not, we assume it hasn't changed.  If so, we assume it
+                        // *has* changed, and thus we change the version of the
+                        // state.  I imagine it would be more accurate to diff
+                        // from before the to_save handler began with when
+                        // t.done(o) ran.
+                        //
+                        // Note: We will likely solve this in the future by
+                        // preventing .to_save() from changing the incoming state,
+                        // except through an explicit .revise() function.
+                        if (o) t.version = new_version()
 
                     if (method === 'to_delete') {
                         delete bus.cache[key]
