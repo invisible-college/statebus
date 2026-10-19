@@ -924,6 +924,15 @@
                         // except through an explicit .revise() function.
                         if (o) t.version = new_version()
 
+                    if (o) {
+                        console.assert(!o.key || o.key === key,
+                                       't.done(obj) with wrong key ' + o.key)
+
+                        // Set the key, in case the user passed in an object and
+                        // left the key explicit
+                        o.key = key
+                    }
+
                     if (method === 'to_delete') {
                         delete bus.cache[key]
                         delete bus.backup_cache[key]
@@ -932,7 +941,6 @@
                         bus.route(key, 'on_set_sync', o || arg, t)
                     } else {
                         // Now method === 'to_fetch'
-                        o.key = key
                         bus.save.fire(o, t)
                         // And now reset the version cause it could get called again
                         delete t.version
