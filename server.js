@@ -2201,7 +2201,7 @@ function import_server (bus, options)
             })
 
             // Save to master
-            client.master.save(obj)
+            client.master.save.sync(obj)
             p_keys && client.master.save(p_keys)
         }
 
