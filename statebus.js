@@ -730,7 +730,11 @@
                 handler.args['obj'] = i; break
             case 'old':
                 handler.args['old'] = i; break
-            case 'func_args':
+            case 'args':
+                handler.args['args'] = i; break
+            case 'kson':
+                handler.args['kson'] = i; break
+            case 'func_args':   // Deprecated: use args or kson
                 handler.args['func_args'] = i; break
             }
     }
@@ -751,20 +755,27 @@
 
             // First, convert the pattern into a regexp.
 
-            // 1. Handle :foo by swapping it with '([^/*()]+)'
-            pattern = pattern.replace(/(?<=^|\/):[^/*()]+/g, match => {
-                // Replace :foo with ([^/]+), and remember the "foo" name
+            // 1. Take off the * and () at the end, which become regexps below
+            var fstring = pattern.slice(-2) === '()'
+            if (fstring) pattern = pattern.slice(0, -2)
+            var star = pattern.slice(-1) === '*'
+            if (star) pattern = pattern.slice(0, -1)
+
+            // 2. Swap each :foo with '([^/*()]+)', remembering the "foo" name,
+            //    and escape each special character, so it matches only itself
+            pattern = pattern.replace(/(?<=^|\/):[^/*()]+|[.*+?^${}()|[\]\\]/g, match => {
+                if (match[0] !== ':') return '\\' + match
                 param_names.push(match.slice(1))
                 return '([^/*()]+)'
             })
 
-            // Now look for * and () at the end and replace with regexps
-            if (pattern.slice(-3) === '*()')
-                pattern = pattern.slice(0, -3) + '(?<star>[^()]*)(?<fstring>\\(.*\\))?'
-            else if (pattern.slice(-1) === '*')
-                pattern = pattern.slice(0, -1) + '(?<star>.*)'
-            else if (pattern.slice(-2) === '()')
-                pattern = pattern.slice(0, -2) + '(?<fstring>\\(.*\\))?'
+            // 3. Put the * and () back on as regexps
+            if (star && fstring)
+                pattern += '(?<star>[^()]*)(?<fstring>\\(.*\\))'
+            else if (star)
+                pattern += '(?<star>.*)'
+            else if (fstring)
+                pattern += '(?<fstring>\\(.*\\))'
 
             // Construct the regexp
             var regex = new RegExp('^' + pattern + '$')
@@ -776,7 +787,7 @@
                 var match = path.match(regex)
                 if (!match) return null
                 var params = {}
-                params.func_args = match.groups.fstring
+                params.args = match.groups.fstring
                 params.star = match.groups.star
 
                 // Add to params.path all the path parts
@@ -790,7 +801,7 @@
         }
 
         // Add patterns to the list, not the hash
-        if (type === 'pattern' && /[:*]/.test(pattern))  // Is it a pattern?
+        if (type === 'pattern' && /[:*]|\(\)$/.test(pattern))  // Is it a pattern?
             pattern_handlers.push({pattern: pattern,
                                    matcher: pattern_matcher(pattern),
                                    method: method,
@@ -805,7 +816,7 @@
     }
     function unbind (pattern, method, funk, type) {
         bogus_check(pattern)
-        if (type === 'pattern' && /[:*]/.test(pattern))  // Is it a pattern?
+        if (type === 'pattern' && /[:*]|\(\)$/.test(pattern))  // Is it a pattern?
             // Delete pattern connection
             for (var i=0; i < pattern_handlers.length; i++) {
                 var handler = pattern_handlers[i]
@@ -966,15 +977,16 @@
                 return 'Bad JSON "' + r + '" for key ' + key_arg()
             }
         }
-        // Parse out function params for URLs in the style /foo/bar(param1,param2:val2).
-        // We're currently calling that (param1,param2:val2) part "function params", and presuming
-        // that it exists in the () part of the pattern like in /foo/bar*().
-        function func_args () {
-            // console.log('Getting func_args from', func.statebus_binding.args)
-            if (!(func.statebus_binding.args
-                  && func.statebus_binding.args.func_args))
-                return undefined
-            return funcarg_parse(func.statebus_binding.args.func_args)
+        function kson_arg () {
+            var s = func.statebus_binding
+                    && func.statebus_binding.args
+                    && func.statebus_binding.args.args
+            if (!s) return undefined
+            try {
+                return kson_parse(s)
+            } catch (e) {
+                return 'Bad KSON "' + s + '" for key ' + key_arg()
+            }
         }
         var f = reactive(function () {
             // Initialize transaction
@@ -1070,8 +1082,10 @@
                     if (func.call_with_proxies)
                         args[func.args[k]] = args[func.args[k]].val
                     break
+                case 'args':
+                case 'kson':
                 case 'func_args':
-                    args[func.args[k]] = func_args(); break
+                    args[func.args[k]] = kson_arg(); break
                 }
             }
 
@@ -1446,59 +1460,130 @@
     }
 
     // ******************
-    // Function Args -- an alternative to Query Params
+    // KSON -- the (...) part of a key, an alternative to query params
 
-    // Parse a funcarg string.
+    // KSON = Kinda Simple Object Notation.  Rhymes with JSON, but simpler to write.
 
-    function funcarg_parse (str) {
-        // Coffeescript doesn't have object comprehensions :(
-        var ret = {}
-
-        function split_once (str, char) {
-            var i = str.indexOf(char)
-            return i === -1 ? [str, ""] : [str.slice(0, i), str.slice(i + 1)]
+    // Reads KSON into an object, like:
+    //
+    //   KSON:
+    //
+    //     (hello,there,and:this,is:(some,kson))
+    //
+    //   Parsed:
+    //
+    //     {
+    //       "0": "hello",
+    //       "1": "there",
+    //       "and":"this",
+    //       "is":  {
+    //          "0":"some",
+    //          "1":"kson"
+    //       }
+    //     }
+    function kson_parse (text) {
+        function object_of (items) {
+            var object = {}, position = 0
+            items.forEach(function (item) {
+                var value = Array.isArray(item.value) ? object_of(item.value) : item.value
+                // Defined, not assigned, so a name like __proto__ is just a field
+                Object.defineProperty(object, item.name === undefined ? position++ : item.name,
+                                      {value: value, enumerable: true, writable: true, configurable: true})
+            })
+            return object
         }
-
-        // Now process the string:
-        str
-            // Pull out the parentheses
-            .slice(1, -1)
-            // Split by commas. TODO: Allow spaces after commas?
-            .split(",")
-            // Delete empty parts (this ensures that empty strings
-            // will properly result in empty func_string, and allows trailing
-            // commas)
-            .filter(part => part.length)
-            .forEach(part => {
-                // If the part has a comma, its a key:value, otherwise
-                // it's just a singleton
-                var [k, v] = split_once(part, ":")
-
-                if (v.length === 0) ret[k] = true
-                // If the value is itself a func_string params object, parse it recursively
-                else if (v.startsWith("(")) ret[k] = funcarg_parse(v)
-                else ret[k] = v
-            })
-        return ret
+        return object_of(kson_items(text))
     }
 
-    // Generate a funcarg string
-    function funcarg_stringify (obj) {
-        var inner = Object.entries(obj)
-        // Allowed values in KSON are: object, string, true
-        // Arrays are in fact objects, and we don't need to treat them differently.
-        // Their order won't change!
-            .filter(([k, v]) => v)
-            .sort()
-            .map(([k, v]) => {
-                if (typeof v === "boolean") return k
-                if (typeof v === "string") return `${k}:${v}`
-                if (typeof v === "object") return `${k}:${funcarg_string(v)}`
-                return ""
-            })
-            .join(",")
-        return inner.length ? `(${inner})` : ""
+    // Parses KSON into a list of items, in order, as [{name, value}], where an item
+    // with no name is positional, and each value is a string, or a list of items
+    // of its own.  Each word is percent-decoded after the ( ) , and : around it
+    // are read, so an encoded one never breaks the structure.
+    function kson_items (text) {
+        var position = 0
+        function fail (problem) {
+            throw new Error('KSON ' + problem + ', at character ' + position + ' of ' + text)
+        }
+        function word () {
+            var start = position
+            while (position < text.length && '(),:'.indexOf(text[position]) === -1) position++
+            var raw = text.slice(start, position)
+            try { return decodeURIComponent(raw) } catch (e) { return raw }
+        }
+        function list () {
+            position++
+            var items = []
+            if (text[position] === ')') { position++; return items }
+            while (true) {
+                var item = {}
+                if (text[position] === '(') item.value = list()
+                else {
+                    var first = word()
+                    if (text[position] === ':') {
+                        // A name of digits would read as a position
+                        if (first === '' || /^[0-9]+$/.test(first)) fail("can't name an item '" + first + "'")
+                        position++
+                        item.name = first
+                        item.value = text[position] === '(' ? list() : word()
+                    } else
+                        item.value = first
+                }
+                items.push(item)
+                if (text[position] === ',') { position++; continue }
+                if (text[position] === ')') { position++; return items }
+                fail(position < text.length ? 'expects , or )' : 'has a ( with no )')
+            }
+        }
+        if (text === '') return []
+        if (text[0] !== '(') fail('starts without (')
+        var items = list()
+        if (position < text.length) fail('has more after its )')
+        return items
     }
+
+    // Writes an object, or an array, as KSON, like:
+    //
+    //   Object:
+    //
+    //     {
+    //       "is": ["some", "kson"],
+    //       "and": "this",
+    //       "name": "Bob, Jr.",
+    //       "0": "hello",
+    //       "1": "there"
+    //     }
+    //
+    //   KSON:
+    //
+    //     (hello,there,and:this,is:(some,kson),name:Bob%2C%20Jr.)
+    //
+    // Positions come first, then names in order, so equal objects make the
+    // same key.
+    function kson_stringify (object) {
+        var keys = Object.keys(object).filter(function (key) { return object[key] !== undefined })
+        var positions = keys.filter(function (key) { return /^(0|[1-9][0-9]*)$/.test(key) })
+                            .map(Number).sort(function (a, b) { return a - b })
+        var names = keys.filter(function (key) { return !/^[0-9]+$/.test(key) }).sort()
+        if (positions.length + names.length < keys.length || names.indexOf('') !== -1)
+            throw new Error("KSON can't name a field '" + keys.find(function (key) { return /^[0-9]*$/.test(key) && positions.indexOf(Number(key)) === -1 }) + "'")
+        positions.forEach(function (n, i) {
+            if (n !== i) throw new Error("KSON can't write a gap before position " + n)
+        })
+        // () is no items at all, so a lone empty value would disappear
+        if (positions.length === 1 && names.length === 0 && String(object[0]) === '')
+            throw new Error("KSON can't write a list of one empty value")
+        function write (value) {
+            if (value !== null && typeof value === 'object') return kson_stringify(value)
+            return encodeURIComponent(String(value)).replace(/\(/g, '%28').replace(/\)/g, '%29')
+        }
+        return '(' + positions.map(function (n) { return write(object[n]) })
+            .concat(names.map(function (name) { return write(name) + ':' + write(object[name]) }))
+            .join(',') + ')'
+    }
+
+    // Deprecated names for kson_parse and kson_stringify
+    var funcarg_parse = kson_parse
+    var funcarg_stringify = kson_stringify
 
 
     // ******************
@@ -2771,7 +2856,7 @@
                'old_subspace new_subspace bindings run_handler bind unbind reactive extend_reaction uncallback',
                'versions new_version',
                'aget client_bus_for',
-               'funcarg_parse funcarg_stringify',
+               'kson_items kson_parse kson_stringify funcarg_parse funcarg_stringify',
                'funk_key funk_name funks key_id key_name id',
                'pending_gets gets_in gets_out loading_keys loading once',
                'global_funk busses rerunnable_funks',

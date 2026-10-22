@@ -1186,10 +1186,27 @@ test(function path_parts (done) {
     })
 })
 
+test(function literal_patterns (done) {
+    // Characters a regexp would read as syntax match only themselves
+    bus('literal.key(*').getter = function (star) { return {star: star} }
+    assert(bus.get('literal.key(a:1)').star === 'a:1)')
+    assert(!bus.get('literalXkey(a:1)').star)
+
+    // A pattern ending in () matches its key with a (...) on the end, and
+    // not the plain key
+    bus('calls()').getter = function (key, args) { return {args: args} }
+    assert(bus.get('calls(n:1)').args.n === '1')
+    assert(JSON.stringify(bus.get('calls()').args) === '{}')
+    assert(bus.get('calls').args === undefined)
+    done()
+})
+
 test(function func_args (done) {
     log('Func args test!!!')
 
-    bus('func_args/:foo/stuff*()').getter = function (key, func_args, star, t) {
+    bus('func_args/:foo/stuff*()').getter = function (key, args, kson, func_args, star, t) {
+        // args and kson both read the (...) part, and func_args is their deprecated name
+        assert(JSON.stringify(args) === JSON.stringify(kson) && JSON.stringify(args) === JSON.stringify(func_args))
         log('Getting star', star, 'func_args', func_args)
         t.done({
             key: key,
@@ -1197,21 +1214,25 @@ test(function func_args (done) {
         })
     }
     
-    bus.get_once('func_args/foobar/stuff(yes:maam,okay)', (o) => {
+    bus.get_once('func_args/foobar/stuff(okay,yes:maam,page:(per:50,n:-2),name:Bob%2C%20Jr.)', (o) => {
+        assert(o.val.func_args[0] === 'okay')
         assert(o.val.func_args.yes === 'maam')
-        assert(o.val.func_args.okay)
+        assert(o.val.func_args.page.per === '50' && o.val.func_args.page.n === '-2')
+        assert(o.val.func_args.name === 'Bob, Jr.')
+        assert(bus.kson_stringify(o.val.func_args) === '(okay,name:Bob%2C%20Jr.,page:(n:-2,per:50),yes:maam)')
+        assert(bus.funcarg_stringify === bus.kson_stringify)
         assert(o.val.star === '')
     })
 
     bus.get_once('func_args/foobar/stuff_and_more(yes:maam,okay)', (o) => {
         assert(o.val.func_args.yes === 'maam')
-        assert(o.val.func_args.okay)
+        assert(o.val.func_args[0] === 'okay')
         assert(o.val.star === '_and_more')
     })
 
+    // Without a (...) on the end, the key isn't this pattern's
     bus.get_once('func_args/foobar/stuff_and_more', (o) => {
-        assert(o.val.func_args === undefined)
-        assert(o.val.star === '_and_more')
+        assert(o.val === undefined)
     })
 
     delay(50, done)
