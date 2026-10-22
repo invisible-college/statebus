@@ -1238,6 +1238,25 @@ test(function func_args (done) {
     delay(50, done)
 })
 
+test(function args_on_rerun (done) {
+    // A getter re-running for one key gets that key's args and rest, after
+    // its pattern has matched other keys
+    bus.set({key: 'asks_depend_on', n: 1})
+    bus('asks/*()').getter = function (args, rest) {
+        bus.get('asks_depend_on')
+        return {who: args.who, rest: rest}
+    }
+    bus.get('asks/1(who:a)', () => {})
+    bus.get('asks/2(who:b)', () => {})
+    delay(10, () => bus.set({key: 'asks_depend_on', n: 2}))
+    delay(10, () => {
+        var a = bus.get('asks/1(who:a)'), b = bus.get('asks/2(who:b)')
+        assert(a.who === 'a' && a.rest === '1', 'asks/1(who:a) holds ' + JSON.stringify(a))
+        assert(b.who === 'b' && b.rest === '2')
+        done()
+    })
+})
+
 test(function autodetected_args_called_with_proxy (done) {
     var count = 0
     bus('counter', {
@@ -1325,6 +1344,16 @@ test(function set_can_trigger_toget (done) {
     delay(30, () => { log('savin 1!'); obj.a = 1; bus.set(obj) })
     delay(30, () => { log('savin 2!'); obj.a = 2; bus.set(obj) })
     delay(30, done)
+})
+
+test(function dirty_without_getter (done) {
+    // A key with no getter holds nothing, but dirtying it still re-runs
+    // whatever got it
+    var runs = 0
+    bus(() => { bus.get('dirty_without_getter'); runs++ })
+    delay(10, () => bus.dirty('dirty_without_getter'))
+    delay(10, () => bus.dirty('dirty_without_getter'))
+    delay(10, () => { assert(runs === 3, 'ran ' + runs + ' times'); done() })
 })
 
 test(function rollback_setfire (done) {

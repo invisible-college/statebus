@@ -539,8 +539,11 @@
             }
         clean_timer = clean_timer || setTimeout(clean)
 
-        // If none found, then just mark the key changed
-        if (!found && cache.hasOwnProperty(key)) mark_changed(key, t)
+        // If none found, then just mark the key changed with a new version.
+        if (!found && cache.hasOwnProperty(key)) {
+            versions[key] = version
+            mark_changed(key, t)
+        }
     }
 
     function mark_changed (key, t) {
@@ -944,9 +947,14 @@
         // Fresh get/set/forget/delete handlers will just be regular
         // functions.  We'll store their arg and transaction and let them
         // re-run until they are done re-running.
+
+        // Save the handler's binding to this key, because future re-runs of
+        // func will get different bindings
+        var our_binding = func.statebus_binding
+
         function key_arg () { return ((typeof arg.key) === 'string') ? arg.key : arg }
         function rest_arg () {
-            return func.statebus_binding && func.statebus_binding.args.star
+            return our_binding && our_binding.args.star
             // (key_arg()).substr(binding.length-1)
         }
         function val_arg () {
@@ -978,9 +986,7 @@
             }
         }
         function kson_arg () {
-            var s = func.statebus_binding
-                    && func.statebus_binding.args
-                    && func.statebus_binding.args.args
+            var s = our_binding && our_binding.args && our_binding.args.args
             if (!s) return undefined
             try {
                 return kson_parse(s)
@@ -1063,9 +1069,7 @@
                 case 'key':
                     args[func.args[k]] = key_arg(); break
                 case 'path':
-                    args[func.args[k]] = (func.statebus_binding
-                                          && func.statebus_binding.args
-                                          && func.statebus_binding.args.path)
+                    args[func.args[k]] = our_binding && our_binding.args && our_binding.args.path
                     break
                 case 'rest':
                     args[func.args[k]] = rest_arg(); break
