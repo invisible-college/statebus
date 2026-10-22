@@ -2607,9 +2607,24 @@
         return items
     }
 
-    // Writes an object, or an array, as KSON: its values at 0, 1, 2 and on first,
-    // in order, then its other fields, in order by name, so equal objects make the
-    // same key.  Each value is written as text, and nested objects as lists.
+    // Writes an object, or an array, as KSON, like:
+    //
+    //   Object:
+    //
+    //     {
+    //       "is": ["some", "kson"],
+    //       "and": "this",
+    //       "name": "Bob, Jr.",
+    //       "0": "hello",
+    //       "1": "there"
+    //     }
+    //
+    //   KSON:
+    //
+    //     (hello,there,and:this,is:(some,kson),name:Bob%2C%20Jr.)
+    //
+    // Positions come first, then names in order, so equal objects make the
+    // same key.
     function kson_stringify (object) {
         var keys = Object.keys(object).filter(function (key) { return object[key] !== undefined })
         var positions = keys.filter(function (key) { return /^(0|[1-9][0-9]*)$/.test(key) })
