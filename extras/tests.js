@@ -979,18 +979,60 @@ test(function key_patterns (done) {
     })
 })
 
+test(function literal_patterns (done) {
+    // Characters a regex would read as syntax match only themselves
+    bus('literal.key(*').to_fetch = function (rest) { return {rest: rest} }
+    assert(bus.fetch('literal.key(a:1)').rest === 'a:1)')
+    assert(!bus.fetch('literalXkey(a:1)').rest)
+    done()
+})
+
+test(function args_patterns (done) {
+    // A pattern ending in () takes its key with a (...) on the end, which args
+    // and kson both read as KSON, and leaves the plain key to its own handler
+    bus('calls()').to_fetch = function (args, kson, rest) {
+        return {args: args, kson: kson, rest: rest || null}
+    }
+    assert(bus.fetch('calls(n:1)').args.n === '1')
+    assert(bus.fetch('calls(n:1)').kson.n === '1')
+    assert(bus.fetch('calls(n:1)').rest === null)
+    assert(JSON.stringify(bus.fetch('calls()').args) === '{}')
+    assert(bus.fetch('calls').args === undefined)
+    assert(bus.fetch('callsX(n:1)').args === undefined)
+
+    // With a * before the (), the * part stops at the (, and the :foo parts
+    // still arrive as key_parts
+    bus('user/:id/sessions*()').to_fetch = function (key_parts, rest, args) {
+        return {id: key_parts.id, rest: rest, args: args}
+    }
+    var o = bus.fetch('user/mike/sessions/upcoming(type:buddy)')
+    assert(o.id === 'mike' && o.rest === '/upcoming' && o.args.type === 'buddy')
+    assert(bus.fetch('user/mike/sessions').id === undefined)
+    done()
+})
+
 test(function kson (done) {
-    bus('kson_stuff/foo/stuff*').to_fetch = function (key, kson, t) {
+    bus('kson_stuff/foo/stuff()').to_fetch = function (key, kson, t) {
         t.done({
             key: key,
             kson: kson
         })
     }
     
-    bus.fetch_once('kson_stuff/foo/stuff(yes:maam,okay)', (o) => {
-        console.log(o)
+    // Every value is text: positional ones at 0, 1 and on, named ones by
+    // name, and lists as objects of their own
+    bus.fetch_once('kson_stuff/foo/stuff(okay,yes:maam,page:(per:50,n:-2),name:Bob%2C%20Jr.,ids:(a,1),okay)', (o) => {
+        assert(o.kson[0] === 'okay' && o.kson[1] === 'okay')
         assert(o.kson.yes === 'maam')
-        assert(o.kson.okay)
+        assert(o.kson.page.per === '50' && o.kson.page.n === '-2')
+        assert(o.kson.name === 'Bob, Jr.')
+        assert(o.kson.ids[0] === 'a' && o.kson.ids[1] === '1')
+        assert(bus.kson_stringify(o.kson) === '(okay,okay,ids:(a,1),name:Bob%2C%20Jr.,page:(n:-2,per:50),yes:maam)')
+
+        // The items, before they're one object, keep every name, and its order
+        var items = bus.kson_items('(a,tag:x,tag:y)')
+        assert(items.length === 3 && items[1].name === 'tag' && items[2].value === 'y')
+        assert(bus.kson_parse('(tag:x,tag:y)').tag === 'y')
         done()
     })
 })
