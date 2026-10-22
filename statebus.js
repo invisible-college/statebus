@@ -862,11 +862,15 @@
         // Fresh fetch/save/forget/delete handlers will just be regular
         // functions.  We'll store their arg and transaction and let them
         // re-run until they are done re-running.
+
+        // Save the handler's binding to this key, because future re-runs of
+        // func will get different bindings
+        var our_binding = func.statebus_binding
+
         function key_arg () { return ((typeof arg.key) === 'string') ? arg.key : arg }
         function rest_arg () {
-            var matched = func.statebus_binding
-            if (matched && matched.takes_args)
-                return matched.star   // Cutting the key below would keep its (...)
+            if (our_binding && our_binding.takes_args)
+                return our_binding.star   // Cutting the key below would keep its (...)
             return (key_arg()).substr(binding.length-1)
         }
         function vars_arg () {
@@ -878,8 +882,7 @@
             }
         }
         function kson_arg () {
-            var matched = func.statebus_binding
-            var r = matched && matched.args
+            var r = our_binding && our_binding.args
             if (r === undefined) return undefined
             try {
                 return kson_parse(r)
@@ -965,7 +968,7 @@
                 case 'key':
                     args[func.args[k]] = key_arg(); break
                 case 'key_parts':
-                    args[func.args[k]] = func.statebus_binding && func.statebus_binding.params
+                    args[func.args[k]] = our_binding && our_binding.params
                     break
                 case 'rest':
                     args[func.args[k]] = rest_arg(); break

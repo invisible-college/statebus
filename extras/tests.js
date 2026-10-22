@@ -1011,6 +1011,23 @@ test(function args_patterns (done) {
     done()
 })
 
+test(function args_on_rerun (done) {
+    // A handler re-running for one key gets that key's args, after its
+    // pattern has matched other keys
+    bus('asks()').to_fetch = function (args) {
+        bus.fetch('asks_depend_on')
+        return {who: args.who}
+    }
+    bus.fetch('asks(who:a)', () => {})
+    bus.fetch('asks(who:b)', () => {})
+    delay(10, () => bus.dirty('asks_depend_on'))
+    delay(10, () => {
+        assert(bus.cache['asks(who:a)'].who === 'a', 'asks(who:a) holds ' + bus.cache['asks(who:a)'].who)
+        assert(bus.cache['asks(who:b)'].who === 'b')
+        done()
+    })
+})
+
 test(function kson (done) {
     bus('kson_stuff/foo/stuff()').to_fetch = function (key, kson, t) {
         t.done({
