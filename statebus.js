@@ -485,8 +485,11 @@
             }
         clean_timer = clean_timer || setTimeout(clean)
 
-        // If none found, then just mark the key changed
-        if (!found && cache.hasOwnProperty(key)) mark_changed(key, t)
+        // If none found, then just mark the key changed with a new version.
+        if (!found && cache.hasOwnProperty(key)) {
+            versions[key] = version
+            mark_changed(key, t)
+        }
     }
 
     function mark_changed (key, t) {

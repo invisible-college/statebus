@@ -1100,6 +1100,16 @@ test(function save_can_trigger_tofetch (done) {
     delay(30, done)
 })
 
+test(function dirty_without_handler (done) {
+    // A key with no to_fetch holds nothing, but dirtying it still re-runs
+    // whatever fetched it
+    var runs = 0
+    bus(() => { bus.fetch('dirty_without_handler'); runs++ })
+    delay(10, () => bus.dirty('dirty_without_handler'))
+    delay(10, () => bus.dirty('dirty_without_handler'))
+    delay(10, () => { assert(runs === 3, 'ran ' + runs + ' times'); done() })
+})
+
 test(function rollback_savefire (done) {
     var count = 0
     var error = false
