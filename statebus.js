@@ -1817,6 +1817,7 @@
             || (m.save && 'save')
             || (m['delete'] && 'delete')
             || (m.forget && 'forget')
+            || (m.heartbeat && 'heartbeat')
     }
 
     function net_mount (prefix, url, client_creds) {
@@ -1829,7 +1830,6 @@
         var attempts = 0
         var outbox = []
         var client_fetched_keys = new bus.Set()
-        var heartbeat
         if (url[url.length-1]=='/') url = url.substr(0,url.length-1)
         function nlog (s) {
             if (nodejs) {console.log(s)} else console.log('%c' + s, 'color: blue')
@@ -1930,7 +1930,6 @@
                 }
 
                 attempts = 0
-                //heartbeat = setInterval(function () {send({ping:true})}, 5000)
             }
             sock.onclose   = function()  {
                 if (done) {
@@ -1938,7 +1937,6 @@
                     return
                 }
                 nlog('[*] closed ' + url)
-                heartbeat && clearInterval(heartbeat); heartbeat = null
                 setTimeout(connect, attempts++ < 3 ? 1500 : 5000)
 
                 // Update state
@@ -1970,9 +1968,12 @@
                 try {
                     var message = JSON.parse(event.data)
                     var method = message_method(message)
+                    // The socket's owner handles heartbeats (see
+                    // setup_heartbeats in client.js)
+                    if (method === 'heartbeat') return
 
                     // We only take saves from the server for now
-                    if (method !== 'save' && method !== 'pong') throw 'barf'
+                    if (method !== 'save') throw 'barf'
                     bus.log('net client received', message)
                     var t = {version: message.version,
                              parents: message.parents,

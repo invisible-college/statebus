@@ -1589,6 +1589,38 @@ test(function connections_2 (done) {
     connections_helper(done, 3952, {include_users: false, edit_others: false})
 })
 
+test(function heartbeats (done) {
+    var port = 3953
+    var heartbeats = []
+    var s = require('../statebus').serve({port: port, file_store: false,
+                                          client: (c, conn) => conn.on('heartbeat', (heartbeat, arrived_late_by) => heartbeats.push({heartbeat, arrived_late_by}))})
+    s.label = 's'
+    s.heartbeat_interval = 100
+    var connection = () => {
+        var id = Object.keys(s.fetch('connections')).find((key) => key !== 'key')
+        return s.fetch('connection/' + id)
+    }
+
+    // A browser that sends one heartbeat, and then not until it says so
+    var from_server = 0
+    var ws = new (require('websocket').w3cwebsocket)('ws://localhost:' + port + '/_connect_to_statebus_/websocket')
+    ws.onmessage = (event) => { if (JSON.parse(event.data).heartbeat) from_server++ }
+    ws.onopen = () => ws.send(JSON.stringify({heartbeat: true}))
+
+    delay(500, () => {
+        assert(from_server >= 2, 'got ' + from_server + ' heartbeats from the server')
+        assert(connection().alive === false, 'still alive once its heartbeats stopped')
+        ws.send(JSON.stringify({heartbeat: true, sorry_im_late: {by: 300, because: 'busy'}}))
+    })
+    delay(50, () => {
+        assert(connection().alive === undefined, 'not alive again after a heartbeat came')
+        assert(heartbeats.length === 2 && heartbeats[1].heartbeat.sorry_im_late.by === 300
+               && heartbeats[1].arrived_late_by > 300, 'heartbeats: ' + JSON.stringify(heartbeats))
+        ws.close()
+        done()
+    })
+})
+
 test(function flashbacks (done) {
     // We have an echo canceler.  If you save state, it shouldn't send the
     // same state back to you, but it should send it to everyone else.  But if

@@ -455,6 +455,59 @@ function import_server (bus, options)
 
             var our_fetches_in = {}  // Every key that this socket has fetched
             log('sockjs_s: New connection from', conn.remoteAddress)
+
+            // Heartbeats: the server and client send {heartbeat: true} every
+            // 3s to detect when the connection is alive, or dead.
+            //
+            // The server reports aliveness on each 'connection/<id>' state.
+            var heartbeat_interval = master.heartbeat_interval || 3000
+            var last_heard_at, alive = true, last_tick = Date.now()
+            function set_alive (is_alive) {
+                alive = is_alive
+                if (!client_bus_func) return
+                var connection = bus.clone(master.fetch('connection/' + conn.id))
+                if (is_alive) delete connection.alive
+                else connection.alive = false
+                master.save(connection)
+            }
+
+            // This function runs every 3s
+            var heartbeats = setInterval(function () {
+                // Send the heartbeat
+                conn.write(JSON.stringify({heartbeat: true}))
+
+                // Now check that the client's heartbeat isn't late
+                var now = Date.now()
+                var server_is_frozen = now - last_tick > heartbeat_interval + 1000
+                last_tick = now
+                if (alive
+                    && last_heard_at
+                    && now - last_heard_at > 2 * heartbeat_interval
+
+                    // If the server is busy, then maybe the heartbeats are fine
+                    // but we're just slow at processing them.
+                    && !server_is_frozen)
+
+                    // Then the client's heartbeat is late!  The connection must
+                    // not be alive.
+                    set_alive(false)
+            }, heartbeat_interval)
+
+            // When the client's heartbeat arrives
+            function got_heartbeat (heartbeat) {
+                // Measure how late it came
+                var now = Date.now()
+                var arrived_late_by = last_heard_at
+                    && now - last_heard_at - heartbeat_interval
+                last_heard_at = now
+
+                // The connection is alive!
+                if (!alive) set_alive(true)
+
+                // Pass it on to the app
+                conn.emit('heartbeat', heartbeat, arrived_late_by)
+            }
+
             function sockjs_pubber (obj, t) {
                 // log('sockjs_pubber:', obj, t)
                 var msg = {save: obj}
@@ -495,7 +548,10 @@ function import_server (bus, options)
                            && master.validate(message, {forget: 'string'}))
                           ||
                           (method === 'delete'
-                           && master.validate(message, {'delete': 'string'}))))
+                           && master.validate(message, {'delete': 'string'}))
+                          ||
+                          (method === 'heartbeat'
+                           && master.validate(message, {heartbeat: '*', '?sorry_im_late': 'object'}))))
                         throw 'validation error'
 
                 } catch (e) {
@@ -506,6 +562,9 @@ function import_server (bus, options)
                 }
 
                 switch (method) {
+                case 'heartbeat':
+                    got_heartbeat(message)
+                    return
                 case 'fetch':
                     our_fetches_in[message.fetch] = true
                     client.fetch(message.fetch, sockjs_pubber)
@@ -550,6 +609,7 @@ function import_server (bus, options)
                 //log('sockjs_s: done with message')
             })
             conn.on('close', function() {
+                clearInterval(heartbeats)
                 log('sockjs_s: disconnected from', conn.remoteAddress, conn.id, client.id)
                 for (var key in our_fetches_in)
                     client.forget(key, sockjs_pubber)
@@ -580,6 +640,12 @@ function import_server (bus, options)
                     }
                     o.id     = star
                     o.client = star      // Deprecated.  Delete this line in v7.
+
+                    // Only the server says whether the connection is alive,
+                    // and a browser's copy may be stale
+                    if (master.fetch('connection/' + star).alive === false) o.alive = false
+                    else delete o.alive
+
                     master.save.sync(client.clone(o))
                 }
 

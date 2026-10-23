@@ -23,6 +23,7 @@
     }
     try { document.cookie } catch (e) {get_cookie = set_cookie = function (){}}
     function make_websocket (url) {
+        var orig_url = url
         if (!url.match(/^\w{0,7}:\/\//))
             url = location.protocol+'//'+location.hostname+(location.port ? ':'+location.port : '') + url
 
@@ -39,8 +40,10 @@
         //     url = link.href
         // }
 
-        return new WebSocket(url + '/' + websocket_prefix + '/websocket')
+        var sock = new WebSocket(url + '/' + websocket_prefix + '/websocket')
         // return new SockJS(url + '/' + websocket_prefix)
+        setup_heartbeats(this, sock, orig_url)
+        return sock
     }
     function client_creds (server_url) {
         var me = bus.fetch('ls/me')
@@ -58,6 +61,80 @@
         set_cookie('client', me.client)
         return {clientid: me.client}
     }
+
+    // Heartbeats: the server and client send {heartbeat: true} every 3s to
+    // detect when the connection is alive, or dead.
+    //
+    // The client reports aliveness on the fetch('peers')[url] state.
+    function setup_heartbeats (bus, sock, url) {
+        var timer, last_heard_at, alive = true
+
+        function set_alive (is_alive) {
+            alive = is_alive
+            var peers = bus.fetch('peers')
+            peers[url] = peers[url] || {}
+            if (is_alive) delete peers[url].alive
+            else peers[url].alive = false
+            bus.save(peers)
+        }
+        function beat () {
+            var interval = bus.heartbeat_interval || 3000,
+                due_at = Date.now() + interval
+
+            // This function runs every 3s
+            timer = setTimeout(function () {
+                var now = Date.now(), heartbeat = {heartbeat: true}
+
+                // If we're sending our heartbeat out late, let's tell the server
+                if (now - due_at > 10)
+                    heartbeat.sorry_im_late = {
+                        by: now - due_at,
+                        because: (document.hidden || page_last_visible > due_at)
+                            ? 'hidden' : 'busy'
+                    }
+
+                // Send the heartbeat
+                if (sock.readyState === 1)
+                    sock.send(JSON.stringify(heartbeat))
+
+                // Now check that server's heartbeat isn't late
+                var page_is_frozen = now - due_at > 1000
+                if (alive && last_heard_at && now - last_heard_at > 2 * interval
+
+                    // If the page is hidden or busy, then maybe the heartbeats
+                    // are fine but we're just slow at processing them.
+                    && !page_is_frozen)
+
+                    // Then server's heartbeat is late!  We must not be alive.
+                    set_alive(false)
+
+                // Repeat
+                beat()
+            }, interval)
+        }
+        sock.addEventListener('open', beat)
+        sock.addEventListener('message', function (event) {
+            if (event.data !== '{"heartbeat":true}') return
+            last_heard_at = Date.now()
+            if (!alive) set_alive(true)
+        })
+        sock.addEventListener('close', function () {
+            clearTimeout(timer)
+            if (!alive) {
+                // Clean up the peer state
+                var peers = bus.fetch('peers')
+                delete peers[url].alive
+                bus.save(peers)
+            }
+        })
+    }
+
+    // When the page was last shown, so a late heartbeat can say whether the
+    // page was hidden, when the browser slows or pauses its timers
+    var page_last_visible = 0
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) page_last_visible = Date.now()
+    })
 
     function braid_http_mount (prefix, url) {
         throw "Sorry, braid_http_mount is disabled! Tell mike you're using it, and he'll re-enable it."
