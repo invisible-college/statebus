@@ -441,6 +441,11 @@
             // And go ahead and delete if there aren't any!
             delete cache[key]
             delete backup_cache[key]
+
+            // Note: this means that sqlite store's .to_delete handler
+            // prevents any cache entry from leaving memory once deleted.  To
+            // fix, we might need a del fire handler, or watch for t.done() or
+            // something.
         }
 
         // Call the on_delete handlers
