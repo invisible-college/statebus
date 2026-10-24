@@ -981,7 +981,7 @@
                     args[func.args[k]] = arg.key ? arg : bus.cache[arg]; break
                 case 'old':
                     var key = key_arg()
-                    args[func.args[k]] = bus.cache[key] || (bus.cache[key] = {key:key})
+                    args[func.args[k]] = bus.clone(bus.backup_cache[key] || {key:key})
                     break
                 case 'args':
                 case 'kson':
