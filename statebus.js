@@ -1082,7 +1082,7 @@
                     args[func.args[k]] = val_arg(); break
                 case 'old':
                     var key = key_arg()
-                    args[func.args[k]] = bus.cache[key] || (bus.cache[key] = {key:key})
+                    args[func.args[k]] = bus.clone(bus.backup_cache[key] || {key:key})
                     if (func.call_with_proxies)
                         args[func.args[k]] = args[func.args[k]].val
                     break

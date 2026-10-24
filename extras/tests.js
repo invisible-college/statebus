@@ -1356,6 +1356,53 @@ test(function dirty_without_getter (done) {
     delay(10, () => { assert(runs === 3, 'ran ' + runs + ' times'); done() })
 })
 
+test(function old_is_the_state_before_a_set (done) {
+    // A setter's old is the state as it was before the set, and it stays that
+    // way once the set is done.  That holds however the object set came to
+    // be: a new object, as from a client, or the cached object itself, changed
+    // in place, as code on the same bus often does.
+    var seen = []
+    bus('old_before/*').setter = (obj, old, t) => {
+        var before = old.n
+        t.done(obj)
+        seen.push([obj.key, before, old.n])
+    }
+
+    // A new object
+    bus.set({key: 'old_before/new', n: 1})
+    bus.set({key: 'old_before/new', n: 2})
+
+    // The cached object, changed in place
+    var cached = bus.get('old_before/cached')
+    cached.n = 1; bus.set(cached)
+    cached.n = 2; bus.set(cached)
+
+    // A nested keyed object, set within its parent, then changed in place
+    bus.set({key: 'old_before/parent', child: {key: 'old_before/child', n: 1}})
+    var child = bus.get('old_before/child')
+    child.n = 2; bus.set(child)
+
+    var expected = [['old_before/new', undefined, undefined],
+                    ['old_before/new', 1, 1],
+                    ['old_before/cached', undefined, undefined],
+                    ['old_before/cached', 1, 1],
+                    ['old_before/parent', undefined, undefined],
+                    ['old_before/child', 1, 1]]
+    assert(bus.deep_equals(seen, expected), 'old was ' + JSON.stringify(seen))
+    done()
+})
+
+test(function getter_can_change_old_and_return_it (done) {
+    // A getter can change old and return it as the new state, which re-runs
+    // whatever got it
+    var count = 0
+    bus('changes_old').getter = (old) => { old.n = ++count; return old }
+    var seen = []
+    bus(() => { seen.push(bus.get('changes_old').n) })
+    delay(10, () => bus.dirty('changes_old'))
+    delay(10, () => { assert(bus.deep_equals(seen, [1, 2]), 'saw ' + JSON.stringify(seen)); done() })
+})
+
 test(function rollback_setfire (done) {
     var count = 0
     var error = false
