@@ -1687,17 +1687,16 @@ function import_server (bus, make_statebus, options)
             // Hash password
             params.pass = require('bcrypt-nodejs').hashSync(params.pass)
 
-            // Choose account key
-            //
-            //   NOTE: Checking if master.cache has the key probably sucks,
-            //   because if something gets that key (hoping it exists), it
-            //   might create it, even though the account hasn't been created
-            //   yet, and then this will rename it to some random ID.
-            //
+            // Choose the account's key: the prefix and its name, or a random
+            // one if it has no name
             var key = prefix + params.name
             if (!params.name)
                 key = prefix + Math.random().toString(36).substring(7,13)
-            while (master.cache.hasOwnProperty(key))
+
+            // If another account already has that key, pick a random one
+            var accounts = master.get('users').val || []
+            var taken = (key) => accounts.some((account) => account.link === key)
+            while (taken(key))
                 key = prefix + Math.random().toString(36).substring(7,13)
 
             // Make account object
