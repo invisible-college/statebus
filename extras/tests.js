@@ -7,6 +7,23 @@ statelog_indent++
 // Include the test functions
 var {test, run_tests, log, assert, delay} = require('../statebus').testing
 
+// Calls then() as soon as condition() is true, checking every 5ms, and fails
+// the test if it isn't true within 3 seconds.  Tests wait for what they're
+// waiting for, rather than for a fixed time like setTimeout(check, 60),
+// because on a busy machine the check can run before what it's waiting for.
+//
+// To check that something *didn't* happen, a test still waits a fixed time.
+// A busy machine can only make that check too lenient, never fail it.
+function wait_for (condition, then, limit = 3000) {
+    var started = Date.now()
+    ;(function check () {
+        if (condition()) return then()
+        if (Date.now() - started > limit)
+            assert.fail('Waited ' + limit + 'ms for ' + condition)
+        setTimeout(check, 5)
+    })()
+}
+
 // Make sure we have all the npm packages installed
 try {
     var reqs = 'sockjs chokidar websocket bcrypt-nodejs'.split(' ')
@@ -14,7 +31,7 @@ try {
 } catch (e) {
     console.log(e)
     console.warn('#### Yo!  You need to run "npm install sockjs chokidar websocket bcrypt-nodejs"')
-    process.exit()
+    process.exit(1)
 }
 
 
@@ -165,35 +182,27 @@ test(function auto_vars (done) {
 })
 
 test(function serve_options (done) {
-    var filename = 'test1.db', backups = 'test1.backups', certs = 'testcerts'
-
-    // Remove old stuff if there
-    try {
-        // rm db
-        fs.unlinkSync(filename)
-
-        // rm -r backups
-        fs.readdirSync(backups).forEach((f) => {
-            fs.unlinkSync(backups + "/" + f);
-        })
-        fs.rmdirSync(backups)
-        
-        // // rm -r certs
-        // fs.readdirSync(certs).forEach((f) => {
-        //     fs.unlinkSync(certs + "/" + f);
-        // })
-        // fs.rmdirSync(certs)
-    } catch (e) {log(e)}
-
+    // A server on a port we choose, without a file store, and with certs
+    // that don't exist, so it serves without encryption
+    var certs = 'testcerts'
     var b = require('../statebus').serve({
         port: 31829,
-        //file_store: false,
-        file_store: {filename: filename, save_delay: 0, backup_dir: backups},
+        file_store: false,
         certs: {private_key: certs+'/pk', certificate: certs+'/cert'},
     })
+    b.save({key: 'foo', body: 'is this served?'})
 
-    b.save({key: 'foo', body: 'is this on disk?'})
-    setTimeout(() => done(), 60)
+    // It answers on that port with what we saved
+    setTimeout(() => {
+        require('http').get('http://localhost:31829/foo', (res) => {
+            var body = ''
+            res.on('data', (data) => body += data)
+            res.on('end', () => {
+                assert.deepEqual(JSON.parse(body), {key: 'foo', body: 'is this served?'})
+                done()
+            })
+        }).on('error', (e) => assert.fail('The server on port 31829 did not answer: ' + e.message))
+    }, 60)
 })
 
 test(function transactions (done) {
@@ -355,11 +364,16 @@ test(function basics (done) {
 // Multi-handlers
 test(function multiple_handlers1 (done) {
     var cuss = require('../statebus')()
-    cuss('foo').to_fetch = () => {log('do nothing 1')}
-    cuss('foo').to_fetch = () => {log('do nothing 2')}
-    cuss('foo').to_fetch = () => (log('doing something'),{b: 3})
+    var ran = []
+    cuss('foo').to_fetch = () => {ran.push(1); log('do nothing 1')}
+    cuss('foo').to_fetch = () => {ran.push(2); log('do nothing 2')}
+    cuss('foo').to_fetch = () => (ran.push(3), log('doing something'), {b: 3})
     cuss.fetch('foo', (o) => {
         log('Multi-handle got', o)
+
+        // Every handler ran, and we got the one value
+        assert.deepEqual(ran, [1, 2, 3])
+        assert(o.b === 3, 'Got ' + JSON.stringify(o))
         cuss.forget()
         setTimeout(()=>{done()})
     })
@@ -367,13 +381,19 @@ test(function multiple_handlers1 (done) {
 
 test(function multiple_handlers2 (done) {
     var cuss = require('../statebus')()
-    cuss('foo').to_save = (o) => {log('do nothing 1')}
-    cuss('foo').to_save = (o) => {log('do nothing 2')}
-    cuss('foo').to_save = (o) => {log('doin something'); cuss.save.fire(o)}
+    var ran = []
+    cuss('foo').to_save = (o) => {ran.push(1); log('do nothing 1')}
+    cuss('foo').to_save = (o) => {ran.push(2); log('do nothing 2')}
+    cuss('foo').to_save = (o) => {ran.push(3); log('doin something'); cuss.save.fire(o)}
     //cuss('foo').to_save = (o) => {log('doin abortion'); cuss.save.abort(o)}
     cuss.save({key: 'foo', b: 55})
     log('over and out')
-    setTimeout(()=>{done()})
+    setTimeout(()=>{
+        // Every handler ran, and the one that fired the save stored it
+        assert.deepEqual(ran, [1, 2, 3])
+        assert(cuss.cache.foo.b === 55, 'Stored ' + JSON.stringify(cuss.cache.foo))
+        done()
+    })
 })
 
 // Callbacks are reactive
@@ -398,33 +418,31 @@ test(function fetch_with_callback (done) {
     bus.fetch('foo', cb)                             // Call 1
 
     // Fire a foo
-    setTimeout(function () {
-        assert(count === 1, '1!=' + count)
+    wait_for(() => count === 1, function () {
         // log(bbs().length + ' bindings after first fetch')
 
         log('firing a new foo')
         // log(bbs().length + ' bindings')
         bus.save.fire({key: 'foo', count:count})       // Call 2
-    }, 30)
 
-    // Fire a bar, which the callback depends on
-    setTimeout(function () {
-        log('firing a new bar')
-        // log(bbs().length+ ' bindings')
-        assert(count === 2, '2!=' + count)
-        bus.honk = true
-        bus.save.fire({key: 'bar', count:count})       // Call 3
-        log('fired the new bar')
-        //log(bus.bindings('bar', 'on_save'))
-    }, 50)
+        // Fire a bar, which the callback depends on
+        wait_for(() => count === 2, function () {
+            log('firing a new bar')
+            // log(bbs().length+ ' bindings')
+            bus.honk = true
+            bus.save.fire({key: 'bar', count:count})   // Call 3
+            log('fired the new bar')
+            //log(bus.bindings('bar', 'on_save'))
 
-    // Done
-    setTimeout(function () {
-        assert(count === 2, '2!=' + count)
-        bus.forget('foo', cb)
-        //bus.forget('bar', cb)
-        done()
-    }, 100)
+            // Done
+            setTimeout(function () {
+                assert(count === 2, '2!=' + count)
+                bus.forget('foo', cb)
+                //bus.forget('bar', cb)
+                done()
+            }, 50)
+        })
+    })
 })
 
 test(function fetch_once (done) {
@@ -480,12 +498,12 @@ test(function fetch_remote (done) {
     bus.fetch('moon', cb)       // Doesn't call back yet
     assert(count === 0, '0!=' + count)
 
-    // There should be a moonshot by now
-    setTimeout(function () {
+    // Then there's a moonshot
+    wait_for(() => count > 0, function () {
         assert(count === 1, '1!=' + count)
         bus.forget('moon', cb)
         done()
-    }, 50)
+    })
 })
 
 // Multiple batched fires might trigger duplicate reactions
@@ -514,15 +532,17 @@ test(function duplicate_fires (done) {
         log("ok, now let's see what happens.")
     }, 30)
 
-    // Done
-    setTimeout(function () {
-        assert(count === 2, '2!=' + count)
-        assert(dupes.length === 0, 'CB got duplicate calls', dupes)
-        log('Well, that went smoothly!')
-        bus.forget('foo', cb)
-        //bus.forget('bar', cb)
-        done()
-    }, 60)
+    // Done, once it's been called again, and given a moment for any more calls
+    wait_for(() => count >= 2, function () {
+        setTimeout(function () {
+            assert(count === 2, '2!=' + count)
+            assert(dupes.length === 0, 'CB got duplicate calls ' + dupes)
+            log('Well, that went smoothly!')
+            bus.forget('foo', cb)
+            //bus.forget('bar', cb)
+            done()
+        }, 20)
+    })
 })
 
 // Identity fires shouldn't infinite loop
@@ -538,16 +558,18 @@ test(function identity (done) {
     }
     bus.fetch(key, cb)
 
-    // Done
-    setTimeout(function () {
-        // Calls:
-        //  1. Initial call
-        //  2. First return from pending fetch
-        assert(count === 1, 'cb called '+count+'!=1 times')
-        bus.forget(key, cb)
-        bus(key).to_fetch.delete(fire)
-        done()
-    }, 40)
+    // Done, once it's been called, and given a moment for any more calls
+    wait_for(() => count >= 1, function () {
+        setTimeout(function () {
+            // Calls:
+            //  1. Initial call
+            //  2. First return from pending fetch
+            assert(count === 1, 'cb called '+count+'!=1 times')
+            bus.forget(key, cb)
+            bus(key).to_fetch.delete(fire)
+            done()
+        }, 20)
+    })
 })
 
 
@@ -571,15 +593,21 @@ test(function forgetting (done) {
     }
 
     bus.fetch(key, cb)
-    setTimeout(fire, 70)
-    setTimeout(fire, 80)
 
-    // Done
-    setTimeout(function () {
-        assert(count === 2, "Count should be 2 but is", count)
-        bus(key).to_fetch.delete(fire)
-        done()
-    }, 100)
+    // Fire once it has arrived, and then fire again after cb2 forgets
+    wait_for(() => count === 1, function () {
+        fire()
+        wait_for(() => count === 2, function () {
+            fire()
+
+            // Done
+            setTimeout(function () {
+                assert(count === 2, "Count should be 2 but is " + count)
+                bus(key).to_fetch.delete(fire)
+                done()
+            }, 20)
+        })
+    })
 })
 
 // Can we return an object that fetches another?
@@ -616,6 +644,9 @@ test(function russian_doll_nesting (done) {
     var obj = bus.fetch('big')
     log('we got', obj)
 
+    // The first fetch gets all three, nested
+    assert(obj.middle.small.nothing === 3, 'Got ' + JSON.stringify(obj))
+
     setTimeout(function () {
         bus.fetch('big', function (o) {
             nothing = 5
@@ -637,6 +668,12 @@ test(function russian_doll_nesting (done) {
 
     // Done
     setTimeout(function () {
+        // Each nested object is the one in the cache, so big shows the last
+        // change to small
+        assert(bus.cache.big.middle === bus.cache.middle && bus.cache.middle.small === bus.cache.small,
+               'big holds copies of middle or small')
+        assert(bus.cache.big.middle.small.something === 50, 'big shows ' + JSON.stringify(bus.cache.big))
+
         bus('big').to_fetch.delete(big)
         bus('middle').to_fetch.delete(middle)
         bus('small').to_fetch.delete(small)
@@ -655,8 +692,41 @@ test(function some_handlers_suicide (done) {
     // Ok, that's everyting except for a .to_fetch handler, which
     // runs until its key has been forget()ed.
 
-    // XXX todo
-    done()
+    // Each handler reads an input key, and counts how often it runs
+    var runs = {to_save: 0, on_save: 0, to_delete: 0, to_fetch: 0}
+    bus.save({key: 'suicide/input', n: 1})
+    bus('suicide/saved').to_save = function (o, t) { runs.to_save++; bus.fetch('suicide/input'); t.done() }
+    bus('suicide/saved').on_save = function (o) { runs.on_save++; bus.fetch('suicide/input') }
+    bus('suicide/deleted').to_delete = function (k, t) { runs.to_delete++; bus.fetch('suicide/input'); t.done() }
+    bus('suicide/fetched').to_fetch = function (k) { runs.to_fetch++; return {n: bus.fetch('suicide/input').n} }
+
+    // Run each one once
+    bus.save({key: 'suicide/deleted', x: 1})
+    bus.save({key: 'suicide/saved', x: 1})
+    bus.delete('suicide/deleted')
+    function keep_fetching (o) {}
+    bus.fetch('suicide/fetched', keep_fetching)
+
+    // When the input changes, only the .to_fetch runs again
+    wait_for(() => runs.to_save && runs.on_save && runs.to_delete && runs.to_fetch, () => {
+        assert.deepEqual(runs, {to_save: 1, on_save: 1, to_delete: 1, to_fetch: 1})
+        bus.save({key: 'suicide/input', n: 2})
+
+        wait_for(() => runs.to_fetch === 2, () => {
+            assert.deepEqual(runs, {to_save: 1, on_save: 1, to_delete: 1, to_fetch: 2})
+
+            // Once its key has been forgotten, which statebus does 200ms
+            // after its last fetch lets go, the .to_fetch stops too
+            bus.forget('suicide/fetched', keep_fetching)
+            setTimeout(() => {
+                bus.save({key: 'suicide/input', n: 3})
+                setTimeout(() => {
+                    assert(runs.to_fetch === 2, 'The .to_fetch ran ' + runs.to_fetch + ' times')
+                    done()
+                }, 50)
+            }, 300)
+        })
+    })
 })
 
 test(function uncallback (done) {
@@ -664,10 +734,10 @@ test(function uncallback (done) {
         var chokidar = require('chokidar')
     } catch (e) {
         console.warn('#### Yo!  You need to run "npm install chokidar"')
-        process.exit()
+        process.exit(1)
     }
 
-    var watchers = {}
+    var watchers = {}, watching = false
     function read_file (filename, cb) {
         fs.readFile(filename, function (err, result) {
             if (err) throw err
@@ -680,7 +750,8 @@ test(function uncallback (done) {
             var filename = args[0]
             assert(!(filename in watchers), 'WTF... the file ' + filename + ' is already being watched?')
             watchers[filename] = chokidar.watch(filename)
-            watchers[filename].on('change', () => { bus.dirty(this.key) })
+            watchers[filename].on('ready', () => { watching = true })
+            watchers[filename].on('change', () => { dirty() })
         },
         stop_watching: (json) => {
             filename = json[0]
@@ -709,20 +780,27 @@ test(function uncallback (done) {
 
         switch(runs) {
         case 1:
-            console.assert(result == undefined); break
+            assert(result == undefined); break
         case 2:
-            console.assert(result == 'foo'); break
+            assert(result == 'foo'); break
         case 3:
         case 4:
-            console.assert(result == '1' || result == '2' || result == '3'); break;
+            assert(result == '1' || result == '2' || result == '3'); break;
         }
     })
 
-    delay(10,  () => {log('* MODIFY 1'); fs.writeFileSync('/tmp/blah', '1')})
-    delay(200, () => {log('* MODIFY 2'); fs.writeFileSync('/tmp/blah', '2')})
-    delay(200, () => {log('* MODIFY 3'); fs.writeFileSync('/tmp/blah', '3')})
-
-    delay(200, () => {console.assert(runs < 4, 'There were', runs, 'runs'); done()})
+    // Once it has read 'foo', and the watcher is ready, change the file, and
+    // it reads the change.  Then it forgets, so later changes don't run it.
+    wait_for(() => runs >= 2 && watching, () => {
+        log('* MODIFY 1'); fs.writeFileSync('/tmp/blah', '1')
+        wait_for(() => runs >= 3, () => {
+            log('* MODIFY 2'); fs.writeFileSync('/tmp/blah', '2')
+            setTimeout(() => {
+                log('* MODIFY 3'); fs.writeFileSync('/tmp/blah', '3')
+                setTimeout(() => {assert(runs < 4, 'There were ' + runs + ' runs'); done()}, 200)
+            }, 200)
+        })
+    })
 })
 
 test(function readfile (done) {
@@ -735,13 +813,13 @@ test(function readfile (done) {
         log('Got', r, 'at count', count)
         switch(count++) {
         case 0:
-            console.assert(r === undefined); break
+            assert(r === undefined); break
         case 1:
-            console.assert(r === '1'); break
+            assert(r === '1'); break
         case 2:
-            console.assert(r === '2'); b.forget(); break
+            assert(r === '2'); b.forget(); break
         case 3:
-            console.assert(false); break
+            assert(false); break
         }
     })
 
@@ -842,16 +920,16 @@ test(function proxies2 (done) {
 
     state.foo = 3
     // This should set into _
-    console.assert(bus.validate(bus.cache.foo,
+    assert(bus.validate(bus.cache.foo,
                                 {key: 'foo', _: 3}))
 
 
     state.foo = {a: 5}
     // This should set directly on it
-    console.assert(bus.validate(bus.cache.foo,
+    assert(bus.validate(bus.cache.foo,
                                 {key: 'foo', a: 5}))
     state.foo.b = 6
-    console.assert(bus.validate(bus.cache.foo,
+    assert(bus.validate(bus.cache.foo,
                                 {key: 'foo', b: 6}))
 
     state.bar = [3]
@@ -938,16 +1016,16 @@ test(function braid_proxies (done) {
 
     state.foo = 3
     // This should set into _
-    console.assert(bus.validate(bus.cache.foo,
+    assert(bus.validate(bus.cache.foo,
                                 {key: 'foo', _: 3}))
 
 
     state.foo = {a: 5}
     // This should set directly on it
-    console.assert(bus.validate(bus.cache.foo,
+    assert(bus.validate(bus.cache.foo,
                                 {key: 'foo', a: 5}))
     state.foo.b = 6
-    console.assert(bus.validate(bus.cache.foo,
+    assert(bus.validate(bus.cache.foo,
                                 {key: 'foo', b: 6}))
 
     state.bar = [3]
@@ -1064,30 +1142,25 @@ test(function only_one (done) {
     assert(!bus.fetch('only_one/2').selected)
     assert(!bus.fetch('only_one/3').selected)
 
+    // Choose each one in turn, and wait for it to be selected
     bus.save({key: 'selector', choice: 1})
-
-    setTimeout(function () {
-        assert( bus.fetch('only_one/1').selected)
+    wait_for(() => bus.fetch('only_one/1').selected, function () {
         assert(!bus.fetch('only_one/2').selected)
         assert(!bus.fetch('only_one/3').selected)
 
         bus.save({key: 'selector', choice: 2})
-    }, 10)
+        wait_for(() => bus.fetch('only_one/2').selected, function () {
+            assert(!bus.fetch('only_one/1').selected)
+            assert(!bus.fetch('only_one/3').selected)
 
-    setTimeout(function () {
-        assert(!bus.fetch('only_one/1').selected)
-        assert( bus.fetch('only_one/2').selected)
-        assert(!bus.fetch('only_one/3').selected)
-
-        bus.save({key: 'selector', choice: 3})
-    }, 20)
-
-    setTimeout(function () {
-        assert(!bus.fetch('only_one/1').selected)
-        assert(!bus.fetch('only_one/2').selected)
-        assert( bus.fetch('only_one/3').selected)
-        done()
-    }, 30)
+            bus.save({key: 'selector', choice: 3})
+            wait_for(() => bus.fetch('only_one/3').selected, function () {
+                assert(!bus.fetch('only_one/1').selected)
+                assert(!bus.fetch('only_one/2').selected)
+                done()
+            })
+        })
+    })
 })
 
 test(function save_can_trigger_tofetch (done) {
@@ -1122,9 +1195,14 @@ test(function dirty_without_handler (done) {
     // whatever fetched it
     var runs = 0
     bus(() => { bus.fetch('dirty_without_handler'); runs++ })
-    delay(10, () => bus.dirty('dirty_without_handler'))
-    delay(10, () => bus.dirty('dirty_without_handler'))
-    delay(10, () => { assert(runs === 3, 'ran ' + runs + ' times'); done() })
+    bus.dirty('dirty_without_handler')
+    wait_for(() => runs === 2, () => {
+        bus.dirty('dirty_without_handler')
+        wait_for(() => runs === 3, () => {
+            // And no more than that
+            setTimeout(() => { assert(runs === 3, 'ran ' + runs + ' times'); done() }, 20)
+        })
+    })
 })
 
 test(function old_is_the_state_before_a_save (done) {
@@ -1170,8 +1248,11 @@ test(function to_fetch_can_change_old_and_return_it (done) {
     bus('changes_old').to_fetch = (old) => { old.n = ++count; return old }
     var seen = []
     bus(() => { seen.push(bus.fetch('changes_old').n) })
-    delay(10, () => bus.dirty('changes_old'))
-    delay(10, () => { assert(bus.deep_equals(seen, [1, 2]), 'saw ' + JSON.stringify(seen)); done() })
+    bus.dirty('changes_old')
+    wait_for(() => seen.length >= 2, () => {
+        assert(bus.deep_equals(seen, [1, 2]), 'saw ' + JSON.stringify(seen))
+        done()
+    })
 })
 
 test(function rollback_savefire (done) {
@@ -1220,19 +1301,14 @@ test(function rollback_savefire (done) {
     },
                40)
 
-    // The state should finally progress after 50ms
-    setTimeout(function () {
+    // The state should finally progress, once the wait arrives
+    wait_for(() => bus.cache['undo me'].state === 'progressing', function () {
         log('state is', bus.cache['undo me'].state)
-        assert(bus.cache['undo me'].state === 'progressing')
         assert(phase++ === 2)
-    },
-               60)
-
-    setTimeout(function () {
         bus('wait').to_fetch.delete(wait)
         assert(phase === 3)
         done()
-    }, 80)
+    })
 })
 
 test(function rollback_del (done) {
@@ -1261,6 +1337,7 @@ test(function rollback_save (done) {
     var saves = []
     var all_done = false
     bus('candy').to_save = function (o) {saves.push(o); bus.save.fire(o)}
+    bus('candy waits forever').to_fetch = function () {} // shooting blanks
     bus.save.fire({key: 'candy', flavor: 'lemon'})
 
     log('Trying some rollbacks starting with', bus.cache['candy'])
@@ -1268,7 +1345,7 @@ test(function rollback_save (done) {
     // First do a save that will roll back
     bus(function () { if (all_done) return;
                       log('Doing a rollback on bananafied candy')
-                      bus.fetch('wait forever')                  // Never finishes loading
+                      bus.fetch('candy waits forever')           // Never finishes loading
                       bus.save({key:'candy', flavor: 'banana'})  // Will roll back
                       log('...and the candy is', bus.cache['candy'])
                       //forget('candy')
@@ -1279,7 +1356,7 @@ test(function rollback_save (done) {
     // Try rolling back another style of save
     bus(function () { if (all_done) return
                       log("Now we'll First we licoricize the", bus.cache['candy'])
-                      bus.fetch('wait forever')                  // Never finishes loading
+                      bus.fetch('candy waits forever')           // Never finishes loading
                       var candy = bus.fetch('candy')
                       candy.flavor = 'licorice'
                       log('...the candy has become', bus.cache['candy'])
@@ -1295,7 +1372,7 @@ test(function rollback_save (done) {
         log('Doing a real save on', bus.cache['candy'])
         bus.save({key:'candy', flavor: 'orangina'})  // Will go through
     })
-    assert(bus.cache['candy'].flavor = 'orangina')
+    assert(bus.cache['candy'].flavor === 'orangina')
     assert(saves.length === 1, 'Saves.length 1 != '+saves.length)
 
     log('Now candy is', bus.cache['candy'])
@@ -1336,13 +1413,12 @@ test(function loading_quirk (done) {
         loaded = !bus.loading()
     })
 
-    // Finish
-    setTimeout(function () {
-        assert(loaded, 'We never got loaded.')
+    // Finish, once we're loaded
+    wait_for(() => loaded, function () {
         assert(num_calls == 2,
                'We got called '+num_calls+'!=2 times')
         done()
-    }, 100)
+    })
 })
 
 // A reactive function is loading while a key it fetched in this run hasn't
@@ -1383,12 +1459,12 @@ test(function loading_until_a_key_arrives (done) {
     funk()
     assert(funk.loading(), 'Not loading while the key is on its way')
 
-    setTimeout(function () {
+    wait_for(() => runs.length >= 2, function () {
         assert(loading_on_arrival === false, 'Still loading right after the key arrived')
         assert.deepEqual(runs, [{said: undefined, loading: true}, {said: 'here', loading: false}])
         funk.forget()
         done()
-    }, 60)
+    })
 })
 
 test(function loading_ends_when_a_key_arrives_unchanged (done) {
@@ -1409,12 +1485,12 @@ test(function loading_ends_when_a_key_arrives_unchanged (done) {
     })
     funk()
 
-    setTimeout(function () {
+    wait_for(() => runs >= 2, function () {
         assert(loading_on_arrival === false, 'Still loading after the key arrived unchanged')
         assert(runs == 2, 'Ran ' + runs + ' times, not 2')
         funk.forget()
         done()
-    }, 60)
+    })
 })
 
 test(function loading_waits_for_what_a_to_fetch_reads (done) {
@@ -1431,14 +1507,14 @@ test(function loading_waits_for_what_a_to_fetch_reads (done) {
     funk()
     assert(funk.loading(), 'Not loading while the key outer reads is on its way')
 
-    setTimeout(function () {
+    wait_for(() => runs[runs.length - 1].doubled === 10, function () {
         assert(!funk.loading())
         assert.deepEqual(runs[runs.length - 1], {doubled: 10, loading: false})
         assert(runs.every((run) => run.loading || run.doubled === 10),
                'Saw outer before inner arrived, without loading: ' + JSON.stringify(runs))
         funk.forget()
         done()
-    }, 60)
+    })
 })
 
 test(function saves_wait_until_loaded (done) {
@@ -1455,38 +1531,31 @@ test(function saves_wait_until_loaded (done) {
     // Its save waits until the key arrives
     var saved = () => bus.cache['computed from slow input'] && bus.cache['computed from slow input'].n
     assert(saved() === undefined, 'Saved ' + saved() + ' before the input arrived')
-    setTimeout(function () {
-        assert(saved() === 30, 'Saved ' + saved() + ', not 30')
+    wait_for(() => saved() === 30, function () {
         funk.forget()
         done()
-    }, 60)
+    })
 })
 
 test(function loading_forgets_keys_from_the_last_run (done) {
-    // A key that takes a while, and a switch for whether to read it
-    bus('takes a while').to_fetch = (k) => {
-        setTimeout(() => bus.save.fire({key: k}), 100)
-    }
+    // A key that never arrives, and a switch for whether to read it
+    bus('never arrives here').to_fetch = (k) => {}
     bus.save({key: 'read the slow key', yes: true})
 
     var funk = bus.reactive(function () {
         if (bus.fetch('read the slow key').yes)
-            bus.fetch('takes a while')
+            bus.fetch('never arrives here')
     })
     funk()
     assert(funk.loading())
 
-    // Stop reading the slow key before it arrives.  The next run doesn't
-    // fetch it, so that run isn't loading.
-    delay.init()
-    delay(20, () => bus.save({key: 'read the slow key', yes: false}))
-    delay(20, () => {
-        assert(!funk.loading(), 'Still loading a key this run never fetched')
+    // Stop reading the key.  The next run doesn't fetch it, so that run
+    // isn't loading.
+    bus.save({key: 'read the slow key', yes: false})
+    wait_for(() => !funk.loading(), () => {
         funk.forget()
+        done()
     })
-
-    // Let the slow key arrive before the next test
-    delay(100, () => done())
 })
 
 test(function two_functions_wait_for_the_same_key (done) {
@@ -1501,12 +1570,11 @@ test(function two_functions_wait_for_the_same_key (done) {
     second()
     assert(first.loading() && second.loading(), 'Not both loading')
 
-    setTimeout(function () {
-        assert(!first.loading() && !second.loading(), 'Still loading after the key arrived')
+    wait_for(() => !first.loading() && !second.loading(), function () {
         first.forget()
         second.forget()
         done()
-    }, 60)
+    })
 })
 
 test(function loading_lets_go_of_a_deleted_bus (done) {
@@ -1530,8 +1598,7 @@ test(function requires (done) {
         require.resolve('sockjs') // Will throw error if not found
         require.resolve('websocket')
     } catch (e) {
-        console.warn('#### Yo!  You need to run "npm install sockjs websocket"')
-        process.exit()
+        assert.fail('#### Yo!  You need to run "npm install sockjs websocket"')
     }
     log('Ok good, we have the goods.')
     done()
@@ -1542,14 +1609,14 @@ test(function default_route (done) {
     var b2 = require('../statebus')()
     b1.shadows(b2)
     b2.save({key: 'foo', bar: 3})
-    console.assert(b1.fetch('foo').bar)
+    assert(b1.fetch('foo').bar)
     log(b1.fetch('foo'))
     log(b2.fetch('foo'))
     b1.delete('foo')
     log(b1.fetch('foo'))
     log(b2.fetch('foo'))
-    console.assert(!b1.fetch('foo').bar)
-    console.assert(!b2.fetch('foo').bar)
+    assert(!b1.fetch('foo').bar)
+    assert(!b2.fetch('foo').bar)
     done()
 })
 
@@ -1604,7 +1671,7 @@ test(function setup_server (done) {
                 log('We got '+o.key+' from the server!')
 
                 c.forget()
-                console.assert(count++ === 0, "Forget didn't work.")
+                assert(count++ === 0, "Forget didn't work.")
 
                 setTimeout(function () {done()})
             }
@@ -1614,7 +1681,7 @@ test(function setup_server (done) {
     var matches = new Set()
     for (var k in s.busses) {
         log("Checking unique bus id", k, 'with name', s.busses[k].toString())
-        console.assert(!matches.has(k), 'duplicate bus id', k)
+        assert(!matches.has(k), 'duplicate bus id ' + k)
         matches.add(k)
     }
 })
@@ -1622,12 +1689,17 @@ test(function setup_server (done) {
 test(function login (done) {
     var {s, c} = setup_servers()
 
+    // If we haven't logged in within 2 seconds, it didn't work
+    var gave_up = setTimeout(() => assert.fail('Never logged in'), 2000)
+
     //c.honk = true
     c(function () {
         var u = c.fetch('/current_user')
         log('Current user changed!', c.label, JSON.stringify(u))
         if (u.logged_in) {
             log('Yay! We are logged in as', u.user.name)
+            assert(u.user.name === 'mike', 'Logged in as ' + u.user.name)
+            clearTimeout(gave_up)
             forget()
             setTimeout(function () {done()}, 200)
         } else
@@ -1743,69 +1815,59 @@ function connections_helper (done, port, options) {
     c2.c = c2.fetch('/connection')
     c1.all = c1.fetch('/connections')
 
-    delay(50, _=> {
+    wait_for(() => c1.c.id && c2.c.id, _=> {
         // Test
         log('c1.c:', c1.c)
         log('c2.c:', c2.c)
         log('all:', c1.all)
-        assert(c1.c.id)
-        assert(c2.c.id)
 
         // Load the connections inside
         c1.c1 = c1.fetch('/connection/' + c1.c.id)
         c1.c2 = c1.fetch('/connection/' + c2.c.id)
         c2.c1 = c2.fetch('/connection/' + c1.c.id)
         c2.c2 = c2.fetch('/connection/' + c2.c.id)
-    })
 
-    delay(50, _=> {
-        // Test
-        assert(c1.validate(c1.c1, {key: 'string', client: 'string', id: 'string'}))
-        log('c1.c1', JSON.stringify(c1.c1))
-        log('c2.c2', JSON.stringify(c2.c2))
-        assert(c1.c1.id === c1.c.id)
-        assert(c1.c2.id === c2.c.id)
-        assert(c2.c1.id === c1.c.id)
-        assert(c2.c2.id === c2.c.id)
+        wait_for(() => c1.c1.id && c1.c2.id && c2.c1.id && c2.c2.id, _=> {
+            // Test
+            assert(c1.validate(c1.c1, {key: 'string', client: 'string', id: 'string'}))
+            log('c1.c1', JSON.stringify(c1.c1))
+            log('c2.c2', JSON.stringify(c2.c2))
+            assert(c1.c1.id === c1.c.id)
+            assert(c1.c2.id === c2.c.id)
+            assert(c2.c1.id === c1.c.id)
+            assert(c2.c2.id === c2.c.id)
 
-        // Modify a connection
-        c1.c.foo = 'bar'; c1.save(c1.c)
-        c2.c2.fuzz = 'buzz'; c2.save(c2.c2)
-    })
+            // Modify a connection
+            c1.c.foo = 'bar'; c1.save(c1.c)
+            c2.c2.fuzz = 'buzz'; c2.save(c2.c2)
 
-    delay(50, _=> {
-        // Test
-        assert(c1.c.foo === 'bar')
-        assert(c1.c1.foo === 'bar')
-        assert(c2.c1.foo === 'bar')
+            // Everyone sees it
+            wait_for(() => c1.c.foo === 'bar' && c1.c1.foo === 'bar' && c2.c1.foo === 'bar'
+                           && c2.c.fuzz === 'buzz' && c2.c2.fuzz === 'buzz' && c1.c2.fuzz === 'buzz', _=> {
 
-        assert(c2.c.fuzz === 'buzz')
-        assert(c2.c2.fuzz === 'buzz')
-        assert(c1.c2.fuzz === 'buzz')
+                // Modify someone else's connection
+                c1.c2.fuzz = 'fart'; c1.save(c1.c2)
+                c2.c1.free = 'willy'; c2.save(c2.c1)
 
-        // Modify someone else's connection
-        c1.c2.fuzz = 'fart'; c1.save(c1.c2)
-        c2.c1.free = 'willy'; c2.save(c2.c1)
-    })
-
-    delay(50, _=> {
-        // Test
-        if (options.edit_others) {
-            assert(c1.c2.fuzz === 'fart')
-            assert(c2.c2.fuzz === 'fart')
-            assert(c1.c1.free === 'willy')
-            assert(c2.c1.free === 'willy')
-        } else {
-            assert(c1.c2.fuzz !== 'fart')
-            assert(c2.c2.fuzz !== 'fart')
-            assert(c1.c1.free !== 'willy')
-            assert(c2.c1.free !== 'willy')
-        }
+                // Test
+                if (options.edit_others)
+                    wait_for(() => c1.c2.fuzz === 'fart' && c2.c2.fuzz === 'fart'
+                                   && c1.c1.free === 'willy' && c2.c1.free === 'willy', _=> done())
+                else
+                    // The server refuses each edit, so it goes back to how it
+                    // was for whoever made it, and the other never sees it
+                    wait_for(() => c1.c2.fuzz !== 'fart' && c2.c1.free !== 'willy', _=> {
+                        setTimeout(_=> {
+                            assert(c2.c2.fuzz !== 'fart')
+                            assert(c1.c1.free !== 'willy')
+                            done()
+                        }, 50)
+                    })
+            })
+        })
     })
 
     // Todo: test the inclusion of users
-
-    delay(50, _=> done())
 }
 
 test(function connections_1 (done) {
@@ -1878,18 +1940,16 @@ test(function flashbacks (done) {
     c1.x = c1.fetch('x')
     c2.x = c2.fetch('x')
 
-    // Change stuff
-    delay(50, _=> {
+    // Change stuff, once both clients have x from the server
+    wait_for(() => !c1.pending_fetches.x && !c2.pending_fetches.x, _=> {
         c1.x.x = 1
         c1.save(c1.x)
-    })
 
-    // Test stuff
-    delay(50, _=> {
-        assert(c2.x.x === 2, 'c2 didn\'t get it')
-        assert(c1.x.x === 2, 'c1 didn\'t get it')
-        log('complete!', c1.x, c2.x)
-        done()
+        // Test stuff
+        wait_for(() => c1.x.x === 2 && c2.x.x === 2, _=> {
+            log('complete!', c1.x, c2.x)
+            done()
+        })
     })
 })
 

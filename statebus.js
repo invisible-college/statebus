@@ -1122,7 +1122,7 @@
             } catch (e) {
                 if (e.message === 'Maximum call stack size exceeded') {
                     console.error(e)
-                    process.exit()
+                    process.exit(1)
                 }
                 //executing_funk = null // Or should this be last_executing_funk?
                 if (funk.loading()) return null
@@ -1130,7 +1130,7 @@
                     // If we ware on node, then just print out the error
                     if (nodejs) {
                         console.error(e.stack)
-                        process.exit()
+                        process.exit(1)
                     } else {
                         // This is the best way to print errors in browsers,
                         // so that they get clickable line numbers
