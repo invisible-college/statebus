@@ -1345,6 +1345,186 @@ test(function loading_quirk (done) {
     }, 100)
 })
 
+// A reactive function is loading while a key it fetched in this run hasn't
+// arrived yet.  These follow loading() as keys arrive.
+
+test(function loading_ignores_keys_that_arrive_right_away (done) {
+    // This key's to_fetch answers as soon as it's asked
+    bus('right away').to_fetch = (k) => ({said: 'here'})
+
+    var was_loading
+    var funk = bus.reactive(function () {
+        bus.fetch('right away')
+        was_loading = bus.loading()
+    })
+    funk()
+    assert(was_loading === false, 'A key that arrived right away left us loading')
+    assert(!funk.loading())
+    funk.forget()
+    done()
+})
+
+test(function loading_until_a_key_arrives (done) {
+    // This key's to_fetch answers 30ms after it's asked.  Right after it
+    // answers, before our function runs again, we check that it isn't
+    // loading anymore.
+    var loading_on_arrival
+    bus('arrives later').to_fetch = (k) => {
+        setTimeout(() => {
+            bus.save.fire({key: k, said: 'here'})
+            loading_on_arrival = funk.loading()
+        }, 30)
+    }
+
+    var runs = []
+    var funk = bus.reactive(function () {
+        runs.push({said: bus.fetch('arrives later').said, loading: bus.loading()})
+    })
+    funk()
+    assert(funk.loading(), 'Not loading while the key is on its way')
+
+    setTimeout(function () {
+        assert(loading_on_arrival === false, 'Still loading right after the key arrived')
+        assert.deepEqual(runs, [{said: undefined, loading: true}, {said: 'here', loading: false}])
+        funk.forget()
+        done()
+    }, 60)
+})
+
+test(function loading_ends_when_a_key_arrives_unchanged (done) {
+    // This key arrives with nothing in it, the same as the empty object we
+    // had while waiting
+    var loading_on_arrival
+    bus('arrives empty').to_fetch = (k) => {
+        setTimeout(() => {
+            bus.save.fire({key: k})
+            loading_on_arrival = funk.loading()
+        }, 30)
+    }
+
+    var runs = 0
+    var funk = bus.reactive(function () {
+        runs++
+        bus.fetch('arrives empty')
+    })
+    funk()
+
+    setTimeout(function () {
+        assert(loading_on_arrival === false, 'Still loading after the key arrived unchanged')
+        assert(runs == 2, 'Ran ' + runs + ' times, not 2')
+        funk.forget()
+        done()
+    }, 60)
+})
+
+test(function loading_waits_for_what_a_to_fetch_reads (done) {
+    // The outer key is computed from the inner key, which arrives 30ms later
+    bus('nested load/inner').to_fetch = (k) => {
+        setTimeout(() => bus.save.fire({key: k, n: 5}), 30)
+    }
+    bus('nested load/outer').to_fetch = (k) => ({doubled: bus.fetch('nested load/inner').n * 2})
+
+    var runs = []
+    var funk = bus.reactive(function () {
+        runs.push({doubled: bus.fetch('nested load/outer').doubled, loading: bus.loading()})
+    })
+    funk()
+    assert(funk.loading(), 'Not loading while the key outer reads is on its way')
+
+    setTimeout(function () {
+        assert(!funk.loading())
+        assert.deepEqual(runs[runs.length - 1], {doubled: 10, loading: false})
+        assert(runs.every((run) => run.loading || run.doubled === 10),
+               'Saw outer before inner arrived, without loading: ' + JSON.stringify(runs))
+        funk.forget()
+        done()
+    }, 60)
+})
+
+test(function saves_wait_until_loaded (done) {
+    bus('slow input').to_fetch = (k) => {
+        setTimeout(() => bus.save.fire({key: k, n: 3}), 30)
+    }
+
+    // This function saves what it computes from a key that takes a while
+    var funk = bus.reactive(function () {
+        bus.save({key: 'computed from slow input', n: bus.fetch('slow input').n * 10})
+    })
+    funk()
+
+    // Its save waits until the key arrives
+    var saved = () => bus.cache['computed from slow input'] && bus.cache['computed from slow input'].n
+    assert(saved() === undefined, 'Saved ' + saved() + ' before the input arrived')
+    setTimeout(function () {
+        assert(saved() === 30, 'Saved ' + saved() + ', not 30')
+        funk.forget()
+        done()
+    }, 60)
+})
+
+test(function loading_forgets_keys_from_the_last_run (done) {
+    // A key that takes a while, and a switch for whether to read it
+    bus('takes a while').to_fetch = (k) => {
+        setTimeout(() => bus.save.fire({key: k}), 100)
+    }
+    bus.save({key: 'read the slow key', yes: true})
+
+    var funk = bus.reactive(function () {
+        if (bus.fetch('read the slow key').yes)
+            bus.fetch('takes a while')
+    })
+    funk()
+    assert(funk.loading())
+
+    // Stop reading the slow key before it arrives.  The next run doesn't
+    // fetch it, so that run isn't loading.
+    delay.init()
+    delay(20, () => bus.save({key: 'read the slow key', yes: false}))
+    delay(20, () => {
+        assert(!funk.loading(), 'Still loading a key this run never fetched')
+        funk.forget()
+    })
+
+    // Let the slow key arrive before the next test
+    delay(100, () => done())
+})
+
+test(function two_functions_wait_for_the_same_key (done) {
+    bus('shared slow key').to_fetch = (k) => {
+        setTimeout(() => bus.save.fire({key: k, n: 1}), 30)
+    }
+
+    // The second asks while the first one's fetch is already on its way
+    var first = bus.reactive(() => bus.fetch('shared slow key'))
+    var second = bus.reactive(() => bus.fetch('shared slow key'))
+    first()
+    second()
+    assert(first.loading() && second.loading(), 'Not both loading')
+
+    setTimeout(function () {
+        assert(!first.loading() && !second.loading(), 'Still loading after the key arrived')
+        first.forget()
+        second.forget()
+        done()
+    }, 60)
+})
+
+test(function loading_lets_go_of_a_deleted_bus (done) {
+    // A key on another bus that never arrives
+    var other = require('../statebus')()
+    other('never arrives').to_fetch = (k) => {}
+
+    var funk = bus.reactive(() => other.fetch('never arrives'))
+    funk()
+    assert(funk.loading())
+
+    // Once that bus is gone, we're not waiting on it anymore
+    other.delete_bus()
+    assert(!funk.loading(), 'Still loading a key on a bus that was deleted')
+    funk.forget()
+    done()
+})
+
 test(function requires (done) {
     try {
         require.resolve('sockjs') // Will throw error if not found
