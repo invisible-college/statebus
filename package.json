@@ -21,7 +21,7 @@
   "dependencies": {
     "bcrypt-nodejs": "0.0.3",
     "braid-http": "^1.5.1",
-    "chokidar": "^3.4.0",
+    "chokidar": "^4.0.3",
     "cookie": "^0.3.1",
     "express": "^4.15.3",
     "http2-express-bridge": "^1.0.7",

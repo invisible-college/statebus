@@ -65,6 +65,10 @@
         // If called reactively, we always return a value.
         if (called_from_reactive_funk) {
             funk.has_seen(bus, key, versions[key])
+
+            // Keep track of pending_keys, so that loading() is fast
+            if (pending_gets[key]) funk.pending_keys.push([bus, key])
+
             backup_cache[key] = backup_cache[key] || {key: key}
             return cache[key] = cache[key] || {key: key}
         }
@@ -1231,7 +1235,7 @@
             } catch (e) {
                 if (e.message === 'Maximum call stack size exceeded') {
                     console.error(e)
-                    process.exit()
+                    process.exit(1)
                 }
                 //executing_funk = null // Or should this be last_executing_funk?
                 if (funk.loading()) return null
@@ -1239,7 +1243,7 @@
                     // If we ware on node, then just print out the error
                     if (nodejs) {
                         console.error(e.stack)
-                        process.exit()
+                        process.exit(1)
                     } else {
                         // This is the best way to print errors in browsers,
                         // so that they get clickable line numbers
@@ -1264,8 +1268,9 @@
 
         funk.func = func  // just for debugging
         funk.called_directly = true
-        funk.getted_keys = {} // maps [bus,key] to version
-                               // version will be undefined until loaded
+        funk.getted_keys = {}  // Maps [bus, key] to version
+                               //   - version will be undefined until loaded
+        funk.pending_keys = [] // Array of [bus, key] keys that are loading
         funk.abortable_keys = []
         funk.has_seen = function (bus, key, version) {
             //console.log('depend:', bus, key, versions[key])
@@ -1302,16 +1307,16 @@
                     bus.forget(key, funk)
             }
             funk.getted_keys = {}
+            funk.pending_keys = []
         }
         funk.loading = function () {
-            for (var hash in funk.getted_keys) {
-                var tmp = JSON.parse(hash),
-                    bus = busses[tmp[0]], key = tmp[1]
-                if (bus  // Cause it might have been deleted
-                    && bus.pending_gets[key])
-                    return true
-            }
-            return false
+            // Double-check our pending_keys to see if any have loaded
+            funk.pending_keys = funk.pending_keys.filter(function (pair) {
+                return busses[pair[0].id]  // Because it might have been deleted
+                    && pair[0].pending_gets[pair[1]]
+            })
+            // Then return true if there are any left
+            return funk.pending_keys.length > 0
         }
 
         // for backwards compatibility

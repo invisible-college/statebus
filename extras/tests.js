@@ -14,7 +14,7 @@ try {
 } catch (e) {
     console.log(e)
     console.warn('#### Yo!  You need to run "npm install sockjs chokidar websocket bcrypt-nodejs"')
-    process.exit()
+    process.exit(1)
 }
 
 
@@ -176,36 +176,28 @@ test(function auto_vars (done) {
 })
 
 test(function serve_options (done) {
-    var filename = 'test1.db', backups = 'test1.backups', certs = 'testcerts'
-
-    // Remove old stuff if there
-    try {
-        // rm db
-        fs.unlinkSync(filename)
-
-        // rm -r backups
-        fs.readdirSync(backups).forEach((f) => {
-            fs.unlinkSync(backups + "/" + f);
-        })
-        fs.rmdirSync(backups)
-        
-        // // rm -r certs
-        // fs.readdirSync(certs).forEach((f) => {
-        //     fs.unlinkSync(certs + "/" + f);
-        // })
-        // fs.rmdirSync(certs)
-    } catch (e) {log(e)}
-
+    // A server on a port we choose, without a file store, and with certs
+    // that don't exist, so it serves without encryption
+    var certs = 'testcerts'
     var b = require('../statebus').serve({
         port: 31829,
-        //file_store: false,
-        file_store: {filename: filename, save_delay: 0, backup_dir: backups},
+        file_store: false,
         certs: {private_key: certs+'/pk', certificate: certs+'/cert'},
         websocket: true
     })
+    b.set({key: 'foo', val: {body: 'is this served?'}})
 
-    b.set({key: 'foo', body: 'is this on disk?'})
-    setTimeout(() => done(), 60)
+    // It answers on that port with what we set
+    setTimeout(() => {
+        require('http').get('http://localhost:31829/foo', (res) => {
+            var body = ''
+            res.on('data', (data) => body += data)
+            res.on('end', () => {
+                assert.deepEqual(JSON.parse(body), {body: 'is this served?'})
+                done()
+            })
+        }).on('error', (e) => assert.fail('The server on port 31829 did not answer: ' + e.message))
+    }, 60)
 })
 
 test(function transactions (done) {
@@ -665,11 +657,16 @@ test(function basics (done) {
 // Multi-handlers
 test(function multiple_handlers1 (done) {
     var cuss = require('../statebus')()
-    cuss('foo').getter = () => {log('do nothing 1')}
-    cuss('foo').getter = () => {log('do nothing 2')}
-    cuss('foo').getter = () => (log('doing something'),{b: 3})
+    var ran = []
+    cuss('foo').getter = () => {ran.push(1); log('do nothing 1')}
+    cuss('foo').getter = () => {ran.push(2); log('do nothing 2')}
+    cuss('foo').getter = () => (ran.push(3), log('doing something'), {b: 3})
     cuss.get('foo', (o) => {
         log('Multi-handle got', o)
+
+        // Every handler ran, and we got the one value
+        assert.deepEqual(ran, [1, 2, 3])
+        assert(o.b === 3, 'Got ' + JSON.stringify(o))
         cuss.forget()
         setTimeout(()=>{done()})
     })
@@ -677,13 +674,19 @@ test(function multiple_handlers1 (done) {
 
 test(function multiple_handlers2 (done) {
     var cuss = require('../statebus')()
-    cuss('foo').setter = (o) => {log('do nothing 1')}
-    cuss('foo').setter = (o) => {log('do nothing 2')}
-    cuss('foo').setter = (o) => {log('doin something'); cuss.set.fire(o)}
+    var ran = []
+    cuss('foo').setter = (o) => {ran.push(1); log('do nothing 1')}
+    cuss('foo').setter = (o) => {ran.push(2); log('do nothing 2')}
+    cuss('foo').setter = (o) => {ran.push(3); log('doin something'); cuss.set.fire(o)}
     //cuss('foo').setter = (o) => {log('doin abortion'); cuss.set.abort(o)}
     cuss.set({key: 'foo', b: 55})
     log('over and out')
-    setTimeout(()=>{done()})
+    setTimeout(()=>{
+        // Every handler ran, and the one that fired the set stored it
+        assert.deepEqual(ran, [1, 2, 3])
+        assert(cuss.cache.foo.b === 55, 'Stored ' + JSON.stringify(cuss.cache.foo))
+        done()
+    })
 })
 
 // Callbacks are reactive
@@ -926,6 +929,9 @@ test(function russian_doll_nesting (done) {
     var obj = bus.get('big')
     log('we got', obj)
 
+    // The first get gets all three, nested
+    assert(obj.middle.small.nothing === 3, 'Got ' + JSON.stringify(obj))
+
     setTimeout(function () {
         bus.get('big', function (o) {
             nothing = 5
@@ -947,6 +953,12 @@ test(function russian_doll_nesting (done) {
 
     // Done
     setTimeout(function () {
+        // Each nested object is the one in the cache, so big shows the last
+        // change to small
+        assert(bus.cache.big.middle === bus.cache.middle && bus.cache.middle.small === bus.cache.small,
+               'big holds copies of middle or small')
+        assert(bus.cache.big.middle.small.something === 50, 'big shows ' + JSON.stringify(bus.cache.big))
+
         bus('big').getter.delete(big)
         bus('middle').getter.delete(middle)
         bus('small').getter.delete(small)
@@ -965,8 +977,39 @@ test(function some_handlers_suicide (done) {
     // Ok, that's everyting except for a .getter handler, which
     // runs until its key has been forget()ed.
 
-    // XXX todo
-    done()
+    // Each handler reads an input key, and counts how often it runs
+    var runs = {setter: 0, on_set: 0, deleter: 0, getter: 0}
+    bus.set({key: 'suicide/input', n: 1})
+    bus('suicide/set').setter = function (o, t) { runs.setter++; bus.get('suicide/input'); t.done() }
+    bus('suicide/set').on_set = function (o) { runs.on_set++; bus.get('suicide/input') }
+    bus('suicide/deleted').deleter = function (k, t) { runs.deleter++; bus.get('suicide/input'); t.done() }
+    bus('suicide/gotten').getter = function (k) { runs.getter++; return {n: bus.get('suicide/input').n} }
+
+    // Run each one once
+    bus.set({key: 'suicide/deleted', x: 1})
+    bus.set({key: 'suicide/set', x: 1})
+    bus.delete('suicide/deleted')
+    function keep_getting (o) {}
+    bus.get('suicide/gotten', keep_getting)
+
+    // When the input changes, only the .getter runs again
+    delay.init()
+    delay(10, () => {
+        assert.deepEqual(runs, {setter: 1, on_set: 1, deleter: 1, getter: 1})
+        bus.set({key: 'suicide/input', n: 2})
+    })
+    delay(10, () => {
+        assert.deepEqual(runs, {setter: 1, on_set: 1, deleter: 1, getter: 2})
+        bus.forget('suicide/gotten', keep_getting)
+    })
+
+    // Once its key has been forgotten, which can take up to a second, the
+    // .getter stops too
+    delay(1100, () => bus.set({key: 'suicide/input', n: 3}))
+    delay(10, () => {
+        assert(runs.getter === 2, 'The .getter ran ' + runs.getter + ' times')
+        done()
+    })
 })
 
 test(function uncallback (done) {
@@ -974,7 +1017,7 @@ test(function uncallback (done) {
         var chokidar = require('chokidar')
     } catch (e) {
         console.warn('#### Yo!  You need to run "npm install chokidar"')
-        process.exit()
+        process.exit(1)
     }
 
     var watchers = {}
@@ -1019,12 +1062,12 @@ test(function uncallback (done) {
 
         switch(runs) {
         case 1:
-            console.assert(result == undefined); break
+            assert(result == undefined); break
         case 2:
-            console.assert(result == 'foo'); break
+            assert(result == 'foo'); break
         case 3:
         case 4:
-            console.assert(result == '1' || result == '2' || result == '3'); break;
+            assert(result == '1' || result == '2' || result == '3'); break;
         }
     })
 
@@ -1032,7 +1075,7 @@ test(function uncallback (done) {
     delay(200, () => {log('* MODIFY 2'); fs.writeFileSync('/tmp/blah', '2')})
     delay(200, () => {log('* MODIFY 3'); fs.writeFileSync('/tmp/blah', '3')})
 
-    delay(200, () => {console.assert(runs < 4, 'There were', runs, 'runs'); done()})
+    delay(200, () => {assert(runs < 4, 'There were ' + runs + ' runs'); done()})
 })
 
 test(function readfile (done) {
@@ -1045,13 +1088,13 @@ test(function readfile (done) {
         log('Got', r, 'at count', count)
         switch(count++) {
         case 0:
-            console.assert(r === undefined); break
+            assert(r === undefined); break
         case 1:
-            console.assert(r === '1'); break
+            assert(r === '1'); break
         case 2:
-            console.assert(r === '2'); b.forget(); break
+            assert(r === '2'); b.forget(); break
         case 3:
-            console.assert(false); break
+            assert(false); break
         }
     })
 
@@ -1574,13 +1617,192 @@ test(function loading_quirk (done) {
     }, 100)
 })
 
+// A reactive function is loading while a key it got in this run hasn't
+// arrived yet.  These follow loading() as keys arrive.
+
+test(function loading_ignores_keys_that_arrive_right_away (done) {
+    // This key's getter answers as soon as it's asked
+    bus('right away').getter = (k) => ({said: 'here'})
+
+    var was_loading
+    var funk = bus.reactive(function () {
+        bus.get('right away')
+        was_loading = bus.loading()
+    })
+    funk()
+    assert(was_loading === false, 'A key that arrived right away left us loading')
+    assert(!funk.loading())
+    funk.forget()
+    done()
+})
+
+test(function loading_until_a_key_arrives (done) {
+    // This key's getter answers 30ms after it's asked.  Right after it
+    // answers, before our function runs again, we check that it isn't
+    // loading anymore.
+    var loading_on_arrival
+    bus('arrives later').getter = (k) => {
+        setTimeout(() => {
+            bus.set.fire({key: k, said: 'here'})
+            loading_on_arrival = funk.loading()
+        }, 30)
+    }
+
+    var runs = []
+    var funk = bus.reactive(function () {
+        runs.push({said: bus.get('arrives later').said, loading: bus.loading()})
+    })
+    funk()
+    assert(funk.loading(), 'Not loading while the key is on its way')
+
+    setTimeout(function () {
+        assert(loading_on_arrival === false, 'Still loading right after the key arrived')
+        assert.deepEqual(runs, [{said: undefined, loading: true}, {said: 'here', loading: false}])
+        funk.forget()
+        done()
+    }, 60)
+})
+
+test(function loading_ends_when_a_key_arrives_unchanged (done) {
+    // This key arrives with nothing in it, the same as the empty object we
+    // had while waiting
+    var loading_on_arrival
+    bus('arrives empty').getter = (k) => {
+        setTimeout(() => {
+            bus.set.fire({key: k})
+            loading_on_arrival = funk.loading()
+        }, 30)
+    }
+
+    var runs = 0
+    var funk = bus.reactive(function () {
+        runs++
+        bus.get('arrives empty')
+    })
+    funk()
+
+    setTimeout(function () {
+        assert(loading_on_arrival === false, 'Still loading after the key arrived unchanged')
+        assert(runs == 2, 'Ran ' + runs + ' times, not 2')
+        funk.forget()
+        done()
+    }, 60)
+})
+
+test(function loading_waits_for_what_a_getter_reads (done) {
+    // The outer key is computed from the inner key, which arrives 30ms later
+    bus('nested load/inner').getter = (k) => {
+        setTimeout(() => bus.set.fire({key: k, n: 5}), 30)
+    }
+    bus('nested load/outer').getter = (k) => ({doubled: bus.get('nested load/inner').n * 2})
+
+    var runs = []
+    var funk = bus.reactive(function () {
+        runs.push({doubled: bus.get('nested load/outer').doubled, loading: bus.loading()})
+    })
+    funk()
+    assert(funk.loading(), 'Not loading while the key outer reads is on its way')
+
+    setTimeout(function () {
+        assert(!funk.loading())
+        assert.deepEqual(runs[runs.length - 1], {doubled: 10, loading: false})
+        assert(runs.every((run) => run.loading || run.doubled === 10),
+               'Saw outer before inner arrived, without loading: ' + JSON.stringify(runs))
+        funk.forget()
+        done()
+    }, 60)
+})
+
+test(function sets_wait_until_loaded (done) {
+    bus('slow input').getter = (k) => {
+        setTimeout(() => bus.set.fire({key: k, n: 3}), 30)
+    }
+
+    // This function sets what it computes from a key that takes a while
+    var funk = bus.reactive(function () {
+        bus.set({key: 'computed from slow input', n: bus.get('slow input').n * 10})
+    })
+    funk()
+
+    // Its set waits until the key arrives
+    var set_value = () => bus.cache['computed from slow input'] && bus.cache['computed from slow input'].n
+    assert(set_value() === undefined, 'Set ' + set_value() + ' before the input arrived')
+    setTimeout(function () {
+        assert(set_value() === 30, 'Set ' + set_value() + ', not 30')
+        funk.forget()
+        done()
+    }, 60)
+})
+
+test(function loading_forgets_keys_from_the_last_run (done) {
+    // A key that takes a while, and a switch for whether to read it
+    bus('takes a while').getter = (k) => {
+        setTimeout(() => bus.set.fire({key: k}), 100)
+    }
+    bus.set({key: 'read the slow key', yes: true})
+
+    var funk = bus.reactive(function () {
+        if (bus.get('read the slow key').yes)
+            bus.get('takes a while')
+    })
+    funk()
+    assert(funk.loading())
+
+    // Stop reading the slow key before it arrives.  The next run doesn't
+    // get it, so that run isn't loading.
+    delay.init()
+    delay(20, () => bus.set({key: 'read the slow key', yes: false}))
+    delay(20, () => {
+        assert(!funk.loading(), 'Still loading a key this run never got')
+        funk.forget()
+    })
+
+    // Let the slow key arrive before the next test
+    delay(100, () => done())
+})
+
+test(function two_functions_wait_for_the_same_key (done) {
+    bus('shared slow key').getter = (k) => {
+        setTimeout(() => bus.set.fire({key: k, n: 1}), 30)
+    }
+
+    // The second asks while the first one's get is already on its way
+    var first = bus.reactive(() => bus.get('shared slow key'))
+    var second = bus.reactive(() => bus.get('shared slow key'))
+    first()
+    second()
+    assert(first.loading() && second.loading(), 'Not both loading')
+
+    setTimeout(function () {
+        assert(!first.loading() && !second.loading(), 'Still loading after the key arrived')
+        first.forget()
+        second.forget()
+        done()
+    }, 60)
+})
+
+test(function loading_lets_go_of_a_deleted_bus (done) {
+    // A key on another bus that never arrives
+    var other = require('../statebus')()
+    other('never arrives').getter = (k) => {}
+
+    var funk = bus.reactive(() => other.get('never arrives'))
+    funk()
+    assert(funk.loading())
+
+    // Once that bus is gone, we're not waiting on it anymore
+    other.delete_bus()
+    assert(!funk.loading(), 'Still loading a key on a bus that was deleted')
+    funk.forget()
+    done()
+})
+
 test(function requires (done) {
     try {
         require.resolve('sockjs') // Will throw error if not found
         require.resolve('websocket')
     } catch (e) {
-        console.warn('#### Yo!  You need to run "npm install sockjs websocket"')
-        process.exit()
+        assert.fail('#### Yo!  You need to run "npm install sockjs websocket"')
     }
     log('Ok good, we have the goods.')
     done()
@@ -1591,14 +1813,14 @@ test(function default_route (done) {
     var b2 = require('../statebus')()
     b1.shadows(b2)
     b2.set({key: 'foo', bar: 3})
-    console.assert(b1.get('foo').bar)
+    assert(b1.get('foo').bar)
     log(b1.get('foo'))
     log(b2.get('foo'))
     b1.delete('foo')
     log(b1.get('foo'))
     log(b2.get('foo'))
-    console.assert(!b1.get('foo').bar)
-    console.assert(!b2.get('foo').bar)
+    assert(!b1.get('foo').bar)
+    assert(!b2.get('foo').bar)
     done()
 })
 
@@ -1663,7 +1885,7 @@ test(function setup_server (done) {
                 log('We got '+o.key+' from the server!')
 
                 c.forget()
-                console.assert(count++ === 0, "Forget didn't work.")
+                assert(count++ === 0, "Forget didn't work.")
 
                 setTimeout(function () {done()})
             }
@@ -1673,13 +1895,16 @@ test(function setup_server (done) {
     var matches = new Set()
     for (var k in s.busses) {
         log("Checking unique bus id", k, 'with name', s.busses[k].toString())
-        console.assert(!matches.has(k), 'duplicate bus id', k)
+        assert(!matches.has(k), 'duplicate bus id ' + k)
         matches.add(k)
     }
 })
 
 test(function login (done) {
     var {s, c} = setup_servers()
+
+    // If we haven't logged in within 2 seconds, it didn't work
+    var gave_up = setTimeout(() => assert.fail('Never logged in'), 2000)
 
     // c.honk = true
     c(function () {
@@ -1691,6 +1916,7 @@ test(function login (done) {
                 'which is loaded as', user)
             if (user.val) {
                 assert(user.val.name === 'mike')
+                clearTimeout(gave_up)
                 c.forget()
                 setTimeout(function () {done()}, 200)
             }
