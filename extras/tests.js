@@ -7,6 +7,23 @@ statelog_indent++
 // Include the test functions
 var {test, run_tests, log, assert, delay} = require('../statebus').testing
 
+// Calls then() as soon as condition() is true, checking every 5ms, and fails
+// the test if it isn't true within 3 seconds.  Tests wait for what they're
+// waiting for, rather than for a fixed time like setTimeout(check, 60),
+// because on a busy machine the check can run before what it's waiting for.
+//
+// To check that something *didn't* happen, a test still waits a fixed time.
+// A busy machine can only make that check too lenient, never fail it.
+function wait_for (condition, then, limit = 3000) {
+    var started = Date.now()
+    ;(function check () {
+        if (condition()) return then()
+        if (Date.now() - started > limit)
+            assert.fail('Waited ' + limit + 'ms for ' + condition)
+        setTimeout(check, 5)
+    })()
+}
+
 // Make sure we have all the npm packages installed
 try {
     var reqs = 'sockjs chokidar websocket bcrypt-nodejs'.split(' ')
@@ -711,33 +728,31 @@ test(function get_with_callback (done) {
     bus.get('foo', cb)                             // Call 1
 
     // Fire a foo
-    setTimeout(function () {
-        assert(count === 1, '1!=' + count)
+    wait_for(() => count === 1, function () {
         // log(bbs().length + ' bindings after first get')
 
         log('firing a new foo')
         // log(bbs().length + ' bindings')
         bus.set.fire({key: 'foo', count:count})       // Call 2
-    }, 30)
 
-    // Fire a bar, which the callback depends on
-    setTimeout(function () {
-        log('firing a new bar')
-        // log(bbs().length+ ' bindings')
-        assert(count === 2, '2!=' + count)
-        bus.honk = true
-        bus.set.fire({key: 'bar', count:count})       // Call 3
-        log('fired the new bar')
-        //log(bus.bindings('bar', 'on_set'))
-    }, 50)
+        // Fire a bar, which the callback depends on
+        wait_for(() => count === 2, function () {
+            log('firing a new bar')
+            // log(bbs().length+ ' bindings')
+            bus.honk = true
+            bus.set.fire({key: 'bar', count:count})   // Call 3
+            log('fired the new bar')
+            //log(bus.bindings('bar', 'on_set'))
 
-    // Done
-    setTimeout(function () {
-        assert(count === 2, '2!=' + count)
-        bus.forget('foo', cb)
-        //bus.forget('bar', cb)
-        done()
-    }, 100)
+            // Done
+            setTimeout(function () {
+                assert(count === 2, '2!=' + count)
+                bus.forget('foo', cb)
+                //bus.forget('bar', cb)
+                done()
+            }, 50)
+        })
+    })
 })
 
 test(function get_once (done) {
@@ -793,12 +808,12 @@ test(function get_remote (done) {
     bus.get('moon', cb)       // Doesn't call back yet
     assert(count === 0, '0!=' + count)
 
-    // There should be a moonshot by now
-    setTimeout(function () {
+    // Then there's a moonshot
+    wait_for(() => count > 0, function () {
         assert(count === 1, '1!=' + count)
         bus.forget('moon', cb)
         done()
-    }, 50)
+    })
 })
 
 // Multiple batched fires might trigger duplicate reactions
@@ -827,15 +842,17 @@ test(function duplicate_fires (done) {
         log("ok, now let's see what happens.")
     }, 30)
 
-    // Done
-    setTimeout(function () {
-        assert(count === 2, '2!=' + count)
-        assert(dupes.length === 0, 'CB got duplicate calls', dupes)
-        log('Well, that went smoothly!')
-        bus.forget('foo', cb)
-        //bus.forget('bar', cb)
-        done()
-    }, 60)
+    // Done, once it's been called again, and given a moment for any more calls
+    wait_for(() => count >= 2, function () {
+        setTimeout(function () {
+            assert(count === 2, '2!=' + count)
+            assert(dupes.length === 0, 'CB got duplicate calls ' + dupes)
+            log('Well, that went smoothly!')
+            bus.forget('foo', cb)
+            //bus.forget('bar', cb)
+            done()
+        }, 20)
+    })
 })
 
 // Identity fires shouldn't infinite loop
@@ -851,16 +868,18 @@ test(function identity (done) {
     }
     bus.get(key, cb)
 
-    // Done
-    setTimeout(function () {
-        // Calls:
-        //  1. Initial call
-        //  2. First return from pending get
-        assert(count === 1, 'cb called '+count+'!=1 times')
-        bus.forget(key, cb)
-        bus(key).getter.delete(fire)
-        done()
-    }, 40)
+    // Done, once it's been called, and given a moment for any more calls
+    wait_for(() => count >= 1, function () {
+        setTimeout(function () {
+            // Calls:
+            //  1. Initial call
+            //  2. First return from pending get
+            assert(count === 1, 'cb called '+count+'!=1 times')
+            bus.forget(key, cb)
+            bus(key).getter.delete(fire)
+            done()
+        }, 20)
+    })
 })
 
 
@@ -884,15 +903,21 @@ test(function forgetting (done) {
     }
 
     bus.get(key, cb)
-    setTimeout(fire, 70)
-    setTimeout(fire, 80)
 
-    // Done
-    setTimeout(function () {
-        assert(count === 2, "Count should be 2 but is", count)
-        bus(key).getter.delete(fire)
-        done()
-    }, 100)
+    // Fire once it has arrived, and then fire again after cb2 forgets
+    wait_for(() => count === 1, function () {
+        fire()
+        wait_for(() => count === 2, function () {
+            fire()
+
+            // Done
+            setTimeout(function () {
+                assert(count === 2, "Count should be 2 but is " + count)
+                bus(key).getter.delete(fire)
+                done()
+            }, 20)
+        })
+    })
 })
 
 // Can we return an object that gets another?
@@ -993,22 +1018,24 @@ test(function some_handlers_suicide (done) {
     bus.get('suicide/gotten', keep_getting)
 
     // When the input changes, only the .getter runs again
-    delay.init()
-    delay(10, () => {
+    wait_for(() => runs.setter && runs.on_set && runs.deleter && runs.getter, () => {
         assert.deepEqual(runs, {setter: 1, on_set: 1, deleter: 1, getter: 1})
         bus.set({key: 'suicide/input', n: 2})
-    })
-    delay(10, () => {
-        assert.deepEqual(runs, {setter: 1, on_set: 1, deleter: 1, getter: 2})
-        bus.forget('suicide/gotten', keep_getting)
-    })
 
-    // Once its key has been forgotten, which can take up to a second, the
-    // .getter stops too
-    delay(1100, () => bus.set({key: 'suicide/input', n: 3}))
-    delay(10, () => {
-        assert(runs.getter === 2, 'The .getter ran ' + runs.getter + ' times')
-        done()
+        wait_for(() => runs.getter === 2, () => {
+            assert.deepEqual(runs, {setter: 1, on_set: 1, deleter: 1, getter: 2})
+
+            // Once its key has been forgotten, which statebus does 200ms
+            // after its last get lets go, the .getter stops too
+            bus.forget('suicide/gotten', keep_getting)
+            setTimeout(() => {
+                bus.set({key: 'suicide/input', n: 3})
+                setTimeout(() => {
+                    assert(runs.getter === 2, 'The .getter ran ' + runs.getter + ' times')
+                    done()
+                }, 50)
+            }, 300)
+        })
     })
 })
 
@@ -1020,7 +1047,7 @@ test(function uncallback (done) {
         process.exit(1)
     }
 
-    var watchers = {}
+    var watchers = {}, watching = false
     function read_file (filename, cb) {
         fs.readFile(filename, function (err, result) {
             if (err) throw err
@@ -1033,7 +1060,8 @@ test(function uncallback (done) {
             var filename = args[0]
             assert(!(filename in watchers), 'WTF... the file ' + filename + ' is already being watched?')
             watchers[filename] = chokidar.watch(filename)
-            watchers[filename].on('change', () => { bus.dirty(this.key) })
+            watchers[filename].on('ready', () => { watching = true })
+            watchers[filename].on('change', () => { dirty() })
         },
         stop_watching: (json) => {
             filename = json[0]
@@ -1071,11 +1099,18 @@ test(function uncallback (done) {
         }
     })
 
-    delay(10,  () => {log('* MODIFY 1'); fs.writeFileSync('/tmp/blah', '1')})
-    delay(200, () => {log('* MODIFY 2'); fs.writeFileSync('/tmp/blah', '2')})
-    delay(200, () => {log('* MODIFY 3'); fs.writeFileSync('/tmp/blah', '3')})
-
-    delay(200, () => {assert(runs < 4, 'There were ' + runs + ' runs'); done()})
+    // Once it has read 'foo', and the watcher is ready, change the file, and
+    // it reads the change.  Then it forgets, so later changes don't run it.
+    wait_for(() => runs >= 2 && watching, () => {
+        log('* MODIFY 1'); fs.writeFileSync('/tmp/blah', '1')
+        wait_for(() => runs >= 3, () => {
+            log('* MODIFY 2'); fs.writeFileSync('/tmp/blah', '2')
+            setTimeout(() => {
+                log('* MODIFY 3'); fs.writeFileSync('/tmp/blah', '3')
+                setTimeout(() => {assert(runs < 4, 'There were ' + runs + ' runs'); done()}, 200)
+            }, 200)
+        })
+    })
 })
 
 test(function readfile (done) {
@@ -1336,30 +1371,25 @@ test(function only_one (done) {
     assert(!bus.get('only_one/2').selected)
     assert(!bus.get('only_one/3').selected)
 
+    // Choose each one in turn, and wait for it to be selected
     bus.set({key: 'selector', choice: 1})
-
-    setTimeout(function () {
-        assert( bus.get('only_one/1').selected)
+    wait_for(() => bus.get('only_one/1').selected, function () {
         assert(!bus.get('only_one/2').selected)
         assert(!bus.get('only_one/3').selected)
 
         bus.set({key: 'selector', choice: 2})
-    }, 10)
+        wait_for(() => bus.get('only_one/2').selected, function () {
+            assert(!bus.get('only_one/1').selected)
+            assert(!bus.get('only_one/3').selected)
 
-    setTimeout(function () {
-        assert(!bus.get('only_one/1').selected)
-        assert( bus.get('only_one/2').selected)
-        assert(!bus.get('only_one/3').selected)
-
-        bus.set({key: 'selector', choice: 3})
-    }, 20)
-
-    setTimeout(function () {
-        assert(!bus.get('only_one/1').selected)
-        assert(!bus.get('only_one/2').selected)
-        assert( bus.get('only_one/3').selected)
-        done()
-    }, 30)
+            bus.set({key: 'selector', choice: 3})
+            wait_for(() => bus.get('only_one/3').selected, function () {
+                assert(!bus.get('only_one/1').selected)
+                assert(!bus.get('only_one/2').selected)
+                done()
+            })
+        })
+    })
 })
 
 test(function set_can_trigger_toget (done) {
@@ -1394,9 +1424,14 @@ test(function dirty_without_getter (done) {
     // whatever got it
     var runs = 0
     bus(() => { bus.get('dirty_without_getter'); runs++ })
-    delay(10, () => bus.dirty('dirty_without_getter'))
-    delay(10, () => bus.dirty('dirty_without_getter'))
-    delay(10, () => { assert(runs === 3, 'ran ' + runs + ' times'); done() })
+    bus.dirty('dirty_without_getter')
+    wait_for(() => runs === 2, () => {
+        bus.dirty('dirty_without_getter')
+        wait_for(() => runs === 3, () => {
+            // And no more than that
+            setTimeout(() => { assert(runs === 3, 'ran ' + runs + ' times'); done() }, 20)
+        })
+    })
 })
 
 test(function old_is_the_state_before_a_set (done) {
@@ -1442,8 +1477,11 @@ test(function getter_can_change_old_and_return_it (done) {
     bus('changes_old').getter = (old) => { old.n = ++count; return old }
     var seen = []
     bus(() => { seen.push(bus.get('changes_old').n) })
-    delay(10, () => bus.dirty('changes_old'))
-    delay(10, () => { assert(bus.deep_equals(seen, [1, 2]), 'saw ' + JSON.stringify(seen)); done() })
+    bus.dirty('changes_old')
+    wait_for(() => seen.length >= 2, () => {
+        assert(bus.deep_equals(seen, [1, 2]), 'saw ' + JSON.stringify(seen))
+        done()
+    })
 })
 
 test(function rollback_setfire (done) {
@@ -1492,19 +1530,14 @@ test(function rollback_setfire (done) {
     },
                40)
 
-    // The state should finally progress after 50ms
-    setTimeout(function () {
+    // The state should finally progress, once the wait arrives
+    wait_for(() => bus.cache['undo me'].state === 'progressing', function () {
         log('state is', bus.cache['undo me'].state)
-        assert(bus.cache['undo me'].state === 'progressing')
         assert(phase++ === 2)
-    },
-               60)
-
-    setTimeout(function () {
         bus('wait').getter.delete(wait)
         assert(phase === 3)
         done()
-    }, 80)
+    })
 })
 
 test(function rollback_del (done) {
@@ -1533,6 +1566,7 @@ test(function rollback_set (done) {
     var sets = []
     var all_done = false
     bus('candy').setter = function (o) {sets.push(o); bus.set.fire(o)}
+    bus('candy waits forever').getter = function () {} // shooting blanks
     bus.set.fire({key: 'candy', flavor: 'lemon'})
 
     log('Trying some rollbacks starting with', bus.cache['candy'])
@@ -1540,7 +1574,7 @@ test(function rollback_set (done) {
     // First do a set that will roll back
     bus(function () { if (all_done) return;
                       log('Doing a rollback on bananafied candy')
-                      bus.get('wait forever')                  // Never finishes loading
+                      bus.get('candy waits forever')           // Never finishes loading
                       bus.set({key:'candy', flavor: 'banana'})  // Will roll back
                       log('...and the candy is', bus.cache['candy'])
                       //forget('candy')
@@ -1551,7 +1585,7 @@ test(function rollback_set (done) {
     // Try rolling back another style of set
     bus(function () { if (all_done) return
                       log("Now we'll First we licoricize the", bus.cache['candy'])
-                      bus.get('wait forever')                  // Never finishes loading
+                      bus.get('candy waits forever')           // Never finishes loading
                       var candy = bus.get('candy')
                       candy.flavor = 'licorice'
                       log('...the candy has become', bus.cache['candy'])
@@ -1567,7 +1601,7 @@ test(function rollback_set (done) {
         log('Doing a real set on', bus.cache['candy'])
         bus.set({key:'candy', flavor: 'orangina'})  // Will go through
     })
-    assert(bus.cache['candy'].flavor = 'orangina')
+    assert(bus.cache['candy'].flavor === 'orangina')
     assert(sets.length === 1, 'Sets.length 1 != '+sets.length)
 
     log('Now candy is', bus.cache['candy'])
@@ -1608,13 +1642,12 @@ test(function loading_quirk (done) {
         loaded = !bus.loading()
     })
 
-    // Finish
-    setTimeout(function () {
-        assert(loaded, 'We never got loaded.')
+    // Finish, once we're loaded
+    wait_for(() => loaded, function () {
         assert(num_calls == 2,
                'We got called '+num_calls+'!=2 times')
         done()
-    }, 100)
+    })
 })
 
 // A reactive function is loading while a key it got in this run hasn't
@@ -1655,12 +1688,12 @@ test(function loading_until_a_key_arrives (done) {
     funk()
     assert(funk.loading(), 'Not loading while the key is on its way')
 
-    setTimeout(function () {
+    wait_for(() => runs.length >= 2, function () {
         assert(loading_on_arrival === false, 'Still loading right after the key arrived')
         assert.deepEqual(runs, [{said: undefined, loading: true}, {said: 'here', loading: false}])
         funk.forget()
         done()
-    }, 60)
+    })
 })
 
 test(function loading_ends_when_a_key_arrives_unchanged (done) {
@@ -1681,12 +1714,12 @@ test(function loading_ends_when_a_key_arrives_unchanged (done) {
     })
     funk()
 
-    setTimeout(function () {
+    wait_for(() => runs >= 2, function () {
         assert(loading_on_arrival === false, 'Still loading after the key arrived unchanged')
         assert(runs == 2, 'Ran ' + runs + ' times, not 2')
         funk.forget()
         done()
-    }, 60)
+    })
 })
 
 test(function loading_waits_for_what_a_getter_reads (done) {
@@ -1703,14 +1736,14 @@ test(function loading_waits_for_what_a_getter_reads (done) {
     funk()
     assert(funk.loading(), 'Not loading while the key outer reads is on its way')
 
-    setTimeout(function () {
+    wait_for(() => runs[runs.length - 1].doubled === 10, function () {
         assert(!funk.loading())
         assert.deepEqual(runs[runs.length - 1], {doubled: 10, loading: false})
         assert(runs.every((run) => run.loading || run.doubled === 10),
                'Saw outer before inner arrived, without loading: ' + JSON.stringify(runs))
         funk.forget()
         done()
-    }, 60)
+    })
 })
 
 test(function sets_wait_until_loaded (done) {
@@ -1727,38 +1760,31 @@ test(function sets_wait_until_loaded (done) {
     // Its set waits until the key arrives
     var set_value = () => bus.cache['computed from slow input'] && bus.cache['computed from slow input'].n
     assert(set_value() === undefined, 'Set ' + set_value() + ' before the input arrived')
-    setTimeout(function () {
-        assert(set_value() === 30, 'Set ' + set_value() + ', not 30')
+    wait_for(() => set_value() === 30, function () {
         funk.forget()
         done()
-    }, 60)
+    })
 })
 
 test(function loading_forgets_keys_from_the_last_run (done) {
-    // A key that takes a while, and a switch for whether to read it
-    bus('takes a while').getter = (k) => {
-        setTimeout(() => bus.set.fire({key: k}), 100)
-    }
+    // A key that never arrives, and a switch for whether to read it
+    bus('never arrives here').getter = (k) => {}
     bus.set({key: 'read the slow key', yes: true})
 
     var funk = bus.reactive(function () {
         if (bus.get('read the slow key').yes)
-            bus.get('takes a while')
+            bus.get('never arrives here')
     })
     funk()
     assert(funk.loading())
 
-    // Stop reading the slow key before it arrives.  The next run doesn't
-    // get it, so that run isn't loading.
-    delay.init()
-    delay(20, () => bus.set({key: 'read the slow key', yes: false}))
-    delay(20, () => {
-        assert(!funk.loading(), 'Still loading a key this run never got')
+    // Stop reading the key.  The next run doesn't get it, so that run
+    // isn't loading.
+    bus.set({key: 'read the slow key', yes: false})
+    wait_for(() => !funk.loading(), () => {
         funk.forget()
+        done()
     })
-
-    // Let the slow key arrive before the next test
-    delay(100, () => done())
 })
 
 test(function two_functions_wait_for_the_same_key (done) {
@@ -1773,12 +1799,11 @@ test(function two_functions_wait_for_the_same_key (done) {
     second()
     assert(first.loading() && second.loading(), 'Not both loading')
 
-    setTimeout(function () {
-        assert(!first.loading() && !second.loading(), 'Still loading after the key arrived')
+    wait_for(() => !first.loading() && !second.loading(), function () {
         first.forget()
         second.forget()
         done()
-    }, 60)
+    })
 })
 
 test(function loading_lets_go_of_a_deleted_bus (done) {
@@ -2054,69 +2079,59 @@ function connections_helper (done, port, options) {
     c2.c = c2.get('/connection')
     c1.all = c1.get('/connections')
 
-    delay(50, _=> {
+    wait_for(() => c1.c.id && c2.c.id, _=> {
         // Test
         log('c1.c:', c1.c)
         log('c2.c:', c2.c)
         log('all:', c1.all)
-        assert(c1.c.id)
-        assert(c2.c.id)
 
         // Load the connections inside
         c1.c1 = c1.get('/connection/' + c1.c.id)
         c1.c2 = c1.get('/connection/' + c2.c.id)
         c2.c1 = c2.get('/connection/' + c1.c.id)
         c2.c2 = c2.get('/connection/' + c2.c.id)
-    })
 
-    delay(50, _=> {
-        // Test
-        assert(c1.validate(c1.c1, {key: 'string', client: 'string', id: 'string'}))
-        log('c1.c1', JSON.stringify(c1.c1))
-        log('c2.c2', JSON.stringify(c2.c2))
-        assert(c1.c1.id === c1.c.id)
-        assert(c1.c2.id === c2.c.id)
-        assert(c2.c1.id === c1.c.id)
-        assert(c2.c2.id === c2.c.id)
+        wait_for(() => c1.c1.id && c1.c2.id && c2.c1.id && c2.c2.id, _=> {
+            // Test
+            assert(c1.validate(c1.c1, {key: 'string', client: 'string', id: 'string'}))
+            log('c1.c1', JSON.stringify(c1.c1))
+            log('c2.c2', JSON.stringify(c2.c2))
+            assert(c1.c1.id === c1.c.id)
+            assert(c1.c2.id === c2.c.id)
+            assert(c2.c1.id === c1.c.id)
+            assert(c2.c2.id === c2.c.id)
 
-        // Modify a connection
-        c1.c.foo = 'bar'; c1.set(c1.c)
-        c2.c2.fuzz = 'buzz'; c2.set(c2.c2)
-    })
+            // Modify a connection
+            c1.c.foo = 'bar'; c1.set(c1.c)
+            c2.c2.fuzz = 'buzz'; c2.set(c2.c2)
 
-    delay(50, _=> {
-        // Test
-        assert(c1.c.foo === 'bar')
-        assert(c1.c1.foo === 'bar')
-        assert(c2.c1.foo === 'bar')
+            // Everyone sees it
+            wait_for(() => c1.c.foo === 'bar' && c1.c1.foo === 'bar' && c2.c1.foo === 'bar'
+                           && c2.c.fuzz === 'buzz' && c2.c2.fuzz === 'buzz' && c1.c2.fuzz === 'buzz', _=> {
 
-        assert(c2.c.fuzz === 'buzz')
-        assert(c2.c2.fuzz === 'buzz')
-        assert(c1.c2.fuzz === 'buzz')
+                // Modify someone else's connection
+                c1.c2.fuzz = 'fart'; c1.set(c1.c2)
+                c2.c1.free = 'willy'; c2.set(c2.c1)
 
-        // Modify someone else's connection
-        c1.c2.fuzz = 'fart'; c1.set(c1.c2)
-        c2.c1.free = 'willy'; c2.set(c2.c1)
-    })
-
-    delay(50, _=> {
-        // Test
-        if (options.edit_others) {
-            assert(c1.c2.fuzz === 'fart')
-            assert(c2.c2.fuzz === 'fart')
-            assert(c1.c1.free === 'willy')
-            assert(c2.c1.free === 'willy')
-        } else {
-            assert(c1.c2.fuzz !== 'fart')
-            assert(c2.c2.fuzz !== 'fart')
-            assert(c1.c1.free !== 'willy')
-            assert(c2.c1.free !== 'willy')
-        }
+                // Test
+                if (options.edit_others)
+                    wait_for(() => c1.c2.fuzz === 'fart' && c2.c2.fuzz === 'fart'
+                                   && c1.c1.free === 'willy' && c2.c1.free === 'willy', _=> done())
+                else
+                    // The server refuses each edit, so it goes back to how it
+                    // was for whoever made it, and the other never sees it
+                    wait_for(() => c1.c2.fuzz !== 'fart' && c2.c1.free !== 'willy', _=> {
+                        setTimeout(_=> {
+                            assert(c2.c2.fuzz !== 'fart')
+                            assert(c1.c1.free !== 'willy')
+                            done()
+                        }, 50)
+                    })
+            })
+        })
     })
 
     // Todo: test the inclusion of users
-
-    delay(50, _=> done())
 }
 
 // test(function connections_1 (done) {
@@ -2164,18 +2179,16 @@ test(function flashbacks (done) {
     var x1 = c1.get('x')
     var x2 = c2.get('x')
 
-    // Change stuff
-    delay(50, _=> {
+    // Change stuff, once both clients have x from the server
+    wait_for(() => !c1.pending_gets.x && !c2.pending_gets.x, _=> {
         x1.val = 1
         c1.set(x1)
-    })
 
-    // Test stuff
-    delay(500, _=> {
-        assert(x2.val === 2, 'c2 didn\'t get the update')
-        assert(x1.val === 2, 'c1 didn\'t get the update')
-        log('complete!', x1, x2)
-        done()
+        // Test stuff
+        wait_for(() => x1.val === 2 && x2.val === 2, _=> {
+            log('complete!', x1, x2)
+            done()
+        })
     })
 })
 
